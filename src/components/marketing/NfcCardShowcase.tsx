@@ -11,14 +11,23 @@ function ChipIcon() {
   )
 }
 
-function CardFace({ tone }: { tone: "front" | "back" }) {
+export type NfcCardTone = "front" | "back" | "gold"
+
+const TONE_TRIM: Record<NfcCardTone, string> = {
+  front: "bg-gradient-brand shadow-[0_25px_60px_rgba(124,58,237,0.45)]",
+  back: "bg-gradient-to-br from-[#2563EB]/70 to-[#7C3AED]/70",
+  gold: "bg-gradient-to-br from-[#F59E0B] via-[#FBBF24] to-[#F59E0B] shadow-[0_25px_60px_rgba(245,158,11,0.4)]",
+}
+
+const TONE_BADGE: Record<NfcCardTone, string> = {
+  front: "bg-gradient-brand shadow-glow-primary",
+  back: "bg-gradient-brand shadow-glow-primary",
+  gold: "bg-gradient-to-br from-[#F59E0B] to-[#FBBF24] shadow-[0_4px_14px_rgba(245,158,11,0.4)]",
+}
+
+export function NfcCardFace({ tone }: { tone: NfcCardTone }) {
   return (
-    <div
-      className={cn(
-        "relative h-full w-full overflow-hidden rounded-[22px] p-[1.5px]",
-        tone === "front" ? "bg-gradient-brand shadow-[0_25px_60px_rgba(124,58,237,0.45)]" : "bg-gradient-to-br from-[#2563EB]/70 to-[#7C3AED]/70",
-      )}
-    >
+    <div className={cn("relative h-full w-full overflow-hidden rounded-[22px] p-[1.5px]", TONE_TRIM[tone])}>
       <div className="relative h-full w-full overflow-hidden rounded-[20.5px] bg-gradient-to-br from-[#0B0F1A] via-[#12142B] to-[#1A1030] p-5 text-white">
         {/* brushed-metal texture */}
         <div
@@ -37,7 +46,7 @@ function CardFace({ tone }: { tone: "front" | "back" }) {
         </div>
 
         <div className="relative mt-4 flex flex-col items-center text-center sm:mt-6">
-          <span className="flex size-9 items-center justify-center rounded-xl bg-gradient-brand shadow-glow-primary">
+          <span className={cn("flex size-9 items-center justify-center rounded-xl", TONE_BADGE[tone])}>
             <Nfc className="size-5" />
           </span>
           <p className="mt-2 text-base font-bold tracking-tight sm:text-lg">TapLink</p>
@@ -73,14 +82,14 @@ export default function NfcCardShowcase() {
         {/* Back card — depth */}
         <div className="absolute inset-0 translate-x-6 translate-y-6 animate-float-slower">
           <div className="h-full w-full rotate-6 opacity-60">
-            <CardFace tone="back" />
+            <NfcCardFace tone="back" />
           </div>
         </div>
 
         {/* Front card — hero, hover tilt */}
         <div className="absolute inset-0 animate-float-slow">
           <div className="h-full w-full -rotate-3 cursor-pointer transition-transform duration-500 ease-out hover:-rotate-1 hover:scale-[1.03]">
-            <CardFace tone="front" />
+            <NfcCardFace tone="front" />
           </div>
         </div>
       </div>

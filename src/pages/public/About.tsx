@@ -10,22 +10,16 @@ import {
   Smartphone,
   Lock,
   Zap,
-  Award,
+  UserCog,
   BarChart3,
-  Radio,
+  ChevronRight,
 } from "lucide-react"
 import heroImg from "@/assets/hero.png"
 import PageHeader from "@/components/marketing/PageHeader"
-import StatCounter from "@/components/marketing/StatCounter"
 import NfcCardShowcase from "@/components/marketing/NfcCardShowcase"
+import MissionShowcase from "@/components/marketing/MissionShowcase"
+import StatsShowcaseCard from "@/components/marketing/StatsShowcaseCard"
 import { cardClass } from "@/components/marketing/PremiumCard"
-
-const STATS = [
-  { value: "10,000+", label: "Connections Shared" },
-  { value: "5,000+", label: "Active Users" },
-  { value: "99.9%", label: "Uptime" },
-  { value: "100%", label: "Eco-Friendly" },
-]
 
 const FEATURE_HIGHLIGHTS = [
   { icon: Zap, label: "One Tap Sharing" },
@@ -37,10 +31,10 @@ const FEATURE_HIGHLIGHTS = [
 ]
 
 const WHY_CHOOSE = [
-  { icon: Zap, title: "Instant Sharing", description: "Share your full profile in under a second with a single tap — no fumbling, no typing." },
-  { icon: Award, title: "Professional Branding", description: "A polished, always-current digital presence that makes every introduction count." },
-  { icon: BarChart3, title: "Analytics Tracking", description: "See every tap, scan, and profile view so you know what's working." },
-  { icon: Radio, title: "Contactless Networking", description: "Hygienic, effortless connections — hold your card near any phone to share instantly." },
+  { icon: Zap, title: "Instant Sharing", description: "Share your entire profile instantly with a single tap.", bg: "linear-gradient(135deg,#4F46E5,#7C3AED)" },
+  { icon: UserCog, title: "Custom Profiles", description: "Fully personalize your bio, photo, branding, and layout.", bg: "linear-gradient(135deg,#EC4899,#F472B6)" },
+  { icon: Nfc, title: "NFC & QR Code", description: "Every card works via NFC tap and a printed QR code.", bg: "linear-gradient(135deg,#2563EB,#06B6D4)" },
+  { icon: BarChart3, title: "Real-time Analytics", description: "See exactly who's viewing your profile, when, and from where.", bg: "linear-gradient(135deg,#22C55E,#10B981)" },
 ]
 
 const VALUES = [
@@ -95,24 +89,13 @@ export default function About() {
             <NfcCardShowcase />
           </div>
         </div>
-
-        <div className="mx-auto mt-16 max-w-4xl rounded-[24px] border border-[#E2E8F0] bg-gradient-to-br from-[#4F46E5]/5 via-[#7C3AED]/5 to-[#EC4899]/5 p-8 text-center">
-          <h2 className="text-xl font-semibold text-foreground">Our Mission</h2>
-          <p className="mt-3 text-muted-foreground">
-            To empower every professional with a networking tool that's instant, sustainable, and
-            endlessly customizable — turning every handshake into a lasting digital connection.
-          </p>
-        </div>
       </section>
 
-      {/* Stats */}
-      <section className="bg-[#F8FAFC] px-4 py-16">
-        <div className="mx-auto grid max-w-5xl grid-cols-2 gap-8 sm:grid-cols-4">
-          {STATS.map((s) => (
-            <StatCounter key={s.label} value={s.value} label={s.label} />
-          ))}
-        </div>
-      </section>
+      {/* Our Mission — premium hero card */}
+      <MissionShowcase />
+
+      {/* Statistics showcase */}
+      <StatsShowcaseCard />
 
       {/* Why Choose TapLink */}
       <section className="bg-white px-4 py-20">
@@ -125,10 +108,19 @@ export default function About() {
           </div>
           <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {WHY_CHOOSE.map((f) => (
-              <div key={f.title} className={`${cardClass} p-6`}>
-                <div className="flex size-12 items-center justify-center rounded-xl bg-gradient-brand text-white shadow-glow-primary">
+              <div
+                key={f.title}
+                className="card-hover group relative rounded-[24px] border border-[#8B5CF6]/20 bg-white p-6 shadow-[0_10px_30px_rgba(15,23,42,0.05)]"
+              >
+                <span
+                  className="flex size-12 items-center justify-center rounded-xl text-white shadow-md"
+                  style={{ background: f.bg }}
+                >
                   <f.icon className="size-6" />
-                </div>
+                </span>
+                <span className="absolute right-5 top-5 flex size-8 items-center justify-center rounded-full border border-border text-muted-foreground transition-all duration-300 group-hover:border-primary group-hover:bg-primary group-hover:text-white">
+                  <ChevronRight className="size-4" />
+                </span>
                 <h3 className="mt-4 text-lg font-semibold text-foreground">{f.title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{f.description}</p>
               </div>

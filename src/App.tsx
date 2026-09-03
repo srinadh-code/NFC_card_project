@@ -1,5 +1,6 @@
 import { Route, Routes } from "react-router-dom"
 
+import { ScrollToTop } from "@/components/ScrollToTop"
 import PublicLayout from "@/components/layout/PublicLayout"
 import AdminLayout from "@/components/layout/AdminLayout"
 import CustomerLayout from "@/components/layout/CustomerLayout"
@@ -47,62 +48,65 @@ import NotFound from "@/pages/NotFound"
 
 function App() {
   return (
-    <Routes>
-      {/* Public marketing site */}
-      <Route element={<PublicLayout />}>
-        <Route path="/" element={<Home />} />
-        <Route path="/about" element={<About />} />
-        <Route path="/features" element={<Features />} />
-        <Route path="/how-it-works" element={<HowItWorks />} />
-        <Route path="/shop" element={<Shop />} />
-        <Route path="/cart" element={<Cart />} />
-        <Route path="/checkout" element={<Checkout />} />
-        <Route path="/order-success" element={<OrderSuccess />} />
-        <Route path="/track-order" element={<TrackOrder />} />
-        <Route path="/faq" element={<Faq />} />
-        <Route path="/contact" element={<Contact />} />
-        <Route path="/privacy-policy" element={<Privacy />} />
-        <Route path="/terms" element={<Terms />} />
+    <>
+      <ScrollToTop />
+      <Routes>
+        {/* Public marketing site */}
+        <Route element={<PublicLayout />}>
+          <Route path="/" element={<Home />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/features" element={<Features />} />
+          <Route path="/how-it-works" element={<HowItWorks />} />
+          <Route path="/shop" element={<Shop />} />
+          <Route path="/cart" element={<Cart />} />
+          <Route path="/checkout" element={<Checkout />} />
+          <Route path="/order-success" element={<OrderSuccess />} />
+          <Route path="/track-order" element={<TrackOrder />} />
+          <Route path="/faq" element={<Faq />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/privacy-policy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
 
-        {/* Unified login (public, unauthenticated) — routes to the right
-            dashboard by role after authenticating */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<CustomerRegister />} />
-      </Route>
+          {/* Unified login (public, unauthenticated) — routes to the right
+              dashboard by role after authenticating */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<CustomerRegister />} />
+        </Route>
 
-      {/* Admin portal */}
-      <Route path="/admin" element={<AdminLayout />}>
-        <Route path="dashboard" element={<AdminDashboard />} />
-        <Route path="customers" element={<AdminCustomers />} />
-        <Route path="customers/:id" element={<AdminCustomerDetails />} />
-        <Route path="cards" element={<AdminCards />} />
-        <Route path="orders" element={<AdminOrders />} />
-        <Route path="transactions" element={<AdminTransactions />} />
-        <Route path="profiles" element={<AdminProfiles />} />
-        <Route path="analytics" element={<AdminAnalytics />} />
-        <Route path="reports" element={<AdminReports />} />
-        <Route path="settings" element={<AdminSettings />} />
-        <Route path="support" element={<AdminSupport />} />
-      </Route>
+        {/* Admin portal */}
+        <Route path="/admin" element={<AdminLayout />}>
+          <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="customers" element={<AdminCustomers />} />
+          <Route path="customers/:id" element={<AdminCustomerDetails />} />
+          <Route path="cards" element={<AdminCards />} />
+          <Route path="orders" element={<AdminOrders />} />
+          <Route path="transactions" element={<AdminTransactions />} />
+          <Route path="profiles" element={<AdminProfiles />} />
+          <Route path="analytics" element={<AdminAnalytics />} />
+          <Route path="reports" element={<AdminReports />} />
+          <Route path="settings" element={<AdminSettings />} />
+          <Route path="support" element={<AdminSupport />} />
+        </Route>
 
-      {/* Customer portal */}
-      <Route element={<CustomerLayout />}>
-        <Route path="/dashboard" element={<CustomerDashboard />} />
-        <Route path="/my-card" element={<CustomerMyCard />} />
-        <Route path="/profile" element={<CustomerProfile />} />
-        <Route path="/social-links" element={<CustomerSocialLinks />} />
-        <Route path="/qr-code" element={<CustomerQrCode />} />
-        <Route path="/analytics" element={<CustomerAnalytics />} />
-        <Route path="/activity" element={<CustomerActivity />} />
-        <Route path="/orders" element={<CustomerOrders />} />
-        <Route path="/settings" element={<CustomerSettings />} />
-      </Route>
+        {/* Customer portal */}
+        <Route element={<CustomerLayout />}>
+          <Route path="/dashboard" element={<CustomerDashboard />} />
+          <Route path="/my-card" element={<CustomerMyCard />} />
+          <Route path="/profile" element={<CustomerProfile />} />
+          <Route path="/social-links" element={<CustomerSocialLinks />} />
+          <Route path="/qr-code" element={<CustomerQrCode />} />
+          <Route path="/analytics" element={<CustomerAnalytics />} />
+          <Route path="/activity" element={<CustomerActivity />} />
+          <Route path="/orders" element={<CustomerOrders />} />
+          <Route path="/settings" element={<CustomerSettings />} />
+        </Route>
 
-      {/* Public digital business card profile */}
-      <Route path="/u/:username" element={<PublicProfile />} />
+        {/* Public digital business card profile */}
+        <Route path="/u/:username" element={<PublicProfile />} />
 
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </>
   )
 }
 
