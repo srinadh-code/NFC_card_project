@@ -1,4 +1,4 @@
-import type { PricingPlan, Product, Testimonial } from "@/types"
+import type { Product, Testimonial } from "@/types"
 
 export const COMPANIES = [
   "Tata Consultancy Services",
@@ -229,85 +229,6 @@ export const TESTIMONIALS: Testimonial[] = [
     rating: 4,
     quote:
       "I travel constantly for trade shows. Being able to update my number and email from my phone the moment they change — without reprinting anything — has saved me real money.",
-  },
-]
-
-export const PRICING_PLANS: PricingPlan[] = [
-  {
-    id: "basic",
-    name: "Basic",
-    price: 599,
-    billing: "One-time",
-    audience: "Individual",
-    features: [
-      "1 NFC Card",
-      "Digital Profile",
-      "QR Code",
-      "Basic Analytics",
-      "Email Support",
-    ],
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    price: 999,
-    billing: "One-time",
-    audience: "Individual",
-    popular: true,
-    features: [
-      "1 NFC Card",
-      "Custom Profile",
-      "QR Code",
-      "Advanced Analytics",
-      "Social Integrations",
-      "Priority Support",
-    ],
-  },
-  {
-    id: "premium",
-    name: "Premium",
-    price: 1499,
-    billing: "One-time",
-    audience: "Individual",
-    features: [
-      "2 NFC Cards",
-      "Custom Profile",
-      "QR Code",
-      "Advanced Analytics",
-      "Social Integrations",
-      "Priority Support",
-      "Personalized Branding",
-    ],
-  },
-  {
-    id: "business",
-    name: "Business",
-    price: 4999,
-    billing: "Yearly",
-    audience: "Business",
-    features: [
-      "Up to 10 NFC Cards",
-      "Team Directory",
-      "Centralized Admin Panel",
-      "Advanced Analytics",
-      "CRM Integrations",
-      "Dedicated Account Manager",
-    ],
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    price: 14999,
-    billing: "Yearly",
-    audience: "Business",
-    features: [
-      "Unlimited NFC Cards",
-      "SSO & Role Management",
-      "Custom Branding",
-      "API Access",
-      "Dedicated Success Manager",
-      "SLA & Priority Support",
-    ],
   },
 ]
 

@@ -3,7 +3,7 @@ import { toast } from "sonner"
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
 import { SortableContext, arrayMove, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { GripVertical, Plus, Trash2, Link2 } from "lucide-react"
+import { GripVertical, Plus, Trash2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -176,7 +176,7 @@ export default function CustomerSocialLinks() {
 
   if (stuck) {
     return (
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-3xl">
         <ProfileNotReady onRetry={retry} />
       </div>
     )
@@ -184,12 +184,10 @@ export default function CustomerSocialLinks() {
 
   if (!profile || !socialLinks || !customLinks) {
     return (
-      <div className="mx-auto max-w-5xl space-y-4">
+      <div className="mx-auto max-w-3xl space-y-4">
         <Skeleton className="h-8 w-48" />
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <Skeleton className="h-96 w-full lg:col-span-2" />
-          <Skeleton className="h-96 w-full" />
-        </div>
+        <Skeleton className="h-96 w-full" />
+        <Skeleton className="h-56 w-full" />
       </div>
     )
   }
@@ -297,11 +295,8 @@ export default function CustomerSocialLinks() {
     }, 300)
   }
 
-  const previewSocial = socialLinks.filter((l) => l.enabled && l.url.trim() && isValidUrl(l.url))
-  const previewCustom = bySortOrder(customLinks.filter((l) => l.enabled && l.url.trim() && isValidUrl(l.url)))
-
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       <div className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight">Social Links</h1>
         <p className="text-sm text-muted-foreground">
@@ -309,128 +304,64 @@ export default function CustomerSocialLinks() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          <Card className="rounded-2xl">
-            <CardHeader>
-              <CardTitle>Your Platforms</CardTitle>
-              <CardDescription>Drag the handle to reorder — changes to order save instantly.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSocialDragEnd}>
-                <SortableContext items={socialLinks.map((l) => l.platform)} strategy={verticalListSortingStrategy}>
-                  {socialLinks.map((link) => (
-                    <SortableSocialRow
-                      key={link.platform}
-                      link={link}
-                      error={socialErrors.get(link.platform) ?? null}
-                      onUrlChange={handleSocialUrlChange}
-                      onToggle={handleSocialToggle}
-                    />
-                  ))}
-                </SortableContext>
-              </DndContext>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-2xl">
-            <CardHeader>
-              <CardTitle>Custom Links</CardTitle>
-              <CardDescription>Add extra links, like a portfolio or booking page.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {customLinks.length === 0 ? (
-                <p className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground">
-                  No custom links yet.
-                </p>
-              ) : (
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleCustomDragEnd}>
-                  <SortableContext items={customLinks.map((l) => l.id)} strategy={verticalListSortingStrategy}>
-                    {customLinks.map((link) => (
-                      <SortableCustomRow
-                        key={link.id}
-                        link={link}
-                        error={customErrors.get(link.id) ?? null}
-                        onChange={handleCustomChange}
-                        onToggle={handleCustomToggle}
-                        onDelete={handleCustomDelete}
-                      />
-                    ))}
-                  </SortableContext>
-                </DndContext>
-              )}
-              <Button type="button" variant="soft" onClick={() => setAddOpen(true)}>
-                <Plus /> Add Custom Link
-              </Button>
-            </CardContent>
-          </Card>
-
-          <div className="flex justify-end">
-            <Button size="lg" onClick={handleSave} disabled={saving}>
-              {saving ? "Saving..." : "Save Links"}
-            </Button>
-          </div>
-        </div>
-
-        <div className="lg:sticky lg:top-6 lg:self-start">
-          <Card className="rounded-2xl">
-            <CardHeader>
-              <CardTitle>Live Preview</CardTitle>
-              <CardDescription>What visitors see on your public card right now.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col items-center gap-3 rounded-2xl border bg-muted/30 p-6 text-center">
-                <img
-                  src={profile.avatar}
-                  alt={profile.fullName}
-                  className="size-16 rounded-full border-4 border-background object-cover shadow"
+      <Card className="rounded-2xl">
+        <CardHeader>
+          <CardTitle>Your Platforms</CardTitle>
+          <CardDescription>Drag the handle to reorder — changes to order save instantly.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSocialDragEnd}>
+            <SortableContext items={socialLinks.map((l) => l.platform)} strategy={verticalListSortingStrategy}>
+              {socialLinks.map((link) => (
+                <SortableSocialRow
+                  key={link.platform}
+                  link={link}
+                  error={socialErrors.get(link.platform) ?? null}
+                  onUrlChange={handleSocialUrlChange}
+                  onToggle={handleSocialToggle}
                 />
-                <div>
-                  <p className="font-semibold">{profile.fullName}</p>
-                  <p className="text-xs text-muted-foreground">{profile.designation}</p>
-                  <p className="text-xs text-muted-foreground">{profile.company}</p>
-                </div>
+              ))}
+            </SortableContext>
+          </DndContext>
+        </CardContent>
+      </Card>
 
-                {previewSocial.length > 0 && (
-                  <div className="flex flex-wrap justify-center gap-2 pt-2">
-                    {previewSocial.map((link) => {
-                      const Icon = getSocialIcon(link.platform)
-                      return (
-                        <div
-                          key={link.platform}
-                          className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary"
-                          title={link.platform}
-                        >
-                          <Icon className="size-4" />
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
+      <Card className="rounded-2xl">
+        <CardHeader>
+          <CardTitle>Custom Links</CardTitle>
+          <CardDescription>Add extra links, like a portfolio or booking page.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {customLinks.length === 0 ? (
+            <p className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground">
+              No custom links yet.
+            </p>
+          ) : (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleCustomDragEnd}>
+              <SortableContext items={customLinks.map((l) => l.id)} strategy={verticalListSortingStrategy}>
+                {customLinks.map((link) => (
+                  <SortableCustomRow
+                    key={link.id}
+                    link={link}
+                    error={customErrors.get(link.id) ?? null}
+                    onChange={handleCustomChange}
+                    onToggle={handleCustomToggle}
+                    onDelete={handleCustomDelete}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
+          )}
+          <Button type="button" variant="soft" onClick={() => setAddOpen(true)}>
+            <Plus /> Add Custom Link
+          </Button>
+        </CardContent>
+      </Card>
 
-                {previewCustom.length > 0 && (
-                  <div className="w-full space-y-2 pt-2">
-                    {previewCustom.map((link) => (
-                      <div
-                        key={link.id}
-                        className="flex w-full items-center justify-center gap-2 rounded-full border bg-background px-4 py-2 text-xs font-medium shadow-sm"
-                      >
-                        <Link2 className="size-3.5 text-primary" />
-                        {link.label}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {previewSocial.length === 0 && previewCustom.length === 0 && (
-                  <p className="pt-2 text-xs text-muted-foreground">
-                    No links enabled yet — toggle one on to see it here.
-                  </p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+      <div className="flex justify-end">
+        <Button size="lg" onClick={handleSave} disabled={saving}>
+          {saving ? "Saving..." : "Save Links"}
+        </Button>
       </div>
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>

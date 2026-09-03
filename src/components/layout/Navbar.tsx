@@ -12,7 +12,6 @@ const NAV_LINKS = [
   { to: "/features", label: "Features" },
   { to: "/shop", label: "Order Card" },
   { to: "/how-it-works", label: "How It Works" },
-  { to: "/pricing", label: "Pricing" },
 ]
 
 function Logo() {

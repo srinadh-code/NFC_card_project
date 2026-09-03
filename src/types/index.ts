@@ -213,16 +213,6 @@ export interface Product {
   popular?: boolean
 }
 
-export interface PricingPlan {
-  id: string
-  name: string
-  price: number
-  billing: "One-time" | "Yearly"
-  audience: "Individual" | "Business"
-  popular?: boolean
-  features: string[]
-}
-
 export interface CartLine {
   lineId: string
   productId: string

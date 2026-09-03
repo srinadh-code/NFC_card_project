@@ -7,7 +7,6 @@ import CustomerLayout from "@/components/layout/CustomerLayout"
 import Home from "@/pages/public/Home"
 import About from "@/pages/public/About"
 import Features from "@/pages/public/Features"
-import Pricing from "@/pages/public/Pricing"
 import HowItWorks from "@/pages/public/HowItWorks"
 import Shop from "@/pages/public/Shop"
 import Cart from "@/pages/public/Cart"
@@ -55,7 +54,6 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/about" element={<About />} />
         <Route path="/features" element={<Features />} />
-        <Route path="/pricing" element={<Pricing />} />
         <Route path="/how-it-works" element={<HowItWorks />} />
         <Route path="/shop" element={<Shop />} />
         <Route path="/cart" element={<Cart />} />
