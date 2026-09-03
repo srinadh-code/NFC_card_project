@@ -7,8 +7,15 @@ import {
   Clock,
   Download,
   ExternalLink,
+  Mail,
+  MapPin,
+  MousePointerClick,
   Nfc,
+  Eye,
   PackageSearch,
+  Phone,
+  QrCode,
+  BookmarkCheck,
   Share2,
   Sparkles,
   Wifi,
@@ -21,6 +28,8 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/admin/StatusBadge"
+import { StatCard } from "@/components/customer/StatCard"
+import { NfcCardFace } from "@/components/marketing/NfcCardShowcase"
 import { useCustomerAuthStore } from "@/store/auth-store"
 import {
   useDataStore,
@@ -28,8 +37,23 @@ import {
   selectOrdersByCustomer,
   selectProfileByCustomer,
 } from "@/store/data-store"
+import { analyticsRecords } from "@/data/seed"
 import { formatDate } from "@/lib/mock-api"
 import { downloadQrPng, shareOrCopyLink } from "@/components/customer/qr-utils"
+
+function InfoRow({ icon: Icon, label, value, mono }: { icon: typeof Mail; label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-muted/30 p-3">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <Icon className="size-4" />
+      </span>
+      <div className="min-w-0">
+        <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+        <p className={`truncate text-sm font-semibold text-foreground ${mono ? "font-mono" : ""}`}>{value}</p>
+      </div>
+    </div>
+  )
+}
 
 const IN_PROGRESS_ORDER_STATUSES = ["Pending", "Processing", "Shipped"]
 
@@ -238,50 +262,90 @@ export default function CustomerMyCard() {
   // A card has already been assigned by admin but the customer hasn't
   // tapped "Activate" yet — no need to type/guess a UID, it's right here.
   if (assignedCard) {
+    const records = analyticsRecords.filter((r) => r.customerId === customer.id)
+    const totals = {
+      taps: records.reduce((s, r) => s + r.taps, 0),
+      profileViews: records.reduce((s, r) => s + r.profileViews, 0),
+      qrScans: records.reduce((s, r) => s + r.qrScans, 0),
+      shares: records.reduce((s, r) => s + r.shares, 0),
+    }
+    const displayName = profile?.fullName ?? customer.name
+    const displayAvatar = profile?.avatar ?? customer.avatar
+    const displayEmail = profile?.email ?? customer.email
+
     return (
-      <div className="mx-auto max-w-2xl space-y-6">
-        <Alert className="rounded-xl border-primary/30 bg-primary/5">
-          <Zap className="text-primary" />
-          <AlertTitle>Your card has arrived — activate it to go live</AlertTitle>
-          <AlertDescription>
-            TapLink has assigned this physical card to your account. Tap Activate below to link it to your
-            profile.
-          </AlertDescription>
-        </Alert>
+      <div className="mx-auto max-w-6xl space-y-6">
+        {/* Status banner */}
+        <div className="relative overflow-hidden rounded-[24px] bg-gradient-brand-br p-6 text-white shadow-glow-primary-lg sm:p-8">
+          <div className="pointer-events-none absolute -right-16 -top-16 size-64 rounded-full bg-white/10 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-20 left-1/4 size-56 rounded-full bg-white/10 blur-3xl" />
+          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-4">
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-white/15 backdrop-blur">
+                <CheckCircle2 className="size-6" />
+              </span>
+              <div>
+                <p className="text-lg font-bold sm:text-xl">Your NFC card is ready for activation</p>
+                <p className="text-sm text-white/75">
+                  Link it to your profile now and start sharing with a single tap.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="lg"
+              onClick={() => activateAssignedMutation.mutate(assignedCard.id)}
+              disabled={activateAssignedMutation.isPending}
+              className="shrink-0 bg-white text-[#4F46E5] shadow-[0_10px_30px_rgba(0,0,0,0.2)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/90 hover:shadow-[0_15px_35px_rgba(0,0,0,0.28)]"
+            >
+              <Zap /> {activateAssignedMutation.isPending ? "Activating..." : "Activate Now"}
+            </Button>
+          </div>
+        </div>
 
-        <Card className="rounded-2xl">
-          <CardHeader>
-            <CardTitle>Your NFC Card</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <p className="text-xs text-muted-foreground">Card UID</p>
-              <p className="font-mono text-sm font-medium">{assignedCard.uid}</p>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+          {/* Card preview */}
+          <div className="flex items-center justify-center overflow-hidden rounded-[24px] bg-gradient-to-br from-[#0B0F1A] via-[#12142B] to-[#1A0F2E] p-8 shadow-xl sm:p-10 lg:col-span-2">
+            <div className="relative h-[190px] w-full max-w-xs sm:h-[210px]">
+              <div className="h-full w-full -rotate-3 animate-float-slow transition-transform duration-500 ease-out hover:-rotate-1 hover:scale-[1.04]">
+                <NfcCardFace tone="gold" />
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Serial Number</p>
-              <p className="font-mono text-sm font-medium">{assignedCard.serialNumber}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Status</p>
-              <StatusBadge status={assignedCard.status} />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Assigned Date</p>
-              <p className="text-sm font-medium">
-                {assignedCard.assignedOn ? formatDate(assignedCard.assignedOn) : "—"}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Button
-          size="lg"
-          onClick={() => activateAssignedMutation.mutate(assignedCard.id)}
-          disabled={activateAssignedMutation.isPending}
-        >
-          <Zap /> {activateAssignedMutation.isPending ? "Activating..." : "Activate Now"}
-        </Button>
+          {/* Profile info */}
+          <Card className="rounded-[24px] lg:col-span-3">
+            <CardContent className="space-y-5 pt-6">
+              <div className="flex flex-wrap items-center gap-4">
+                <img
+                  src={displayAvatar}
+                  alt={displayName}
+                  className="size-16 rounded-full border-4 border-white object-cover shadow-md"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-lg font-bold text-foreground">{displayName}</p>
+                  {profile?.designation && <p className="text-sm text-muted-foreground">{profile.designation}</p>}
+                  {profile?.company && <p className="text-sm text-muted-foreground">{profile.company}</p>}
+                </div>
+                <StatusBadge status={assignedCard.status} />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {displayEmail && <InfoRow icon={Mail} label="Email" value={displayEmail} />}
+                {profile?.phone && <InfoRow icon={Phone} label="Phone" value={profile.phone} />}
+                {profile?.address && <InfoRow icon={MapPin} label="Location" value={profile.address} />}
+                <InfoRow icon={Nfc} label="Card UID" value={assignedCard.uid} mono />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Quick stats */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <StatCard label="Total Taps" value={totals.taps.toLocaleString("en-IN")} icon={MousePointerClick} />
+          <StatCard label="Profile Views" value={totals.profileViews.toLocaleString("en-IN")} icon={Eye} />
+          <StatCard label="QR Scans" value={totals.qrScans.toLocaleString("en-IN")} icon={QrCode} />
+          <StatCard label="Contacts Saved" value={totals.shares.toLocaleString("en-IN")} icon={BookmarkCheck} />
+        </div>
       </div>
     )
   }
