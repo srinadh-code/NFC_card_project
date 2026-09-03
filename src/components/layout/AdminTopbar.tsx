@@ -90,7 +90,7 @@ export function AdminTopbar({ onMenuClick }: { onMenuClick?: () => void }) {
               variant="destructive"
               onClick={() => {
                 logout()
-                navigate("/admin/login")
+                navigate("/login")
               }}
             >
               <LogOut />

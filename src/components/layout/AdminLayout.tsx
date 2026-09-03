@@ -1,15 +1,21 @@
 import { useState } from "react"
 import { Navigate, Outlet } from "react-router-dom"
-import { useAdminAuthStore } from "@/store/auth-store"
+import { useAdminAuthStore, useCustomerAuthStore } from "@/store/auth-store"
 import { AdminSidebar } from "@/components/layout/AdminSidebar"
 import { AdminTopbar } from "@/components/layout/AdminTopbar"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 
 export default function AdminLayout() {
   const admin = useAdminAuthStore((s) => s.admin)
+  const customer = useCustomerAuthStore((s) => s.customer)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
-  if (!admin) return <Navigate to="/admin/login" replace />
+  if (!admin) {
+    // Signed in as the other role — send them to their own dashboard
+    // instead of bouncing a valid session back to the login screen.
+    if (customer) return <Navigate to="/dashboard" replace />
+    return <Navigate to="/login" replace />
+  }
 
   return (
     <div className="flex min-h-screen bg-muted/40">

@@ -18,7 +18,6 @@ import Contact from "@/pages/public/Contact"
 import Privacy from "@/pages/public/Privacy"
 import Terms from "@/pages/public/Terms"
 
-import AdminLogin from "@/pages/admin/Login"
 import AdminDashboard from "@/pages/admin/Dashboard"
 import AdminCustomers from "@/pages/admin/Customers"
 import AdminCustomerDetails from "@/pages/admin/CustomerDetails"
@@ -31,7 +30,7 @@ import AdminReports from "@/pages/admin/Reports"
 import AdminSettings from "@/pages/admin/Settings"
 import AdminSupport from "@/pages/admin/Support"
 
-import CustomerLogin from "@/pages/customer/Login"
+import Login from "@/pages/Login"
 import CustomerRegister from "@/pages/customer/Register"
 import CustomerDashboard from "@/pages/customer/Dashboard"
 import CustomerMyCard from "@/pages/customer/MyCard"
@@ -65,13 +64,11 @@ function App() {
         <Route path="/privacy-policy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
 
-        {/* Customer auth (public, unauthenticated) */}
-        <Route path="/login" element={<CustomerLogin />} />
+        {/* Unified login (public, unauthenticated) — routes to the right
+            dashboard by role after authenticating */}
+        <Route path="/login" element={<Login />} />
         <Route path="/register" element={<CustomerRegister />} />
       </Route>
-
-      {/* Admin auth (no sidebar) */}
-      <Route path="/admin/login" element={<AdminLogin />} />
 
       {/* Admin portal */}
       <Route path="/admin" element={<AdminLayout />}>

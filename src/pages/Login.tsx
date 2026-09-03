@@ -14,13 +14,27 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { useCustomerAuthStore, CUSTOMER_DEMO_CREDENTIALS } from "@/store/auth-store"
+import {
+  useAdminAuthStore,
+  useCustomerAuthStore,
+  ADMIN_DEMO_CREDENTIALS,
+  CUSTOMER_DEMO_CREDENTIALS,
+} from "@/store/auth-store"
 
-export default function CustomerLogin() {
+/**
+ * Single unified login for both roles. Tries the customer store first (it
+ * also covers self-registered accounts), then the admin store — each store's
+ * own `login()` still owns its credential check, so this page only decides
+ * where to send the user once one of them succeeds.
+ */
+export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
+
+  const admin = useAdminAuthStore((s) => s.admin)
+  const adminLogin = useAdminAuthStore((s) => s.login)
   const customer = useCustomerAuthStore((s) => s.customer)
-  const login = useCustomerAuthStore((s) => s.login)
+  const customerLogin = useCustomerAuthStore((s) => s.login)
 
   // If we got here via the "order a card while logged out" redirect (see
   // Checkout.tsx), send the customer right back to finish checkout instead
@@ -33,14 +47,30 @@ export default function CustomerLogin() {
   const [error, setError] = useState<string | null>(null)
   const [forgotOpen, setForgotOpen] = useState(false)
 
+  if (admin) return <Navigate to="/admin/dashboard" replace />
   if (customer) return <Navigate to={redirectTo} replace />
+
+  function attemptLogin(loginEmail: string, loginPassword: string) {
+    const customerResult = customerLogin(loginEmail, loginPassword)
+    if (customerResult.success) return { success: true as const, role: "customer" as const }
+
+    const adminResult = adminLogin(loginEmail, loginPassword)
+    if (adminResult.success) return { success: true as const, role: "admin" as const }
+
+    return { success: false as const, error: customerResult.error ?? adminResult.error }
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const result = login(email, password)
+    const result = attemptLogin(email, password)
     if (result.success) {
-      toast.success("Logged in successfully. Welcome back!")
-      navigate(redirectTo)
+      if (result.role === "admin") {
+        toast.success("Welcome back, Admin!")
+        navigate("/admin/dashboard")
+      } else {
+        toast.success("Logged in successfully. Welcome back!")
+        navigate(redirectTo)
+      }
     } else {
       setError(result.error ?? "Invalid credentials.")
       toast.error(result.error ?? "Invalid credentials.")
@@ -48,7 +78,7 @@ export default function CustomerLogin() {
   }
 
   function handleGoogleLogin() {
-    login(CUSTOMER_DEMO_CREDENTIALS.email, CUSTOMER_DEMO_CREDENTIALS.password)
+    customerLogin(CUSTOMER_DEMO_CREDENTIALS.email, CUSTOMER_DEMO_CREDENTIALS.password)
     toast.success("Signed in with Google (demo)")
     navigate(redirectTo)
   }
@@ -111,7 +141,7 @@ export default function CustomerLogin() {
           <div className="space-y-1">
             <h2 className="text-2xl font-bold tracking-tight">Login to Your Account</h2>
             <p className="text-sm text-muted-foreground">
-              Enter your credentials to access your customer dashboard.
+              Enter your credentials to access your dashboard.
             </p>
           </div>
 
@@ -201,16 +231,29 @@ export default function CustomerLogin() {
             </Link>
           </p>
 
-          <div className="rounded-xl border bg-muted/40 p-4 text-xs text-muted-foreground">
-            <p className="mb-1 flex items-center gap-1.5 font-semibold text-foreground">
-              <CreditCard className="size-3.5" /> Demo credentials
-            </p>
-            <p>
-              Email: <span className="font-mono text-foreground">{CUSTOMER_DEMO_CREDENTIALS.email}</span>
-            </p>
-            <p>
-              Password: <span className="font-mono text-foreground">{CUSTOMER_DEMO_CREDENTIALS.password}</span>
-            </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border bg-muted/40 p-4 text-xs text-muted-foreground">
+              <p className="mb-1 flex items-center gap-1.5 font-semibold text-foreground">
+                <CreditCard className="size-3.5" /> Customer demo
+              </p>
+              <p>
+                Email: <span className="font-mono text-foreground">{CUSTOMER_DEMO_CREDENTIALS.email}</span>
+              </p>
+              <p>
+                Password: <span className="font-mono text-foreground">{CUSTOMER_DEMO_CREDENTIALS.password}</span>
+              </p>
+            </div>
+            <div className="rounded-xl border bg-muted/40 p-4 text-xs text-muted-foreground">
+              <p className="mb-1 flex items-center gap-1.5 font-semibold text-foreground">
+                <CreditCard className="size-3.5" /> Admin demo
+              </p>
+              <p>
+                Email: <span className="font-mono text-foreground">{ADMIN_DEMO_CREDENTIALS.email}</span>
+              </p>
+              <p>
+                Password: <span className="font-mono text-foreground">{ADMIN_DEMO_CREDENTIALS.password}</span>
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -220,8 +263,8 @@ export default function CustomerLogin() {
           <DialogHeader>
             <DialogTitle>Forgot Password</DialogTitle>
             <DialogDescription>
-              Password reset isn&apos;t available in this demo — please use the demo credentials shown
-              on the login page (user@taplink.com / user123) to sign in.
+              Password reset isn&apos;t available in this demo — please use one of the demo
+              credentials shown on the login page to sign in.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

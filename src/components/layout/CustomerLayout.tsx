@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Navigate, Outlet } from "react-router-dom"
-import { useCustomerAuthStore } from "@/store/auth-store"
+import { useCustomerAuthStore, useAdminAuthStore } from "@/store/auth-store"
 import { CustomerSidebar } from "@/components/layout/CustomerSidebar"
 import { CustomerTopbar } from "@/components/layout/CustomerTopbar"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 export default function CustomerLayout() {
   const customer = useCustomerAuthStore((s) => s.customer)
   const repairSession = useCustomerAuthStore((s) => s.repairSession)
+  const admin = useAdminAuthStore((s) => s.admin)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   // Heals any session created before automatic onboarding existed (or any
@@ -18,7 +19,12 @@ export default function CustomerLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer?.id])
 
-  if (!customer) return <Navigate to="/login" replace />
+  if (!customer) {
+    // Signed in as the other role — send them to their own dashboard
+    // instead of bouncing a valid session back to the login screen.
+    if (admin) return <Navigate to="/admin/dashboard" replace />
+    return <Navigate to="/login" replace />
+  }
 
   return (
     <div className="flex min-h-screen bg-muted/30">

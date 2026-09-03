@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { getSocialIcon } from "@/components/customer/social-icons"
+import { DigitalCardPreview } from "@/components/customer/DigitalCardPreview"
 import { ProfileNotReady } from "@/components/customer/ProfileNotReady"
 import { useEnsuredProfile } from "@/hooks/use-ensured-profile"
 import { getQrPngDataUrl, downloadQrPng, downloadQrSvg, downloadQrPdf, shareOrCopyLink } from "@/components/customer/qr-utils"
@@ -74,11 +74,8 @@ export default function CustomerQrCode() {
     )
   }
 
-  const { username, fullName, designation, company } = profile
+  const { username, fullName } = profile
   const prettyUrl = `taplink.com/u/${username}`
-  const enabledSocial = [...profile.socialLinks]
-    .filter((l) => l.enabled)
-    .sort((a, b) => a.order - b.order)
 
   async function handleCopy() {
     try {
@@ -177,36 +174,13 @@ export default function CustomerQrCode() {
             <CardDescription>What people see after scanning your code.</CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center py-6">
-            <div className="relative h-[440px] w-[224px] rounded-[36px] border-8 border-neutral-900 bg-gradient-to-b from-primary/5 to-background shadow-xl dark:border-neutral-700">
-              <div className="absolute left-1/2 top-2 h-1.5 w-16 -translate-x-1/2 rounded-full bg-neutral-900 dark:bg-neutral-700" />
-              <div className="flex h-full flex-col items-center justify-center gap-3 px-5 text-center">
-                <img
-                  src={profile.avatar}
-                  alt={profile.fullName}
-                  className="size-20 rounded-full border-4 border-background object-cover shadow-md"
-                />
-                <div>
-                  <p className="font-semibold">{fullName}</p>
-                  <p className="text-xs text-muted-foreground">{designation}</p>
-                  <p className="text-xs text-muted-foreground">{company}</p>
-                </div>
-                {enabledSocial.length > 0 && (
-                  <div className="flex flex-wrap justify-center gap-2 pt-1">
-                    {enabledSocial.map((link) => {
-                      const Icon = getSocialIcon(link.platform)
-                      return (
-                        <div
-                          key={link.platform}
-                          className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary"
-                        >
-                          <Icon className="size-3.5" />
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
+            <DigitalCardPreview
+              profile={profile}
+              qrDataUrl={qrDataUrl}
+              downloading={busyAction === "png"}
+              onDownloadQr={() => runExport("png")}
+              onShare={handleShare}
+            />
           </CardContent>
         </Card>
       </div>
