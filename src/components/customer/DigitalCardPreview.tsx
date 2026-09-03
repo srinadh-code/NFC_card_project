@@ -26,13 +26,18 @@ interface DigitalCardPreviewProps {
   downloading?: boolean
   onDownloadQr: () => void
   onShare: () => void
+  /** Gates phone/email visibility (action buttons, vCard, Contact rows) —
+   * the owning customer always sees their own info in full; a visitor on the
+   * public profile only sees it when the customer's privacy setting allows
+   * it. Defaults to true so existing owner-facing callers don't need to pass it. */
+  showContactInfo?: boolean
 }
 
 function digitsOnly(phone: string) {
   return phone.replace(/[^0-9]/g, "")
 }
 
-function buildVCard(profile: Profile) {
+function buildVCard(profile: Profile, includeContact: boolean) {
   const lines = [
     "BEGIN:VCARD",
     "VERSION:3.0",
@@ -40,16 +45,18 @@ function buildVCard(profile: Profile) {
     `ORG:${profile.company}`,
     `TITLE:${profile.designation}`,
   ]
-  if (profile.phone) lines.push(`TEL;TYPE=CELL:${profile.phone}`)
-  if (profile.email) lines.push(`EMAIL:${profile.email}`)
+  if (includeContact) {
+    if (profile.phone) lines.push(`TEL;TYPE=CELL:${profile.phone}`)
+    if (profile.email) lines.push(`EMAIL:${profile.email}`)
+  }
   if (profile.address) lines.push(`ADR;TYPE=WORK:;;${profile.address}`)
   if (profile.website) lines.push(`URL:${profile.website}`)
   lines.push("END:VCARD")
   return lines.join("\n")
 }
 
-function downloadVCard(profile: Profile) {
-  const blob = new Blob([buildVCard(profile)], { type: "text/vcard" })
+function downloadVCard(profile: Profile, includeContact: boolean) {
+  const blob = new Blob([buildVCard(profile, includeContact)], { type: "text/vcard" })
   const url = URL.createObjectURL(blob)
   const a = document.createElement("a")
   a.href = url
@@ -116,15 +123,25 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function DigitalCardPreview({ profile, qrDataUrl, downloading, onDownloadQr, onShare }: DigitalCardPreviewProps) {
+export function DigitalCardPreview({
+  profile,
+  qrDataUrl,
+  downloading,
+  onDownloadQr,
+  onShare,
+  showContactInfo = true,
+}: DigitalCardPreviewProps) {
   const enabledSocial = [...profile.socialLinks]
     .filter((l) => l.enabled && l.url.trim())
     .sort((a, b) => a.order - b.order)
   const enabledCustom = [...profile.customLinks]
     .filter((l) => l.enabled && l.url.trim())
     .sort((a, b) => a.order - b.order)
+  const customFields = [...profile.customFields].sort((a, b) => a.order - b.order)
 
-  const hasContactInfo = Boolean(profile.address || profile.email || profile.phone || profile.website)
+  const showPhone = showContactInfo && Boolean(profile.phone)
+  const showEmail = showContactInfo && Boolean(profile.email)
+  const hasContactInfo = Boolean(profile.address || profile.website || showEmail || showPhone)
 
   return (
     <div className="relative mx-auto w-[300px] overflow-hidden rounded-[36px] border-[8px] border-neutral-900 bg-white shadow-xl">
@@ -155,7 +172,7 @@ export function DigitalCardPreview({ profile, qrDataUrl, downloading, onDownload
 
           {/* Action buttons */}
           <div className="mt-5 flex items-start justify-center gap-3">
-            {profile.phone && (
+            {showPhone && (
               <a href={`tel:${profile.phone}`} className="flex w-16 flex-col items-center gap-1">
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#22C55E] text-white shadow-sm transition-transform hover:scale-105">
                   <Phone className="size-4" />
@@ -163,13 +180,17 @@ export function DigitalCardPreview({ profile, qrDataUrl, downloading, onDownload
                 <span className="truncate text-[10px] font-medium text-muted-foreground">Call</span>
               </a>
             )}
-            <button type="button" onClick={() => downloadVCard(profile)} className="flex w-16 flex-col items-center gap-1">
+            <button
+              type="button"
+              onClick={() => downloadVCard(profile, showContactInfo)}
+              className="flex w-16 flex-col items-center gap-1"
+            >
               <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-brand text-white shadow-glow-primary transition-transform hover:scale-105">
                 <UserPlus className="size-4" />
               </span>
               <span className="truncate text-[10px] font-medium text-muted-foreground">Save</span>
             </button>
-            {profile.phone && (
+            {showPhone && (
               <a
                 href={`https://wa.me/${digitsOnly(profile.phone)}`}
                 target="_blank"
@@ -182,7 +203,7 @@ export function DigitalCardPreview({ profile, qrDataUrl, downloading, onDownload
                 <span className="truncate text-[10px] font-medium text-muted-foreground">WhatsApp</span>
               </a>
             )}
-            {profile.email && (
+            {showEmail && (
               <a href={`mailto:${profile.email}`} className="flex w-16 flex-col items-center gap-1">
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#EA4335] text-white shadow-sm transition-transform hover:scale-105">
                   <Mail className="size-4" />
@@ -214,15 +235,34 @@ export function DigitalCardPreview({ profile, qrDataUrl, downloading, onDownload
               <SectionLabel>Contact</SectionLabel>
               <div className="space-y-2.5">
                 {profile.address && <ContactRow icon={MapPin} color="#8B5CF6" title="Address" value={profile.address} />}
-                {profile.email && (
+                {showEmail && (
                   <ContactRow icon={Mail} color="#EA4335" title="Email" value={profile.email} href={`mailto:${profile.email}`} />
                 )}
-                {profile.phone && (
+                {showPhone && (
                   <ContactRow icon={Phone} color="#22C55E" title="Phone" value={profile.phone} href={`tel:${profile.phone}`} />
                 )}
                 {profile.website && (
                   <ContactRow icon={Globe} color="#2563EB" title="Website" value={profile.website} href={profile.website} />
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Custom fields */}
+          {customFields.length > 0 && (
+            <div className="mt-7 w-full">
+              <SectionLabel>Details</SectionLabel>
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                {customFields.map((field) => (
+                  <div key={field.id} className="rounded-2xl border border-border/70 bg-muted/30 px-3.5 py-2.5 text-left">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      {field.label || "Untitled"}
+                    </p>
+                    <p className="truncate text-sm font-semibold text-foreground" title={field.value}>
+                      {field.value || "—"}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
           )}
