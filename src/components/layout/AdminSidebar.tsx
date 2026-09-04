@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from "react-router-dom"
+﻿import { NavLink, useNavigate } from "react-router-dom"
 import {
   LayoutDashboard,
   Users,
@@ -39,7 +39,7 @@ export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
         <div className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
           <Zap className="size-4.5" />
         </div>
-        <span className="text-lg font-semibold tracking-tight">TapLink</span>
+        <span className="text-lg font-semibold tracking-tight">VR's NEXORA</span>
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">

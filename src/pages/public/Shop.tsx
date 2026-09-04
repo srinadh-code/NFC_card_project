@@ -23,7 +23,7 @@ import { cardClass } from "@/components/marketing/PremiumCard"
 // Displayed product copy for this page. `FLAGSHIP_PRODUCT` (from the shared,
 // out-of-scope constants file) still supplies id/cardType/colors, but the
 // name, price, and feature list shown here follow the client's latest brief.
-const DISPLAY_NAME = "TapLink NFC Smart Card"
+const DISPLAY_NAME = "VR's NEXORA NFC Smart Card"
 const DISPLAY_PRICE = 499
 
 const DISPLAY_FEATURES = [
@@ -80,7 +80,7 @@ export default function Shop() {
   return (
     <div>
       <PageHeader
-        title="TapLink NFC Smart Card"
+        title="VR's NEXORA NFC Smart Card"
         subtitle="One smart card that replaces your entire stack of paper business cards. Configure yours below."
       />
 

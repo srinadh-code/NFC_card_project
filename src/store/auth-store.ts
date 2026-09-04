@@ -1,4 +1,4 @@
-import { create } from "zustand"
+﻿import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import type { AdminUser, CustomerUser } from "@/types"
 import { customers } from "@/data/seed"
@@ -26,7 +26,7 @@ export const useAdminAuthStore = create<AdminAuthState>()(
             name: "Admin",
             email: ADMIN_CREDENTIALS.email,
             role: "Super Admin",
-            avatar: "https://api.dicebear.com/9.x/notionists/svg?seed=taplink-admin",
+            avatar: "https://api.dicebear.com/9.x/notionists/svg?seed=VR's NEXORA-admin",
           },
         })
         return { success: true }

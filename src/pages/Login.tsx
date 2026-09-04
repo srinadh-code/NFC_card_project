@@ -1,4 +1,4 @@
-import { useState } from "react"
+﻿import { useState } from "react"
 import { Navigate, Link, useNavigate, useLocation } from "react-router-dom"
 import { toast } from "sonner"
 import { CreditCard, Fingerprint, Sparkles, Zap } from "lucide-react"
@@ -94,7 +94,7 @@ export default function Login() {
           <div className="flex size-9 items-center justify-center rounded-xl bg-white/15">
             <Zap className="size-5" fill="currentColor" />
           </div>
-          <span className="text-lg font-bold tracking-tight">TapLink</span>
+          <span className="text-lg font-bold tracking-tight">VR's NEXORA</span>
         </div>
 
         <div className="relative z-10 space-y-6">
@@ -134,7 +134,7 @@ export default function Login() {
               <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
                 <Zap className="size-5" fill="currentColor" />
               </div>
-              <span className="text-lg font-bold tracking-tight">TapLink</span>
+              <span className="text-lg font-bold tracking-tight">VR's NEXORA</span>
             </div>
           </div>
 

@@ -1,4 +1,4 @@
-import { useState } from "react"
+﻿import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Check, Copy, Download, FileText, ImageIcon, Printer, Share2 } from "lucide-react"
@@ -75,7 +75,7 @@ export default function CustomerQrCode() {
   }
 
   const { username, fullName } = profile
-  const prettyUrl = `taplink.com/u/${username}`
+  const prettyUrl = `vrsnexora.com/u/${username}`
 
   async function handleCopy() {
     try {
@@ -93,7 +93,7 @@ export default function CustomerQrCode() {
     try {
       if (kind === "png") await downloadQrPng(realUrl, `${username}-qr-code.png`)
       else if (kind === "svg") await downloadQrSvg(realUrl, `${username}-qr-code.svg`)
-      else await downloadQrPdf(realUrl, `${username}-qr-code.pdf`, `${fullName} — TapLink`)
+      else await downloadQrPdf(realUrl, `${username}-qr-code.pdf`, `${fullName} — VR's NEXORA`)
       toast.success(`QR code downloaded as ${kind.toUpperCase()}.`)
     } catch {
       toast.error("Couldn't generate that file right now.")
@@ -103,7 +103,7 @@ export default function CustomerQrCode() {
   }
 
   async function handleShare() {
-    const result = await shareOrCopyLink(realUrl, `${fullName} — TapLink`)
+    const result = await shareOrCopyLink(realUrl, `${fullName} — VR's NEXORA`)
     if (result === "shared") toast.success("Shared!")
     else if (result === "copied") toast.success("Sharing isn't supported here — link copied instead!")
     else if (result === "failed") toast.error("Couldn't share or copy the link.")

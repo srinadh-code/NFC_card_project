@@ -10,9 +10,9 @@ import { cardClass } from "@/components/marketing/PremiumCard"
 import { cn } from "@/lib/utils"
 
 const INFO = [
-  { icon: Mail, label: "Email", value: "support@taplink.com" },
+  { icon: Mail, label: "Email", value: "support@vrsnexora.com" },
   { icon: Phone, label: "Phone", value: "+91 98765 43210" },
-  { icon: MapPin, label: "Address", value: "TapLink Technologies Pvt. Ltd., Hyderabad, Telangana, India" },
+  { icon: MapPin, label: "Address", value: "VR's NEXORA Technologies Pvt. Ltd., Hyderabad, Telangana, India" },
   { icon: Clock, label: "Business Hours", value: "Mon – Sat, 9:00 AM – 6:00 PM" },
 ]
 

@@ -1,7 +1,7 @@
-const SECTIONS = [
+﻿const SECTIONS = [
   {
     title: "Introduction",
-    body: "TapLink Technologies Pvt. Ltd. (\"TapLink\", \"we\", \"us\") provides NFC-enabled digital business cards and profile hosting services. This Privacy Policy explains how we collect, use, and protect your information when you purchase a card, create a profile, or otherwise use our website and services.",
+    body: "VR's NEXORA Technologies Pvt. Ltd. (\"VR's NEXORA\", \"we\", \"us\") provides NFC-enabled digital business cards and profile hosting services. This Privacy Policy explains how we collect, use, and protect your information when you purchase a card, create a profile, or otherwise use our website and services.",
   },
   {
     title: "Information We Collect",
@@ -25,7 +25,7 @@ const SECTIONS = [
   },
   {
     title: "Contact for Privacy",
-    body: "If you have questions about this Privacy Policy or how your data is handled, please reach out to us at support@taplink.com or write to TapLink Technologies Pvt. Ltd., Hyderabad, Telangana, India.",
+    body: "If you have questions about this Privacy Policy or how your data is handled, please reach out to us at support@vrsnexora.com or write to VR's NEXORA Technologies Pvt. Ltd., Hyderabad, Telangana, India.",
   },
 ]
 

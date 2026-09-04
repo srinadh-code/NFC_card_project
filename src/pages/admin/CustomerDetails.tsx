@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+﻿import { useMemo } from "react"
 import { Link, useParams } from "react-router-dom"
 import { ChevronRight, ShoppingBag, IndianRupee, Radio, CreditCard, MapPin, Smartphone } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -205,7 +205,7 @@ export default function AdminCustomerDetails() {
                         rel="noreferrer"
                         className="text-sm text-primary hover:underline"
                       >
-                        taplink.com/u/{profile.username}
+                        vrsnexora.com/u/{profile.username}
                       </a>
                     </div>
                     <StatusBadge status={profile.status} className="ml-auto" />

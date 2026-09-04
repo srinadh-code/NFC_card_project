@@ -1,4 +1,4 @@
-// Shared domain types for the TapLink platform.
+﻿// Shared domain types for the VR's NEXORA platform.
 // This is the single source of truth for shapes used across the public site,
 // admin portal and customer portal so a future Django backend can map 1:1.
 
@@ -38,7 +38,7 @@ export interface Customer {
   company: string
   designation: string
   address: Address
-  profileUrl: string // taplink.com/u/username
+  profileUrl: string // vrsnexora.com/u/username
   username: string
   status: CustomerStatus
   avatar: string

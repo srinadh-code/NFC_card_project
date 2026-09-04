@@ -1,4 +1,4 @@
-import { create } from "zustand"
+﻿import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import type {
   CardStatus,
@@ -217,7 +217,7 @@ export const useDataStore = create<DataState>()(
 
         if (!profile) {
           const username = uniqueUsername(slugifyUsername(input.name, input.email), state.profiles)
-          customer = { ...customer, username, profileUrl: `taplink.com/u/${username}` }
+          customer = { ...customer, username, profileUrl: `vrsnexora.com/u/${username}` }
           profile = {
             id: nextId("PRO", state.profiles),
             customerId: id,

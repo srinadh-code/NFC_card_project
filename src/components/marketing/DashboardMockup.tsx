@@ -1,4 +1,4 @@
-import {
+﻿import {
   LayoutDashboard,
   CreditCard,
   UserCircle,
@@ -86,7 +86,7 @@ export default function DashboardMockup() {
             <span className="flex size-6 items-center justify-center rounded-lg bg-gradient-brand text-white">
               <Nfc className="size-3.5" />
             </span>
-            <span className="text-xs font-bold text-white">TapLink</span>
+            <span className="text-xs font-bold text-white">VR's NEXORA</span>
           </div>
           <nav className="space-y-1">
             {NAV_ITEMS.map((item) => (

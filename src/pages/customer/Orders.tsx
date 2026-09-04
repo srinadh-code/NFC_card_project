@@ -1,4 +1,4 @@
-import { useState } from "react"
+﻿import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { CheckCircle2, Circle, Download, LifeBuoy, PackageSearch } from "lucide-react"
@@ -41,7 +41,7 @@ function productSummary(order: Order) {
 
 function downloadInvoice(order: Order) {
   const lines = [
-    `TapLink — Invoice for ${order.id}`,
+    `VR's NEXORA — Invoice for ${order.id}`,
     `Date: ${formatDate(order.date)}`,
     `Customer: ${order.customerName} (${order.customerEmail})`,
     `Payment: ${order.paymentMethod} — ${order.paymentStatus}`,

@@ -1,4 +1,4 @@
-import { create } from "zustand"
+﻿import { create } from "zustand"
 import { persist } from "zustand/middleware"
 
 export interface AdminSettings {
@@ -36,8 +36,8 @@ export interface AdminSettings {
 
 const DEFAULT_SETTINGS: AdminSettings = {
   general: {
-    siteName: "TapLink",
-    siteEmail: "support@taplink.com",
+    siteName: "VR's NEXORA",
+    siteEmail: "support@vrsnexora.com",
     sitePhone: "+91 90000 12345",
     siteAddress: "Hyderabad, Telangana, India",
     currency: "INR",
@@ -53,9 +53,9 @@ const DEFAULT_SETTINGS: AdminSettings = {
     freeShippingThreshold: 999,
   },
   email: {
-    smtpHost: "smtp.taplink.com",
+    smtpHost: "smtp.vrsnexora.com",
     smtpPort: 587,
-    fromAddress: "no-reply@taplink.com",
+    fromAddress: "no-reply@vrsnexora.com",
   },
   sms: {
     provider: "Twilio",

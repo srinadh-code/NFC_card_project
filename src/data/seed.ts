@@ -1,4 +1,4 @@
-import { fakerEN_IN as faker } from "@faker-js/faker"
+﻿import { fakerEN_IN as faker } from "@faker-js/faker"
 import type {
   ActivityRecord,
   AnalyticsRecord,
@@ -92,7 +92,7 @@ export const customers: Customer[] = Array.from({ length: CUSTOMER_COUNT }).map(
     name,
     email: isDemo ? "user@taplink.com" : faker.internet.email({ firstName, lastName }).toLowerCase(),
     phone: isDemo ? "+91 98765 43210" : `+91 ${faker.string.numeric(5)}${faker.string.numeric(5)}`,
-    company: isDemo ? "TapLink Technologies Pvt. Ltd." : pick(COMPANIES),
+    company: isDemo ? "VR's NEXORA Technologies Pvt. Ltd." : pick(COMPANIES),
     designation: isDemo ? "Software Developer" : pick(DESIGNATIONS),
     address: {
       line1: faker.location.streetAddress(),
@@ -101,7 +101,7 @@ export const customers: Customer[] = Array.from({ length: CUSTOMER_COUNT }).map(
       pincode: faker.location.zipCode("######"),
       country: "India",
     },
-    profileUrl: `taplink.com/u/${username}`,
+    profileUrl: `vrsnexora.com/u/${username}`,
     username,
     status,
     avatar: `https://api.dicebear.com/9.x/notionists/svg?seed=${username}`,

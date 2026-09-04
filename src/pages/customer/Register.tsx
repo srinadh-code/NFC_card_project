@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+﻿import { useEffect, useRef, useState } from "react"
 import { Navigate, Link, useNavigate, useLocation } from "react-router-dom"
 import { toast } from "sonner"
 import { Check, ShieldCheck, Sparkles, Zap } from "lucide-react"
@@ -90,7 +90,7 @@ export default function CustomerRegister() {
       toast.error(result.error ?? "Something went wrong. Please try again.")
       return
     }
-    toast.success(`Welcome to TapLink, ${form.name.split(" ")[0]}!`)
+    toast.success(`Welcome to VR's NEXORA, ${form.name.split(" ")[0]}!`)
     navigate(redirectTo)
   }
 
@@ -110,7 +110,7 @@ export default function CustomerRegister() {
           <div className="flex size-9 items-center justify-center rounded-xl bg-white/15">
             <Zap className="size-5" fill="currentColor" />
           </div>
-          <span className="text-lg font-bold tracking-tight">TapLink</span>
+          <span className="text-lg font-bold tracking-tight">VR's NEXORA</span>
         </div>
 
         <div className="relative z-10 space-y-6">
@@ -157,7 +157,7 @@ export default function CustomerRegister() {
               <div className="space-y-1">
                 <h2 className="text-2xl font-bold tracking-tight">Sign Up</h2>
                 <p className="text-sm text-muted-foreground">
-                  Create your TapLink account to get started.
+                  Create your VR's NEXORA account to get started.
                 </p>
               </div>
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+﻿import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import { Globe2, KeyRound, Laptop, Monitor, Moon, Search, ShieldCheck, Smartphone, Sun, Trash2, Users } from "lucide-react"
@@ -138,7 +138,7 @@ export default function CustomerSettings() {
       <Card className="rounded-2xl">
         <CardHeader>
           <CardTitle>Appearance</CardTitle>
-          <CardDescription>Choose how TapLink looks on this device.</CardDescription>
+          <CardDescription>Choose how VR's NEXORA looks on this device.</CardDescription>
         </CardHeader>
         <CardContent>
           <RadioGroup
@@ -277,7 +277,7 @@ export default function CustomerSettings() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium">Password</p>
-              <p className="text-xs text-muted-foreground">Change the password used to sign in to TapLink.</p>
+              <p className="text-xs text-muted-foreground">Change the password used to sign in to VR's NEXORA.</p>
             </div>
             <Button variant="outline" size="sm" onClick={() => setPwOpen(true)}>
               <KeyRound /> Change

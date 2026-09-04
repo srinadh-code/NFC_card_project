@@ -1,4 +1,4 @@
-import { create } from "zustand"
+﻿import { create } from "zustand"
 import { persist } from "zustand/middleware"
 
 interface Session {
@@ -30,7 +30,7 @@ interface CustomerSettingsState {
 
 const DEFAULT_SESSIONS: Session[] = [
   { id: "SES001", device: "Chrome on Windows", location: "Hyderabad, Telangana", lastActive: "Active now" },
-  { id: "SES002", device: "TapLink App on iPhone 14", location: "Hyderabad, Telangana", lastActive: "2 hours ago" },
+  { id: "SES002", device: "VR's NEXORA App on iPhone 14", location: "Hyderabad, Telangana", lastActive: "2 hours ago" },
   { id: "SES003", device: "Safari on MacBook Pro", location: "Bengaluru, Karnataka", lastActive: "3 days ago" },
 ]
 

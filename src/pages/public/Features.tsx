@@ -1,4 +1,4 @@
-import { useState } from "react"
+﻿import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   Zap,
@@ -264,7 +264,7 @@ export default function Features() {
       {/* ============ STATS ============ */}
       <StatsBar />
 
-      <CtaBanner title="Ready to Experience the Power of TapLink?" />
+      <CtaBanner title="Ready to Experience the Power of VR's NEXORA?" />
     </div>
   )
 }

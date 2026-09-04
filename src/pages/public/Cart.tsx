@@ -1,4 +1,4 @@
-import { useState } from "react"
+﻿import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Minus, Plus, ShoppingCart, Trash2 } from "lucide-react"
 import { toast } from "sonner"
@@ -122,7 +122,7 @@ export default function Cart() {
 
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
             <Input
-              placeholder="Enter coupon code (e.g. TAPLINK10)"
+              placeholder="Enter coupon code (e.g. NEXORA10)"
               value={coupon}
               onChange={(e) => setCoupon(e.target.value)}
             />

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+﻿import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -76,7 +76,7 @@ export default function AdminCustomers() {
           pincode: values.pincode,
           country: values.country,
         },
-        profileUrl: `taplink.com/u/${username}`,
+        profileUrl: `vrsnexora.com/u/${username}`,
         username,
         status: values.status,
         avatar: `https://api.dicebear.com/9.x/notionists/svg?seed=${username}`,

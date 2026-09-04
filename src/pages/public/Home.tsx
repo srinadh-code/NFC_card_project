@@ -79,7 +79,7 @@ export default function Home() {
         <div className="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-2">
           <div>
             <span className="inline-flex items-center rounded-full bg-[#4F46E5]/10 px-3 py-1 text-xs font-semibold tracking-wide text-[#4F46E5]">
-              THE FUTURE OF NETWORKING
+              VR&apos;S NEXORA · DIGITAL IDENTITY PLATFORM
             </span>
             <h1 className="mt-5 text-4xl font-bold leading-tight tracking-tight text-foreground sm:text-5xl md:text-6xl">
               One Tap.
@@ -89,8 +89,8 @@ export default function Home() {
               </span>
             </h1>
             <p className="mt-6 max-w-lg text-lg text-muted-foreground">
-              TapLink turns a simple tap into a lasting connection — share your digital business
-              card, social profiles, and portfolio instantly with anyone, anywhere.
+              Transform every introduction into a lasting digital connection using NFC-powered
+              smart identity cards.
             </p>
             <ul className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {CHECKLIST.map((item) => (
@@ -142,10 +142,10 @@ export default function Home() {
             {/* NFC card, tilted behind the phone */}
             <div className="absolute left-1/2 top-1/2 z-0 h-52 w-80 -translate-x-[62%] -translate-y-1/2 -rotate-6 animate-float-slower rounded-[24px] bg-gradient-to-br from-[#0F172A] to-[#1E293B] p-6 shadow-2xl">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold tracking-tight text-white">TapLink</span>
+                <span className="text-sm font-bold tracking-tight text-white">VR's NEXORA</span>
                 <Wifi className="size-5 rotate-90 text-white/70" />
               </div>
-              <p className="mt-16 text-lg font-semibold tracking-tight text-white/90">TapLink</p>
+              <p className="mt-16 text-lg font-semibold tracking-tight text-white/90">VR's NEXORA</p>
             </div>
 
             {/* Phone mockup */}
@@ -160,7 +160,7 @@ export default function Home() {
                 <div>
                   <p className="text-sm font-bold text-white">Alex Morgan</p>
                   <p className="text-xs text-white/75">Product Designer</p>
-                  <p className="text-[11px] text-white/60">TapLink</p>
+                  <p className="text-[11px] text-white/60">VR's NEXORA</p>
                 </div>
                 <div className="flex items-center gap-2">
                   {[Briefcase, Camera, AtSign, MessageCircle].map((Icon, i) => (
@@ -250,19 +250,19 @@ export default function Home() {
             <div>
               <h2 className="text-3xl font-bold tracking-tight text-foreground">Our Story</h2>
               <p className="mt-4 text-muted-foreground">
-                TapLink was born from a simple frustration — running out of paper business cards
+                VR's NEXORA was born from a simple frustration — running out of paper business cards
                 at the exact moment a great connection was made. We set out to build a smarter,
                 greener, and more memorable way to network.
               </p>
               <p className="mt-4 text-muted-foreground">
-                Today, thousands of professionals across the globe use TapLink to share their
+                Today, thousands of professionals across the globe use VR's NEXORA to share their
                 identity in an instant, track every interaction, and keep their profile fresh
                 without ever reprinting a card.
               </p>
             </div>
             <div className="relative flex items-center justify-center">
               <div className="absolute size-72 rounded-full bg-gradient-to-br from-[#4F46E5]/10 via-[#7C3AED]/10 to-[#EC4899]/10 blur-3xl" />
-              <img src={heroImg} alt="TapLink story" className="relative z-10 w-full max-w-sm" />
+              <img src={heroImg} alt="VR's NEXORA story" className="relative z-10 w-full max-w-sm" />
             </div>
           </div>
           <div className="mt-16 grid grid-cols-2 gap-6 lg:grid-cols-4">
@@ -283,7 +283,7 @@ export default function Home() {
       <section className="bg-white px-4 py-20">
         <div className="mx-auto max-w-7xl">
           <div className="mx-auto max-w-2xl text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-foreground">Why Choose TapLink?</h2>
+            <h2 className="text-3xl font-bold tracking-tight text-foreground">Why Choose VR's NEXORA?</h2>
             <p className="mt-3 text-muted-foreground">
               Everything you need to network smarter, in one tiny card.
             </p>
@@ -378,7 +378,7 @@ export default function Home() {
         </div>
       </section>
 
-      <CtaBanner title="Ready to Experience the Power of TapLink?" />
+      <CtaBanner title="Ready to Experience the Power of VR's NEXORA?" />
     </div>
   )
 }

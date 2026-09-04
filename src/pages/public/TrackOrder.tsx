@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react"
+﻿import { useState, type FormEvent } from "react"
 import { CheckCircle2, Circle, Download, PackageSearch } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -28,7 +28,7 @@ export default function TrackOrder() {
 
   function handleDownloadInvoice(order: Order) {
     const content = [
-      `TapLink Invoice`,
+      `VR's NEXORA Invoice`,
       `Order ID: ${order.id}`,
       `Date: ${formatDate(order.date)}`,
       `Customer: ${order.customerName}`,

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react"
+﻿import { useState, type ReactNode } from "react"
 import { toast } from "sonner"
 import {
   Settings as SettingsIcon,
@@ -105,7 +105,7 @@ export default function AdminSettings() {
             <Card>
               <CardHeader>
                 <CardTitle>General</CardTitle>
-                <CardDescription>Basic information about your TapLink platform.</CardDescription>
+                <CardDescription>Basic information about your VR's NEXORA platform.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

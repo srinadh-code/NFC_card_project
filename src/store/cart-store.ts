@@ -1,4 +1,4 @@
-import { create } from "zustand"
+﻿import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import type { CartLine } from "@/types"
 
@@ -15,7 +15,7 @@ interface CartState {
 }
 
 const VALID_COUPONS: Record<string, number> = {
-  TAPLINK10: 0.1,
+  NEXORA10: 0.1,
   WELCOME50: 50,
   FIRSTORDER: 0.15,
 }

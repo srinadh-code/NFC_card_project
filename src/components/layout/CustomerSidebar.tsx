@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from "react-router-dom"
+﻿import { NavLink, useNavigate } from "react-router-dom"
 import {
   Activity,
   BarChart3,
@@ -41,7 +41,7 @@ export function CustomerSidebar({ onNavigate }: CustomerSidebarProps) {
         <div className="flex size-9 items-center justify-center rounded-xl bg-gradient-brand text-white shadow-glow-primary">
           <Zap className="size-5" fill="currentColor" />
         </div>
-        <span className="text-lg font-bold tracking-tight text-white">TapLink</span>
+        <span className="text-lg font-bold tracking-tight text-white">VR's NEXORA</span>
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">

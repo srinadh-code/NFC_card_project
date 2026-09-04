@@ -1,4 +1,4 @@
-import {
+﻿import {
   Sparkles,
   Feather,
   ShieldCheck,
@@ -48,7 +48,7 @@ export default function About() {
   return (
     <div>
       <PageHeader
-        title="About TapLink"
+        title="About VR's NEXORA"
         subtitle="We're on a mission to replace paper business cards with a smarter, greener, more memorable way to connect."
       />
 
@@ -63,14 +63,14 @@ export default function About() {
               A smarter way to <span className="text-gradient-brand">introduce yourself</span>
             </h2>
             <p className="mt-4 text-muted-foreground">
-              TapLink is a digital business card platform built for the modern professional.
+              VR's NEXORA is a digital business card platform built for the modern professional.
               Instead of printing hundreds of cards that end up in a drawer, our NFC-enabled cards
               let you share a rich, always up-to-date profile with a single tap — no app required
               on the recipient's end.
             </p>
             <p className="mt-4 text-muted-foreground">
               Founded by a small team of designers and engineers who were tired of running out of
-              paper cards at networking events, TapLink has grown into a platform trusted by
+              paper cards at networking events, VR's NEXORA has grown into a platform trusted by
               individuals, startups, and enterprise teams across the globe to make every
               introduction count.
             </p>
@@ -97,11 +97,11 @@ export default function About() {
       {/* Statistics showcase */}
       <StatsShowcaseCard />
 
-      {/* Why Choose TapLink */}
+      {/* Why Choose VR's NEXORA */}
       <section className="bg-white px-4 py-20">
         <div className="mx-auto max-w-7xl">
           <div className="mx-auto max-w-2xl text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-foreground">Why Choose TapLink?</h2>
+            <h2 className="text-3xl font-bold tracking-tight text-foreground">Why Choose VR's NEXORA?</h2>
             <p className="mt-3 text-muted-foreground">
               Everything you need to network smarter, in one premium card.
             </p>
@@ -141,7 +141,7 @@ export default function About() {
           <div className="mt-12 grid items-center gap-12 lg:grid-cols-2">
             <div className="relative flex items-center justify-center">
               <div className="absolute size-64 rounded-full bg-gradient-to-br from-[#4F46E5]/10 via-[#7C3AED]/10 to-[#EC4899]/10 blur-3xl" />
-              <img src={heroImg} alt="TapLink story" className="relative z-10 mx-auto w-full max-w-sm" />
+              <img src={heroImg} alt="VR's NEXORA story" className="relative z-10 mx-auto w-full max-w-sm" />
             </div>
             <div>
               <p className="text-muted-foreground">
@@ -150,7 +150,7 @@ export default function About() {
                 card evolved in over a century?
               </p>
               <p className="mt-4 text-muted-foreground">
-                So we built TapLink: a durable NFC card paired with a beautiful, editable digital
+                So we built VR's NEXORA: a durable NFC card paired with a beautiful, editable digital
                 profile. Update your details anytime, track every tap and scan, and never run out
                 of cards again.
               </p>

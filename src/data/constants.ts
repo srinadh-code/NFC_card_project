@@ -1,4 +1,4 @@
-import type { Product, Testimonial } from "@/types"
+﻿import type { Product, Testimonial } from "@/types"
 
 export const COMPANIES = [
   "Tata Consultancy Services",
@@ -110,7 +110,7 @@ export const CARD_COLORS = [
 export const PRODUCTS: Product[] = [
   {
     id: "PRD-STD",
-    name: "TapLink Standard Card",
+    name: "VR's NEXORA Standard Card",
     cardType: "Standard",
     description: "Durable PVC NFC card with custom QR code and profile link.",
     price: 599,
@@ -119,7 +119,7 @@ export const PRODUCTS: Product[] = [
   },
   {
     id: "PRD-PRM",
-    name: "TapLink Premium Card",
+    name: "VR's NEXORA Premium Card",
     cardType: "Premium",
     description: "Matte finish premium PVC card with priority analytics access.",
     price: 999,
@@ -129,7 +129,7 @@ export const PRODUCTS: Product[] = [
   },
   {
     id: "PRD-WOD",
-    name: "TapLink Wooden Card",
+    name: "VR's NEXORA Wooden Card",
     cardType: "Wooden",
     description: "Eco-friendly engraved wooden NFC card, a true conversation starter.",
     price: 799,
@@ -138,7 +138,7 @@ export const PRODUCTS: Product[] = [
   },
   {
     id: "PRD-MTL",
-    name: "TapLink Metal Card",
+    name: "VR's NEXORA Metal Card",
     cardType: "Metal",
     description: "Premium brushed metal card with laser engraving, built to last.",
     price: 1499,
@@ -152,7 +152,7 @@ export const PRODUCTS: Product[] = [
 // from before the catalog was simplified.
 export const FLAGSHIP_PRODUCT: Product = {
   id: "PRD-FLAGSHIP",
-  name: "TapLink NFC Business Card",
+  name: "VR's NEXORA NFC Business Card",
   cardType: "Premium",
   description:
     "One smart card that replaces your entire stack of paper business cards — tap to share your digital profile instantly.",
@@ -178,7 +178,7 @@ export const TESTIMONIALS: Testimonial[] = [
     avatar: "https://api.dicebear.com/9.x/notionists/svg?seed=ananya-reddy",
     rating: 5,
     quote:
-      "TapLink replaced an entire box of paper cards. I tap my phone at every event now and my whole profile — portfolio, socials, contact — opens instantly for the other person.",
+      "VR's NEXORA replaced an entire box of paper cards. I tap my phone at every event now and my whole profile — portfolio, socials, contact — opens instantly for the other person.",
   },
   {
     id: "TST02",
@@ -218,7 +218,7 @@ export const TESTIMONIALS: Testimonial[] = [
     avatar: "https://api.dicebear.com/9.x/notionists/svg?seed=sneha-kulkarni",
     rating: 5,
     quote:
-      "We rolled out TapLink cards to the whole leadership team. Managing everyone's cards from one admin panel makes onboarding new hires painless.",
+      "We rolled out VR's NEXORA cards to the whole leadership team. Managing everyone's cards from one admin panel makes onboarding new hires painless.",
   },
   {
     id: "TST06",
@@ -238,12 +238,12 @@ export const FAQS = [
     a: "An NFC (Near Field Communication) card is a smart card embedded with a chip that lets you share your digital business card, social profiles, and contact details with a single tap on any NFC-enabled smartphone — no app required.",
   },
   {
-    q: "How does TapLink card work?",
-    a: "Simply tap your TapLink card on the back of any NFC-enabled smartphone. Your digital profile opens instantly in the recipient's browser, letting them view your details, save your contact, and connect on social media. If NFC isn't supported, they can scan the QR code instead.",
+    q: "How does VR's NEXORA card work?",
+    a: "Simply tap your VR's NEXORA card on the back of any NFC-enabled smartphone. Your digital profile opens instantly in the recipient's browser, letting them view your details, save your contact, and connect on social media. If NFC isn't supported, they can scan the QR code instead.",
   },
   {
     q: "Do I need any app to use the card?",
-    a: "No. Recipients don't need to install any app to view your profile. You only need to sign in to your TapLink dashboard to activate and manage your card and profile.",
+    a: "No. Recipients don't need to install any app to view your profile. You only need to sign in to your VR's NEXORA dashboard to activate and manage your card and profile.",
   },
   {
     q: "Can I update my profile details later?",
@@ -262,7 +262,7 @@ export const FAQS = [
     a: "Orders are typically processed within 1-2 business days and delivered within 5-7 business days across India via our logistics partners.",
   },
   {
-    q: "Can I use one TapLink card for a business team?",
+    q: "Can I use one VR's NEXORA card for a business team?",
     a: "Yes, our Business and Enterprise plans support bulk card ordering and centralized team management from a single admin panel.",
   },
 ]

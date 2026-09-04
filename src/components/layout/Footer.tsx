@@ -67,7 +67,7 @@ export default function Footer() {
               <span className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white">
                 <Nfc className="size-5" />
               </span>
-              <span className="text-lg font-bold tracking-tight text-white">TapLink</span>
+              <span className="text-lg font-bold tracking-tight text-white">VR's NEXORA</span>
             </Link>
             <p className="mt-4 max-w-xs text-sm text-slate-400">
               Smart NFC digital business cards that help professionals share their contact
@@ -163,7 +163,7 @@ export default function Footer() {
       <div className="border-t border-white/10">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-6 sm:flex-row">
           <p className="text-xs text-slate-500">
-            © 2026 TapLink. All rights reserved.
+            © 2026 VR's NEXORA. All rights reserved.
           </p>
           <div className="flex items-center gap-2">
             {["VISA", "Mastercard", "UPI"].map((p) => (

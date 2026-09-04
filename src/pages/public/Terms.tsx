@@ -1,11 +1,11 @@
-const SECTIONS = [
+﻿const SECTIONS = [
   {
     title: "Acceptance of Terms",
-    body: "By accessing the TapLink website, purchasing a TapLink NFC card, or using our profile hosting services, you agree to be bound by these Terms & Conditions. If you do not agree, please do not use our services.",
+    body: "By accessing the VR's NEXORA website, purchasing a VR's NEXORA NFC card, or using our profile hosting services, you agree to be bound by these Terms & Conditions. If you do not agree, please do not use our services.",
   },
   {
     title: "Use of Service",
-    body: "TapLink grants you a limited, non-exclusive right to use your purchased card and associated digital profile for lawful personal or business networking purposes. You are responsible for the accuracy of the content you publish on your profile.",
+    body: "VR's NEXORA grants you a limited, non-exclusive right to use your purchased card and associated digital profile for lawful personal or business networking purposes. You are responsible for the accuracy of the content you publish on your profile.",
   },
   {
     title: "Orders & Payment",
@@ -17,11 +17,11 @@ const SECTIONS = [
   },
   {
     title: "Intellectual Property",
-    body: "The TapLink name, logo, website design, and platform software are the intellectual property of TapLink Technologies Pvt. Ltd. You retain ownership of the content you upload to your profile, but grant us a license to host and display it as part of the service.",
+    body: "The VR's NEXORA name, logo, website design, and platform software are the intellectual property of VR's NEXORA Technologies Pvt. Ltd. You retain ownership of the content you upload to your profile, but grant us a license to host and display it as part of the service.",
   },
   {
     title: "Limitation of Liability",
-    body: "TapLink is provided on an \"as is\" basis. We are not liable for indirect, incidental, or consequential damages arising from use of our cards or platform, including delays in delivery or third-party service interruptions, to the maximum extent permitted by law.",
+    body: "VR's NEXORA is provided on an \"as is\" basis. We are not liable for indirect, incidental, or consequential damages arising from use of our cards or platform, including delays in delivery or third-party service interruptions, to the maximum extent permitted by law.",
   },
   {
     title: "Governing Law",

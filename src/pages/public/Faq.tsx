@@ -9,7 +9,7 @@ export default function Faq() {
     <div>
       <PageHeader
         title="Frequently Asked Questions"
-        subtitle="Everything you need to know about TapLink cards and profiles."
+        subtitle="Everything you need to know about VR's NEXORA cards and profiles."
       />
 
       <section className="bg-white px-4 py-16">

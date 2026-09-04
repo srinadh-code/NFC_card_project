@@ -1,4 +1,4 @@
-import { ShoppingBag, PackageCheck, Nfc, UserCircle2, Share2 } from "lucide-react"
+﻿import { ShoppingBag, PackageCheck, Nfc, UserCircle2, Share2 } from "lucide-react"
 import PageHeader from "@/components/marketing/PageHeader"
 import CtaBanner from "@/components/marketing/CtaBanner"
 
@@ -20,7 +20,7 @@ const STEPS = [
   {
     icon: Nfc,
     title: "Activate Your Card",
-    description: "Scan the card once and link it to your TapLink account to activate it instantly.",
+    description: "Scan the card once and link it to your VR's NEXORA account to activate it instantly.",
     from: "#7C3AED",
     to: "#EC4899",
   },
@@ -44,7 +44,7 @@ export default function HowItWorks() {
   return (
     <div>
       <PageHeader
-        title="How TapLink Works"
+        title="How VR's NEXORA Works"
         subtitle="Get from unboxing to your first tap in five simple steps."
       />
 
@@ -72,7 +72,7 @@ export default function HowItWorks() {
         </div>
       </section>
 
-      <CtaBanner title="Ready to get your TapLink Card?" buttonLabel="Order Now" />
+      <CtaBanner title="Ready to get your VR's NEXORA Card?" buttonLabel="Order Now" />
     </div>
   )
 }

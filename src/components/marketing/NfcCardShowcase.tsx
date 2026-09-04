@@ -1,4 +1,4 @@
-import { Globe, Lock, Nfc } from "lucide-react"
+﻿import { Globe, Lock, Nfc } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 function ChipIcon() {
@@ -49,7 +49,7 @@ export function NfcCardFace({ tone }: { tone: NfcCardTone }) {
           <span className={cn("flex size-9 items-center justify-center rounded-xl", TONE_BADGE[tone])}>
             <Nfc className="size-5" />
           </span>
-          <p className="mt-2 text-base font-bold tracking-tight sm:text-lg">TapLink</p>
+          <p className="mt-2 text-base font-bold tracking-tight sm:text-lg">VR's NEXORA</p>
           <p className="text-[9px] font-medium uppercase tracking-[0.25em] text-white/50">Digital Identity</p>
         </div>
 

@@ -20,7 +20,7 @@ export default function NfcShowcase() {
             <div className="flex h-full w-full flex-col items-center justify-center gap-4 overflow-hidden rounded-[2rem] bg-gradient-to-b from-[#4F46E5] via-[#7C3AED] to-[#EC4899] p-6 text-center">
               <Nfc className="size-10 text-white" />
               <p className="text-sm font-medium text-white/90">
-                Hold a TapLink card near this phone to share a profile
+                Hold a VR's NEXORA card near this phone to share a profile
               </p>
             </div>
           </div>
@@ -45,7 +45,7 @@ export default function NfcShowcase() {
           </h2>
           <p className="mt-4 max-w-lg text-muted-foreground">
             No fumbling for a paper card, no typing a number into a new contact. Hold your
-            TapLink card near any smartphone and your entire digital identity appears
+            VR's NEXORA card near any smartphone and your entire digital identity appears
             instantly on their screen.
           </p>
           <ul className="mt-8 space-y-4">
