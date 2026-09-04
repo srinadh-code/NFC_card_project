@@ -2,7 +2,6 @@
 import { useNavigate } from "react-router-dom"
 import {
   CheckCircle2,
-  CreditCard,
   Minus,
   Plus,
   RotateCcw,
@@ -19,6 +18,12 @@ import { FLAGSHIP_PRODUCT } from "@/data/constants"
 import { useCartStore } from "@/store/cart-store"
 import { cn } from "@/lib/utils"
 import { cardClass } from "@/components/marketing/PremiumCard"
+import { NfcCardFace } from "@/components/marketing/NfcCardShowcase"
+
+// The card only ships in one premium finish now — no color picker — but
+// CartLine/OrderItem still model a color, so we pass this fixed value through
+// unchanged rather than reshaping those shared types for a single-SKU page.
+const CARD_COLOR = FLAGSHIP_PRODUCT.colors[0]
 
 // Displayed product copy for this page. `FLAGSHIP_PRODUCT` (from the shared,
 // out-of-scope constants file) still supplies id/cardType/colors, but the
@@ -45,7 +50,6 @@ const TRUST_BADGES = [
 export default function Shop() {
   const navigate = useNavigate()
   const addLine = useCartStore((s) => s.addLine)
-  const [color, setColor] = useState(FLAGSHIP_PRODUCT.colors[0])
   const [qty, setQty] = useState(1)
   const [logoName, setLogoName] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -60,7 +64,7 @@ export default function Shop() {
       productId: FLAGSHIP_PRODUCT.id,
       name: DISPLAY_NAME,
       cardType: FLAGSHIP_PRODUCT.cardType,
-      color,
+      color: CARD_COLOR,
       qty,
       price: DISPLAY_PRICE,
       customLogo: logoName,
@@ -81,7 +85,7 @@ export default function Shop() {
     <div>
       <PageHeader
         title="VR's NEXORA NFC Smart Card"
-        subtitle="One smart card that replaces your entire stack of paper business cards. Configure yours below."
+        subtitle="One smart card that replaces your entire stack of paper business cards. Order yours below."
       />
 
       <section className="bg-[#F8FAFC] px-4 py-16">
@@ -116,26 +120,6 @@ export default function Shop() {
                 </li>
               ))}
             </ul>
-
-            <div>
-              <Label className="mb-3 block text-sm font-semibold text-foreground">Color</Label>
-              <div className="flex flex-wrap gap-3">
-                {FLAGSHIP_PRODUCT.colors.map((c) => (
-                  <button
-                    key={c.name}
-                    type="button"
-                    title={c.name}
-                    onClick={() => setColor(c)}
-                    className={cn(
-                      "size-10 rounded-full border-2 shadow-sm transition-transform duration-200 hover:scale-110",
-                      color.name === c.name ? "border-[#4F46E5] ring-2 ring-[#4F46E5]/40" : "border-transparent",
-                    )}
-                    style={{ backgroundColor: c.hex }}
-                  />
-                ))}
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground">Selected: {color.name}</p>
-            </div>
 
             <div>
               <Label className="mb-3 block text-sm font-semibold text-foreground">Quantity</Label>
@@ -216,22 +200,20 @@ export default function Shop() {
             </div>
           </div>
 
-          {/* Right: live preview */}
+          {/* Right: premium card showcase — the exact same card component used
+              on the About page, so both stay visually identical by construction */}
           <div className="flex flex-col items-center justify-center">
-            <div className="relative flex h-80 w-full max-w-sm items-center justify-center">
-              <div className="absolute size-72 rounded-full bg-[#4F46E5]/10 blur-3xl" />
-              <div
-                className="relative z-10 flex h-52 w-full max-w-xs items-center justify-center rounded-2xl shadow-2xl transition-colors"
-                style={{ backgroundColor: color.hex }}
-              >
-                <CreditCard className="size-16 text-white/90" />
-                <span className="absolute bottom-4 left-4 text-sm font-semibold text-white/90">
-                  {DISPLAY_NAME}
-                </span>
+            <div className="relative flex h-80 w-full max-w-sm items-center justify-center overflow-hidden rounded-[32px] bg-gradient-to-br from-[#0B0F1A] via-[#12142B] to-[#1A0F2E] p-8 shadow-2xl">
+              <div className="pointer-events-none absolute left-1/4 top-1/5 size-56 rounded-full bg-[#7C3AED]/30 blur-[90px]" />
+              <div className="pointer-events-none absolute bottom-1/5 right-1/4 size-56 rounded-full bg-[#2563EB]/30 blur-[90px]" />
+              <div className="relative h-44 w-full max-w-xs animate-float-slow">
+                <div className="h-full w-full -rotate-3 cursor-pointer transition-transform duration-500 ease-out hover:-rotate-1 hover:scale-[1.04]">
+                  <NfcCardFace tone="front" />
+                </div>
               </div>
             </div>
             <p className="mt-6 max-w-xs text-center text-sm text-muted-foreground">
-              Live preview — the card color updates instantly as you customize it above.
+              Every {DISPLAY_NAME} ships in this premium matte-black finish with brand-gradient trim.
             </p>
           </div>
         </div>
