@@ -1,0 +1,237 @@
+Watching for file changes with StatReloader
+Performing system checks...
+
+System check identified no issues (0 silenced).
+September 04, 2026 - 14:21:29
+Django version 6.1.1, using settings 'config.settings'
+Starting WSGI development server at http://0.0.0.0:8000/
+Quit the server with CTRL-BREAK.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/6.1/howto/deployment/
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+Subject: Verify your VR's NEXORA account
+From: no-reply@vrsnexora.com
+To: test1@example.com
+Date: Fri, 04 Sep 2026 08:51:40 +0000
+Message-ID: <178851190050.9152.85323159732791745@jampala.hgu_lan>
+
+Hi Test User,
+
+Your verification code is: 836037
+This code expires in 10 minutes.
+
+If you didn't request this, you can ignore this email.
+
+-------------------------------------------------------------------------------
+[04/Sep/2026 14:21:40] "POST /api/auth/register/ HTTP/1.1" 201 124
+[04/Sep/2026 14:22:00] "POST /api/auth/verify-email/ HTTP/1.1" 200 781
+[04/Sep/2026 14:22:09] "GET /api/profiles/me/ HTTP/1.1" 200 1172
+[04/Sep/2026 14:22:09] "PATCH /api/profiles/me/ HTTP/1.1" 200 1210
+[04/Sep/2026 14:22:09] "GET /api/auth/me/ HTTP/1.1" 200 271
+[04/Sep/2026 14:22:28] "PATCH /api/profiles/social-links/1/ HTTP/1.1" 200 104
+Not Found: /u/test-user/
+[04/Sep/2026 14:22:28] "GET /u/test-user/ HTTP/1.1" 404 2911
+[04/Sep/2026 14:22:28] "GET /api/profiles/public/test-user/ HTTP/1.1" 200 452
+[04/Sep/2026 14:22:28] "POST /api/nfc/cards/activate/ HTTP/1.1" 200 314
+[04/Sep/2026 14:22:28] "GET /api/nfc/cards/mine/ HTTP/1.1" 200 303
+[04/Sep/2026 14:22:29] "GET /api/nfc/cards/04AABBCC0001/ HTTP/1.1" 200 70
+[04/Sep/2026 14:23:25] "PATCH /api/profiles/me/ HTTP/1.1" 200 1242
+Not Found: /api/profiles/public/test-user/
+[04/Sep/2026 14:23:25] "GET /api/profiles/public/test-user/ HTTP/1.1" 404 72
+[04/Sep/2026 14:23:25] "PATCH /api/profiles/me/ HTTP/1.1" 200 1241
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+Subject: Verify your VR's NEXORA account
+From: no-reply@vrsnexora.com
+To: test2@example.com
+Date: Fri, 04 Sep 2026 08:53:27 +0000
+Message-ID: <178851200724.9152.14696512467162400909@jampala.hgu_lan>
+
+Hi Second User,
+
+Your verification code is: 929959
+This code expires in 10 minutes.
+
+If you didn't request this, you can ignore this email.
+
+-------------------------------------------------------------------------------
+[04/Sep/2026 14:23:27] "POST /api/auth/register/ HTTP/1.1" 201 124
+[04/Sep/2026 14:23:37] "POST /api/auth/verify-email/ HTTP/1.1" 200 785
+Bad Request: /api/nfc/cards/activate/
+[04/Sep/2026 14:23:38] "POST /api/nfc/cards/activate/ HTTP/1.1" 400 90
+[04/Sep/2026 14:23:39] "POST /api/auth/login/ HTTP/1.1" 200 776
+Unauthorized: /api/profiles/me/
+[04/Sep/2026 14:24:04] "GET /api/profiles/me/ HTTP/1.1" 401 87
+Bad Request: /api/auth/login/
+[04/Sep/2026 14:24:06] "POST /api/auth/login/ HTTP/1.1" 400 108
+C:\Users\Lenovo\OneDrive\Desktop\NFC-PROJECT\NFC_BACKEND\accounts\urls.py changed, reloading.
+Watching for file changes with StatReloader
+[04/Sep/2026 14:26:42] "POST /api/auth/token/refresh/ HTTP/1.1" 200 489
+[04/Sep/2026 14:41:18] "OPTIONS /api/auth/register/ HTTP/1.1" 200 0
+Performing system checks...
+
+System check identified no issues (0 silenced).
+September 04, 2026 - 14:26:15
+Django version 6.1.1, using settings 'config.settings'
+Starting WSGI development server at http://0.0.0.0:8000/
+Quit the server with CTRL-BREAK.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/6.1/howto/deployment/
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+Subject: Verify your VR's NEXORA account
+From: no-reply@vrsnexora.com
+To: e2e_1788513065492@example.com
+Date: Fri, 04 Sep 2026 09:11:20 +0000
+Message-ID: <178851308096.7512.14613248430724401271@jampala.hgu_lan>
+
+Hi E2E Test User,
+
+Your verification code is: 219067
+This code expires in 10 minutes.
+
+If you didn't request this, you can ignore this email.
+
+-------------------------------------------------------------------------------
+[04/Sep/2026 14:41:20] "POST /api/auth/register/ HTTP/1.1" 201 136
+[04/Sep/2026 14:41:22] "OPTIONS /api/auth/verify-email/ HTTP/1.1" 200 0
+Bad Request: /api/auth/verify-email/
+[04/Sep/2026 14:41:22] "POST /api/auth/verify-email/ HTTP/1.1" 400 79
+[04/Sep/2026 14:41:24] "POST /api/auth/verify-email/ HTTP/1.1" 200 805
+[04/Sep/2026 14:41:25] "OPTIONS /api/profiles/me/ HTTP/1.1" 200 0
+[04/Sep/2026 14:41:25] "OPTIONS /api/auth/me/ HTTP/1.1" 200 0
+[04/Sep/2026 14:41:25] "GET /api/auth/me/ HTTP/1.1" 200 295
+[04/Sep/2026 14:41:25] "GET /api/profiles/me/ HTTP/1.1" 200 1213
+[04/Sep/2026 14:41:25] "GET /api/auth/me/ HTTP/1.1" 200 295
+[04/Sep/2026 14:42:28] "OPTIONS /api/auth/register/ HTTP/1.1" 200 0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+Subject: Verify your VR's NEXORA account
+From: no-reply@vrsnexora.com
+To: e2e_1788513143931@example.com
+Date: Fri, 04 Sep 2026 09:12:30 +0000
+Message-ID: <178851315005.7512.16824709363759484577@jampala.hgu_lan>
+
+Hi E2E Test User,
+
+Your verification code is: 599748
+This code expires in 10 minutes.
+
+If you didn't request this, you can ignore this email.
+
+-------------------------------------------------------------------------------
+[04/Sep/2026 14:42:30] "POST /api/auth/register/ HTTP/1.1" 201 136
+[04/Sep/2026 14:42:30] "OPTIONS /api/auth/verify-email/ HTTP/1.1" 200 0
+[04/Sep/2026 14:42:31] "POST /api/auth/verify-email/ HTTP/1.1" 200 805
+[04/Sep/2026 14:43:08] "OPTIONS /api/auth/register/ HTTP/1.1" 200 0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+Subject: Verify your VR's NEXORA account
+From: no-reply@vrsnexora.com
+To: e2e_1788513184190@example.com
+Date: Fri, 04 Sep 2026 09:13:10 +0000
+Message-ID: <178851319041.7512.16480658641522940968@jampala.hgu_lan>
+
+Hi E2E Test User,
+
+Your verification code is: 186468
+This code expires in 10 minutes.
+
+If you didn't request this, you can ignore this email.
+
+-------------------------------------------------------------------------------
+[04/Sep/2026 14:43:10] "POST /api/auth/register/ HTTP/1.1" 201 136
+[04/Sep/2026 14:43:11] "OPTIONS /api/auth/verify-email/ HTTP/1.1" 200 0
+[04/Sep/2026 14:43:11] "POST /api/auth/verify-email/ HTTP/1.1" 200 805
+[04/Sep/2026 14:43:11] "OPTIONS /api/nfc/cards/mine/ HTTP/1.1" 200 0
+[04/Sep/2026 14:43:11] "GET /api/nfc/cards/mine/ HTTP/1.1" 200 41
+[04/Sep/2026 14:44:04] "OPTIONS /api/auth/register/ HTTP/1.1" 200 0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+Subject: Verify your VR's NEXORA account
+From: no-reply@vrsnexora.com
+To: e2e_1788513239398@example.com
+Date: Fri, 04 Sep 2026 09:14:06 +0000
+Message-ID: <178851324694.7512.10187487127529035442@jampala.hgu_lan>
+
+Hi E2E Test User,
+
+Your verification code is: 259411
+This code expires in 10 minutes.
+
+If you didn't request this, you can ignore this email.
+
+-------------------------------------------------------------------------------
+[04/Sep/2026 14:44:06] "POST /api/auth/register/ HTTP/1.1" 201 136
+[04/Sep/2026 14:44:08] "OPTIONS /api/auth/verify-email/ HTTP/1.1" 200 0
+Bad Request: /api/auth/verify-email/
+[04/Sep/2026 14:44:08] "POST /api/auth/verify-email/ HTTP/1.1" 400 79
+[04/Sep/2026 14:44:11] "POST /api/auth/verify-email/ HTTP/1.1" 200 805
+[04/Sep/2026 14:44:12] "OPTIONS /api/nfc/cards/mine/ HTTP/1.1" 200 0
+[04/Sep/2026 14:44:12] "GET /api/nfc/cards/mine/ HTTP/1.1" 200 41
+[04/Sep/2026 14:44:14] "OPTIONS /api/profiles/me/ HTTP/1.1" 200 0
+[04/Sep/2026 14:44:14] "OPTIONS /api/auth/me/ HTTP/1.1" 200 0
+[04/Sep/2026 14:44:14] "OPTIONS /api/auth/me/ HTTP/1.1" 200 0
+[04/Sep/2026 14:44:14] "GET /api/auth/me/ HTTP/1.1" 200 295
+[04/Sep/2026 14:44:14] "GET /api/profiles/me/ HTTP/1.1" 200 1215
+[04/Sep/2026 14:44:14] "GET /api/auth/me/ HTTP/1.1" 200 295
+[04/Sep/2026 14:44:16] "PATCH /api/profiles/me/ HTTP/1.1" 200 1293
+[04/Sep/2026 14:44:16] "GET /api/profiles/me/ HTTP/1.1" 200 1279
+[04/Sep/2026 14:44:17] "GET /api/auth/me/ HTTP/1.1" 200 295
+[04/Sep/2026 14:44:17] "GET /api/profiles/me/ HTTP/1.1" 200 1279
+[04/Sep/2026 14:44:17] "GET /api/auth/me/ HTTP/1.1" 200 295
+[04/Sep/2026 14:44:18] "GET /api/auth/me/ HTTP/1.1" 200 295
+[04/Sep/2026 14:44:18] "GET /api/profiles/me/ HTTP/1.1" 200 1279
+[04/Sep/2026 14:44:18] "GET /api/auth/me/ HTTP/1.1" 200 295
+[04/Sep/2026 14:44:19] "OPTIONS /api/profiles/social-links/46/ HTTP/1.1" 200 0
+[04/Sep/2026 14:44:19] "OPTIONS /api/profiles/social-links/47/ HTTP/1.1" 200 0
+[04/Sep/2026 14:44:19] "OPTIONS /api/profiles/social-links/48/ HTTP/1.1" 200 0
+[04/Sep/2026 14:44:19] "OPTIONS /api/profiles/social-links/49/ HTTP/1.1" 200 0
+[04/Sep/2026 14:44:19] "OPTIONS /api/profiles/social-links/52/ HTTP/1.1" 200 0
+[04/Sep/2026 14:44:19] "OPTIONS /api/profiles/social-links/50/ HTTP/1.1" 200 0
+[04/Sep/2026 14:44:19] "OPTIONS /api/profiles/social-links/51/ HTTP/1.1" 200 0
+[04/Sep/2026 14:44:19] "OPTIONS /api/profiles/social-links/53/ HTTP/1.1" 200 0
+[04/Sep/2026 14:44:20] "OPTIONS /api/profiles/social-links/54/ HTTP/1.1" 200 0
+[04/Sep/2026 14:44:20] "PATCH /api/profiles/social-links/47/ HTTP/1.1" 200 75
+[04/Sep/2026 14:44:20] "PATCH /api/profiles/social-links/49/ HTTP/1.1" 200 74
+[04/Sep/2026 14:44:20] "PATCH /api/profiles/social-links/48/ HTTP/1.1" 200 74
+[04/Sep/2026 14:44:20] "PATCH /api/profiles/social-links/46/ HTTP/1.1" 200 106
+[04/Sep/2026 14:44:20] "PATCH /api/profiles/social-links/53/ HTTP/1.1" 200 74
+[04/Sep/2026 14:44:20] "PATCH /api/profiles/social-links/50/ HTTP/1.1" 200 73
+[04/Sep/2026 14:44:20] "PATCH /api/profiles/social-links/51/ HTTP/1.1" 200 73
+[04/Sep/2026 14:44:20] "PATCH /api/profiles/social-links/54/ HTTP/1.1" 200 73
+[04/Sep/2026 14:44:20] "PATCH /api/profiles/social-links/52/ HTTP/1.1" 200 72
+[04/Sep/2026 14:44:20] "OPTIONS /api/profiles/social-links/reorder/ HTTP/1.1" 200 0
+[04/Sep/2026 14:44:20] "PATCH /api/profiles/social-links/reorder/ HTTP/1.1" 200 55
+[04/Sep/2026 14:44:20] "GET /api/profiles/me/ HTTP/1.1" 200 1311
+[04/Sep/2026 14:44:21] "GET /api/auth/me/ HTTP/1.1" 200 295
+[04/Sep/2026 14:44:21] "GET /api/nfc/cards/mine/ HTTP/1.1" 200 41
+[04/Sep/2026 14:44:21] "GET /api/auth/me/ HTTP/1.1" 200 295
+[04/Sep/2026 14:44:21] "GET /api/profiles/me/ HTTP/1.1" 200 1311
+[04/Sep/2026 14:44:23] "OPTIONS /api/nfc/cards/activate/ HTTP/1.1" 200 0
+[04/Sep/2026 14:44:23] "POST /api/nfc/cards/activate/ HTTP/1.1" 200 318
+[04/Sep/2026 14:44:24] "GET /api/nfc/cards/mine/ HTTP/1.1" 200 307
+[04/Sep/2026 14:44:25] "GET /api/auth/me/ HTTP/1.1" 200 295
+[04/Sep/2026 14:44:25] "GET /api/profiles/me/ HTTP/1.1" 200 1311
+[04/Sep/2026 14:44:25] "GET /api/auth/me/ HTTP/1.1" 200 295
+[04/Sep/2026 14:44:28] "OPTIONS /api/profiles/public/e2e-test-user4/ HTTP/1.1" 200 0
+[04/Sep/2026 14:44:28] "GET /api/profiles/public/e2e-test-user4/ HTTP/1.1" 200 417
+Bad Request: /api/auth/login/
+[04/Sep/2026 15:27:25] "POST /api/auth/login/ HTTP/1.1" 400 108
+[04/Sep/2026 15:29:21] "OPTIONS /api/auth/login/ HTTP/1.1" 200 0
+Bad Request: /api/auth/login/
+[04/Sep/2026 15:29:30] "POST /api/auth/login/ HTTP/1.1" 400 108
+Bad Request: /api/auth/login/
+[04/Sep/2026 15:29:40] "POST /api/auth/login/ HTTP/1.1" 400 108
+[04/Sep/2026 15:29:50,325] - Broken pipe from ('127.0.0.1', 62464)
+C:\Users\Lenovo\OneDrive\Desktop\NFC-PROJECT\NFC_BACKEND\common\response.py changed, reloading.
+Watching for file changes with StatReloader

@@ -1,0 +1,31 @@
+Watching for file changes with StatReloader
+[04/Sep/2026 16:37:21] "OPTIONS /api/profiles/me/ HTTP/1.1" 200 0
+[04/Sep/2026 16:37:21] "GET /api/nfc/cards/mine/ HTTP/1.1" 200 41
+[04/Sep/2026 16:37:21] "GET /api/profiles/me/ HTTP/1.1" 200 1168
+[04/Sep/2026 16:37:51] "GET /api/profiles/me/ HTTP/1.1" 200 1168
+[04/Sep/2026 16:56:39] "OPTIONS /api/auth/me/ HTTP/1.1" 200 0
+[04/Sep/2026 16:56:39] "OPTIONS /api/auth/me/ HTTP/1.1" 200 0
+[04/Sep/2026 16:56:39] "GET /api/auth/me/ HTTP/1.1" 200 266
+[04/Sep/2026 16:56:39] "GET /api/auth/me/ HTTP/1.1" 200 266
+[04/Sep/2026 17:05:44] "OPTIONS /api/nfc/cards/mine/ HTTP/1.1" 200 0
+[04/Sep/2026 17:05:51] "GET /api/auth/me/ HTTP/1.1" 200 266
+[04/Sep/2026 17:05:51] "GET /api/nfc/cards/mine/ HTTP/1.1" 200 41
+[04/Sep/2026 17:05:51] "GET /api/auth/me/ HTTP/1.1" 200 266
+[04/Sep/2026 17:07:35] "OPTIONS /api/auth/logout/ HTTP/1.1" 200 0
+Unauthorized: /api/auth/logout/
+[04/Sep/2026 17:07:35] "POST /api/auth/logout/ HTTP/1.1" 401 252
+[04/Sep/2026 17:07:42] "OPTIONS /api/auth/login/ HTTP/1.1" 200 0
+[04/Sep/2026 17:07:48] "POST /api/auth/login/ HTTP/1.1" 200 780
+[04/Sep/2026 17:07:49] "GET /api/nfc/cards/mine/ HTTP/1.1" 200 41
+[04/Sep/2026 17:08:03] "POST /api/auth/logout/ HTTP/1.1" 200 52
+Bad Request: /api/auth/login/
+[04/Sep/2026 17:08:26] "POST /api/auth/login/ HTTP/1.1" 400 117
+Bad Request: /api/auth/login/
+[04/Sep/2026 17:08:30] "POST /api/auth/login/ HTTP/1.1" 400 117
+Bad Request: /api/auth/login/
+[04/Sep/2026 17:08:44] "POST /api/auth/login/ HTTP/1.1" 400 117
+Bad Request: /api/auth/login/
+[04/Sep/2026 17:08:48] "POST /api/auth/login/ HTTP/1.1" 400 117
+[04/Sep/2026 17:09:00] "POST /api/auth/login/ HTTP/1.1" 200 771
+[04/Sep/2026 17:09:05] "POST /api/auth/login/ HTTP/1.1" 200 771
+[04/Sep/2026 17:11:07] "POST /api/auth/logout/ HTTP/1.1" 200 52
