@@ -17,52 +17,35 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { ChartContainer } from "@/components/ui/chart-container"
 import { StatCard } from "@/components/customer/StatCard"
 import { useCustomerAuthStore } from "@/store/auth-store"
-import { analyticsRecords } from "@/data/seed"
-import { simulateLatency } from "@/lib/mock-api"
-import { nfcApi } from "@/lib/api"
+import { nfcApi, customerAnalyticsApi } from "@/lib/api"
 
-function sumBy<T>(items: T[], fn: (item: T) => number) {
-  return items.reduce((s, item) => s + fn(item), 0)
-}
-
-function deltaPct(current: number, previous: number): number | null {
-  if (previous === 0) return current > 0 ? 100 : null
-  return ((current - previous) / previous) * 100
-}
-
-function computeDashboardStats(customerId: string) {
-  const records = analyticsRecords.filter((r) => r.customerId === customerId)
+// customer_analytics only exposes cumulative today/week/month/year buckets,
+// not a clean "last 7 days vs previous 7 days" split — no real delta to
+// compute against, so this reports null (StatCard already renders that as
+// no arrow) rather than fabricating a week-over-week trend.
+function buildDashboardData(
+  summary: Awaited<ReturnType<typeof customerAnalyticsApi.summary>>,
+  tapEvents: Awaited<ReturnType<typeof customerAnalyticsApi.taps>>,
+) {
+  const totals = {
+    taps: summary.totals.nfcTaps,
+    // No unique-visitor dedup exists server-side yet (would need IP/session
+    // tracking) — 0 until that's built, rather than reusing an unrelated count.
+    uniqueVisitors: 0,
+    qrScans: summary.totals.qrScans,
+    profileViews: summary.totals.profileViews,
+  }
+  const deltas = { taps: null, uniqueVisitors: null, qrScans: null, profileViews: null }
 
   const now = new Date()
-  const last7Start = new Date(now)
-  last7Start.setDate(now.getDate() - 7)
-  const prev7Start = new Date(now)
-  prev7Start.setDate(now.getDate() - 14)
-
-  const last7 = records.filter((r) => new Date(r.date) >= last7Start)
-  const prev7 = records.filter((r) => new Date(r.date) >= prev7Start && new Date(r.date) < last7Start)
-
-  const totals = {
-    taps: sumBy(records, (r) => r.taps),
-    uniqueVisitors: sumBy(records, (r) => r.uniqueVisitors),
-    qrScans: sumBy(records, (r) => r.qrScans),
-    profileViews: sumBy(records, (r) => r.profileViews),
-  }
-
-  const deltas = {
-    taps: deltaPct(sumBy(last7, (r) => r.taps), sumBy(prev7, (r) => r.taps)),
-    uniqueVisitors: deltaPct(sumBy(last7, (r) => r.uniqueVisitors), sumBy(prev7, (r) => r.uniqueVisitors)),
-    qrScans: deltaPct(sumBy(last7, (r) => r.qrScans), sumBy(prev7, (r) => r.qrScans)),
-    profileViews: deltaPct(sumBy(last7, (r) => r.profileViews), sumBy(prev7, (r) => r.profileViews)),
-  }
-
-  // Taps over time, last 30 days
   const last30Start = new Date(now)
   last30Start.setDate(now.getDate() - 30)
   const byDate = new Map<string, number>()
-  for (const r of records) {
-    if (new Date(r.date) < last30Start) continue
-    byDate.set(r.date, (byDate.get(r.date) ?? 0) + r.taps)
+  for (const event of tapEvents) {
+    const d = new Date(event.createdAt)
+    if (d < last30Start) continue
+    const key = d.toISOString().slice(0, 10)
+    byDate.set(key, (byDate.get(key) ?? 0) + 1)
   }
   const series = Array.from(byDate.entries())
     .sort((a, b) => (a[0] < b[0] ? -1 : 1))
@@ -71,16 +54,9 @@ function computeDashboardStats(customerId: string) {
       taps,
     }))
 
-  // Top locations
-  const byLocation = new Map<string, number>()
-  for (const r of records) {
-    byLocation.set(r.location, (byLocation.get(r.location) ?? 0) + r.taps)
-  }
-  const totalLocationTaps = Array.from(byLocation.values()).reduce((s, v) => s + v, 0) || 1
-  const topLocations = Array.from(byLocation.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([location, taps]) => ({ location, taps, pct: (taps / totalLocationTaps) * 100 }))
+  // No location data is captured by the tap-tracking endpoint yet — the
+  // widget below already renders a graceful "no data" state for this.
+  const topLocations: { location: string; taps: number; pct: number }[] = []
 
   return { totals, deltas, series, topLocations }
 }
@@ -94,11 +70,19 @@ export default function CustomerDashboard() {
   })
   const activeCard = useMemo(() => cards.find((c) => c.status === "Active") ?? cards[0] ?? null, [cards])
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["dashboard-stats", customer?.id],
-    queryFn: () => simulateLatency(computeDashboardStats(customer?.id ?? ""), 300),
+  const { data: summary, isLoading: summaryLoading } = useQuery({
+    queryKey: ["customer-analytics-summary", customer?.id],
+    queryFn: customerAnalyticsApi.summary,
     enabled: Boolean(customer?.id),
   })
+  const { data: tapTimestamps, isLoading: tapsLoading } = useQuery({
+    queryKey: ["customer-analytics-taps", customer?.id],
+    queryFn: customerAnalyticsApi.taps,
+    enabled: Boolean(customer?.id),
+  })
+
+  const isLoading = summaryLoading || tapsLoading
+  const data = summary && tapTimestamps ? buildDashboardData(summary, tapTimestamps) : undefined
 
   if (!customer) return null
 

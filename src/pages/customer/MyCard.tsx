@@ -31,12 +31,10 @@ import { StatusBadge } from "@/components/admin/StatusBadge"
 import { StatCard } from "@/components/customer/StatCard"
 import { NfcCardFace } from "@/components/marketing/NfcCardShowcase"
 import { useCustomerAuthStore } from "@/store/auth-store"
-import { useDataStore, selectOrdersByCustomer } from "@/store/data-store"
 import { useEnsuredProfile } from "@/hooks/use-ensured-profile"
-import { analyticsRecords } from "@/data/seed"
 import { formatDate } from "@/lib/mock-api"
 import { downloadQrPng, shareOrCopyLink } from "@/components/customer/qr-utils"
-import { nfcApi } from "@/lib/api"
+import { nfcApi, customerOrderApi, customerAnalyticsApi } from "@/lib/api"
 
 // Known demo UIDs seeded by `python manage.py seed_demo_cards` on the
 // backend — used only to prefill the manual-entry/"simulate scan" demo
@@ -62,13 +60,26 @@ const IN_PROGRESS_ORDER_STATUSES = ["Pending", "Processing", "Shipped"]
 
 export default function CustomerMyCard() {
   const customer = useCustomerAuthStore((s) => s.customer)
-  const orders = useDataStore(selectOrdersByCustomer(customer?.id ?? ""))
   const { profile } = useEnsuredProfile()
   const queryClient = useQueryClient()
 
   const { data: cards = [] } = useQuery({
     queryKey: ["nfc-cards-mine"],
     queryFn: nfcApi.mine,
+    enabled: Boolean(customer),
+  })
+
+  const { data: orders = [] } = useQuery({
+    queryKey: ["customer-orders", customer?.id],
+    queryFn: customerOrderApi.mine,
+    enabled: Boolean(customer),
+  })
+
+  // Only fetched for the "assigned but not yet activated" state below, but
+  // called unconditionally here since hooks can't run inside a branch.
+  const { data: analyticsSummary } = useQuery({
+    queryKey: ["customer-analytics-summary", customer?.id],
+    queryFn: customerAnalyticsApi.summary,
     enabled: Boolean(customer),
   })
 
@@ -244,12 +255,14 @@ export default function CustomerMyCard() {
   // A card has already been assigned by admin but the customer hasn't
   // tapped "Activate" yet — no need to type/guess a UID, it's right here.
   if (assignedCard) {
-    const records = analyticsRecords.filter((r) => r.customerId === customer.id)
     const totals = {
-      taps: records.reduce((s, r) => s + r.taps, 0),
-      profileViews: records.reduce((s, r) => s + r.profileViews, 0),
-      qrScans: records.reduce((s, r) => s + r.qrScans, 0),
-      shares: records.reduce((s, r) => s + r.shares, 0),
+      taps: analyticsSummary?.totals.nfcTaps ?? 0,
+      profileViews: analyticsSummary?.totals.profileViews ?? 0,
+      qrScans: analyticsSummary?.totals.qrScans ?? 0,
+      // No customer-facing "contact saved" event exists yet (that action is
+      // only tracked in an internal table with no customer API) — 0 until
+      // that's wired up, rather than mislabeling social-link clicks as this.
+      shares: 0,
     }
     const displayName = profile?.fullName ?? customer.name
     const displayAvatar = profile?.avatar ?? customer.avatar

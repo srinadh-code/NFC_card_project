@@ -19,8 +19,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useCustomerAuthStore } from "@/store/auth-store"
-import { useDataStore, selectOrdersByCustomer } from "@/store/data-store"
-import { formatCurrency, formatDate, simulateLatency } from "@/lib/mock-api"
+import { useDataStore } from "@/store/data-store"
+import { customerOrderApi } from "@/lib/api"
+import { formatCurrency, formatDate } from "@/lib/mock-api"
 import type { Order, OrderStatus } from "@/types"
 
 const STATUS_VARIANT: Record<OrderStatus, "default" | "secondary" | "success" | "warning" | "destructive"> = {
@@ -69,12 +70,14 @@ function downloadInvoice(order: Order) {
 
 export default function CustomerOrders() {
   const customer = useCustomerAuthStore((s) => s.customer)
-  const orders = useDataStore(selectOrdersByCustomer(customer?.id ?? ""))
+  // No customer-facing support-ticket API exists yet (admin_api/support is
+  // admin-only) — the "Contact Support" dialog below still logs into the
+  // local mock ticket store until that endpoint exists.
   const addTicket = useDataStore((s) => s.addTicket)
 
   const { data, isLoading } = useQuery({
-    queryKey: ["customer-orders", customer?.id, orders.length],
-    queryFn: () => simulateLatency([...orders].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), 300),
+    queryKey: ["customer-orders", customer?.id],
+    queryFn: async () => (await customerOrderApi.mine()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     enabled: Boolean(customer?.id),
   })
 

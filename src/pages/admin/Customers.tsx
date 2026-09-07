@@ -1,8 +1,8 @@
-﻿import { useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, keepPreviousData } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Search, Plus, Download, Eye, Pencil, Trash2, MoreHorizontal } from "lucide-react"
+import { Search, Download, Eye, MoreHorizontal } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -18,148 +18,75 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { StatusBadge } from "@/components/admin/StatusBadge"
 import { TablePagination } from "@/components/admin/TablePagination"
-import { CustomerFormDialog, type CustomerFormValues } from "@/components/admin/CustomerFormDialog"
-import { ConfirmDialog } from "@/components/admin/ConfirmDialog"
 import { downloadCsv } from "@/components/admin/export-csv"
-import { useDataStore } from "@/store/data-store"
-import { simulateLatency, formatDate, formatCurrency } from "@/lib/mock-api"
-import type { Customer, CustomerStatus } from "@/types"
+import { adminCustomerApi, ApiError } from "@/lib/api"
+import { formatDate } from "@/lib/mock-api"
 
 const PAGE_SIZE = 10
 
-function slugify(name: string) {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "")
-    .slice(0, 14)
-}
-
 export default function AdminCustomers() {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const addCustomer = useDataStore((s) => s.addCustomer)
-  const updateCustomer = useDataStore((s) => s.updateCustomer)
-  const deleteCustomer = useDataStore((s) => s.deleteCustomer)
-  const storeCustomers = useDataStore((s) => s.customers)
 
+  const [searchInput, setSearchInput] = useState("")
   const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState<"All" | CustomerStatus>("All")
+  const [statusFilter, setStatusFilter] = useState<"All" | "Active" | "Inactive">("All")
   const [page, setPage] = useState(1)
-  const [formOpen, setFormOpen] = useState(false)
-  const [editing, setEditing] = useState<Customer | null>(null)
-  const [deleting, setDeleting] = useState<Customer | null>(null)
+  const [exporting, setExporting] = useState(false)
 
-  const { data: customers = [], isLoading } = useQuery({
-    queryKey: ["admin-customers"],
-    queryFn: () => simulateLatency(useDataStore.getState().customers, 300),
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(searchInput)
+      setPage(1)
+    }, 300)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
+    queryKey: ["admin-customers", page, search, statusFilter],
+    queryFn: () => adminCustomerApi.list({ page, search: search || undefined, status: statusFilter }),
+    placeholderData: keepPreviousData,
   })
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin-customers"] })
+  const customers = data?.data ?? []
+  const totalItems = data?.count ?? 0
+  const totalPages = Math.max(1, data?.numPages ?? 1)
 
-  const addMutation = useMutation({
-    mutationFn: async (values: CustomerFormValues) => {
-      let base = slugify(values.name) || "user"
-      const existing = new Set(storeCustomers.map((c) => c.username))
-      let username = base
-      let i = 1
-      while (existing.has(username)) username = `${base}${i++}`
-      return addCustomer({
-        name: values.name,
-        email: values.email,
-        phone: values.phone,
-        company: values.company,
-        designation: values.designation,
-        address: {
-          line1: values.line1,
-          city: values.city,
-          state: values.state,
-          pincode: values.pincode,
-          country: values.country,
-        },
-        profileUrl: `vrsnexora.com/u/${username}`,
-        username,
-        status: values.status,
-        avatar: `https://api.dicebear.com/9.x/notionists/svg?seed=${username}`,
-        joinedOn: new Date().toISOString(),
-      })
-    },
-    onSuccess: () => {
-      invalidate()
-      toast.success("Customer added successfully.")
-      setFormOpen(false)
-    },
-  })
+  async function handleExport() {
+    setExporting(true)
+    try {
+      const rows: typeof customers = []
+      let currentPage = 1
+      let numPages = 1
+      do {
+        const result = await adminCustomerApi.list({
+          page: currentPage,
+          search: search || undefined,
+          status: statusFilter,
+        })
+        rows.push(...result.data)
+        numPages = result.numPages
+        currentPage += 1
+      } while (currentPage <= numPages)
 
-  const editMutation = useMutation({
-    mutationFn: async ({ id, values }: { id: string; values: CustomerFormValues }) => {
-      updateCustomer(id, {
-        name: values.name,
-        email: values.email,
-        phone: values.phone,
-        company: values.company,
-        designation: values.designation,
-        status: values.status,
-        address: {
-          line1: values.line1,
-          city: values.city,
-          state: values.state,
-          pincode: values.pincode,
-          country: values.country,
-        },
-      })
-    },
-    onSuccess: () => {
-      invalidate()
-      toast.success("Customer updated successfully.")
-      setFormOpen(false)
-      setEditing(null)
-    },
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => deleteCustomer(id),
-    onSuccess: () => {
-      invalidate()
-      toast.success("Customer deleted.")
-    },
-  })
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return customers.filter((c) => {
-      const matchesQuery =
-        !q ||
-        c.name.toLowerCase().includes(q) ||
-        c.email.toLowerCase().includes(q) ||
-        c.id.toLowerCase().includes(q)
-      const matchesStatus = statusFilter === "All" || c.status === statusFilter
-      return matchesQuery && matchesStatus
-    })
-  }, [customers, search, statusFilter])
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-
-  function resetPage() {
-    setPage(1)
-  }
-
-  function handleExport() {
-    downloadCsv(
-      `customers-${new Date().toISOString().slice(0, 10)}.csv`,
-      filtered.map((c) => ({
-        ID: c.id,
-        Name: c.name,
-        Email: c.email,
-        Phone: c.phone,
-        Company: c.company,
-        Status: c.status,
-        JoinedOn: formatDate(c.joinedOn),
-        TotalOrders: c.totalOrders,
-        TotalSpent: c.totalSpent,
-      })),
-    )
-    toast.success("Customers exported to CSV.")
+      downloadCsv(
+        `customers-${new Date().toISOString().slice(0, 10)}.csv`,
+        rows.map((c) => ({
+          ID: c.id,
+          Name: c.name,
+          Email: c.email,
+          Phone: c.phone,
+          Company: c.company,
+          Status: c.status,
+          JoinedOn: formatDate(c.joinedOn),
+          NfcCards: c.cardCount,
+        })),
+      )
+      toast.success("Customers exported to CSV.")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not export customers.")
+    } finally {
+      setExporting(false)
+    }
   }
 
   return (
@@ -167,22 +94,11 @@ export default function AdminCustomers() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Customers</h1>
-          <p className="text-sm text-muted-foreground">
-            {formatCurrency(customers.reduce((s, c) => s + c.totalSpent, 0))} total spent across{" "}
-            {customers.length} customers
-          </p>
+          <p className="text-sm text-muted-foreground">{totalItems} customers registered</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExport}>
-            <Download /> Export
-          </Button>
-          <Button
-            onClick={() => {
-              setEditing(null)
-              setFormOpen(true)
-            }}
-          >
-            <Plus /> Add Customer
+          <Button variant="outline" onClick={handleExport} disabled={exporting}>
+            <Download /> {exporting ? "Exporting..." : "Export"}
           </Button>
         </div>
       </div>
@@ -193,20 +109,17 @@ export default function AdminCustomers() {
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search by name, email, or ID..."
+                placeholder="Search by name or email..."
                 className="pl-9"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value)
-                  resetPage()
-                }}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
               />
             </div>
             <Select
               value={statusFilter}
               onValueChange={(v) => {
                 setStatusFilter(v as typeof statusFilter)
-                resetPage()
+                setPage(1)
               }}
             >
               <SelectTrigger className="w-full sm:w-40">
@@ -226,6 +139,15 @@ export default function AdminCustomers() {
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
+          ) : isError ? (
+            <div className="flex flex-col items-center gap-3 py-10 text-center">
+              <p className="text-sm text-muted-foreground">
+                {error instanceof ApiError ? error.message : "Could not load customers."}
+              </p>
+              <Button variant="outline" size="sm" onClick={() => refetch()}>
+                Retry
+              </Button>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -236,12 +158,13 @@ export default function AdminCustomers() {
                     <TableHead>Email</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>NFC Cards</TableHead>
                     <TableHead>Joined On</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
-                  {pageItems.map((c) => (
+                <TableBody className={isFetching ? "opacity-60" : undefined}>
+                  {customers.map((c) => (
                     <TableRow key={c.id}>
                       <TableCell className="font-medium">{c.id}</TableCell>
                       <TableCell>
@@ -261,6 +184,7 @@ export default function AdminCustomers() {
                       <TableCell>
                         <StatusBadge status={c.status} />
                       </TableCell>
+                      <TableCell className="text-muted-foreground">{c.cardCount}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(c.joinedOn)}</TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
@@ -271,27 +195,16 @@ export default function AdminCustomers() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => navigate(`/admin/customers/${c.id}`)}>
-                              <Eye /> View
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setEditing(c)
-                                setFormOpen(true)
-                              }}
-                            >
-                              <Pencil /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem variant="destructive" onClick={() => setDeleting(c)}>
-                              <Trash2 /> Delete
+                              <Eye /> View Details
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))}
-                  {pageItems.length === 0 && (
+                  {customers.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                      <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
                         No customers found.
                       </TableCell>
                     </TableRow>
@@ -305,29 +218,11 @@ export default function AdminCustomers() {
             page={page}
             totalPages={totalPages}
             onPageChange={setPage}
-            totalItems={filtered.length}
+            totalItems={totalItems}
             pageSize={PAGE_SIZE}
           />
         </CardContent>
       </Card>
-
-      <CustomerFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        customer={editing}
-        onSubmit={(values) => {
-          if (editing) editMutation.mutate({ id: editing.id, values })
-          else addMutation.mutate(values)
-        }}
-      />
-
-      <ConfirmDialog
-        open={!!deleting}
-        onOpenChange={(open) => !open && setDeleting(null)}
-        title="Delete customer"
-        description={`Are you sure you want to delete ${deleting?.name}? This action cannot be undone.`}
-        onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
-      />
     </div>
   )
 }

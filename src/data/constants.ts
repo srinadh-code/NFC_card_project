@@ -1,104 +1,5 @@
 ﻿import type { Product, Testimonial } from "@/types"
 
-export const COMPANIES = [
-  "Tata Consultancy Services",
-  "Infosys Ltd.",
-  "Wipro Technologies",
-  "HCL Technologies",
-  "Flipkart Internet Pvt. Ltd.",
-  "Zomato Ltd.",
-  "Swiggy Bundl Technologies",
-  "Paytm (One97 Communications)",
-  "Freshworks Inc.",
-  "Razorpay Software Pvt. Ltd.",
-  "BYJU'S",
-  "PhonePe Pvt. Ltd.",
-  "Ola Cabs",
-  "Reliance Jio Infocomm",
-  "Tech Mahindra",
-  "Cognizant India",
-  "Accenture India",
-  "IBM India Pvt. Ltd.",
-  "Amazon Development Centre India",
-  "Google India Pvt. Ltd.",
-  "Microsoft India Pvt. Ltd.",
-  "Meesho",
-  "CRED",
-  "Zerodha Broking",
-  "Nykaa E-Retail",
-  "Myntra Designs",
-  "Dream11",
-  "Delhivery Ltd.",
-  "PolicyBazaar",
-  "Urban Company",
-] as const
-
-export const DESIGNATIONS = [
-  "Software Developer",
-  "Senior Software Engineer",
-  "Product Manager",
-  "UI/UX Designer",
-  "Marketing Manager",
-  "Sales Executive",
-  "Business Analyst",
-  "HR Manager",
-  "Founder & CEO",
-  "Co-Founder",
-  "VP of Engineering",
-  "Data Analyst",
-  "Operations Manager",
-  "Customer Success Manager",
-  "Account Manager",
-  "Full Stack Developer",
-  "QA Engineer",
-  "Regional Sales Head",
-  "Growth Marketer",
-  "Finance Manager",
-] as const
-
-export const INDIAN_CITIES = [
-  "Hyderabad",
-  "Bangalore",
-  "Mumbai",
-  "Delhi",
-  "Chennai",
-  "Pune",
-  "Kolkata",
-  "Ahmedabad",
-  "Jaipur",
-  "Gurugram",
-  "Noida",
-  "Chandigarh",
-  "Kochi",
-  "Indore",
-  "Lucknow",
-] as const
-
-export const TOP_LOCATIONS = [
-  { location: "Hyderabad, India", weight: 30 },
-  { location: "Bangalore, India", weight: 24 },
-  { location: "Mumbai, India", weight: 18 },
-  { location: "Delhi, India", weight: 14 },
-  { location: "Chennai, India", weight: 10 },
-  { location: "United States", weight: 9 },
-  { location: "United Arab Emirates", weight: 6 },
-  { location: "Singapore", weight: 4 },
-  { location: "Australia", weight: 3 },
-] as const
-
-export const INDIAN_STATES = [
-  "Telangana",
-  "Karnataka",
-  "Maharashtra",
-  "Delhi",
-  "Tamil Nadu",
-  "West Bengal",
-  "Gujarat",
-  "Rajasthan",
-  "Haryana",
-  "Uttar Pradesh",
-] as const
-
 export const CARD_COLORS = [
   { name: "Black", hex: "#111111" },
   { name: "Blue", hex: "#2563eb" },
@@ -147,9 +48,8 @@ export const PRODUCTS: Product[] = [
   },
 ]
 
-// The Shop page sells a single flagship SKU. `PRODUCTS` above stays as-is so
-// historical order/analytics seed data still shows realistic product variety
-// from before the catalog was simplified.
+// The Shop page sells a single flagship SKU; `PRODUCTS` above is kept for
+// order-history rendering (past orders reference these product ids/types).
 export const FLAGSHIP_PRODUCT: Product = {
   id: "PRD-FLAGSHIP",
   name: "VR's NEXORA NFC Business Card",

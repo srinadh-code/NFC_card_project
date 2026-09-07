@@ -29,9 +29,8 @@ import { ChartContainer } from "@/components/ui/chart-container"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatusBadge } from "@/components/admin/StatusBadge"
 import { StatCard } from "@/components/admin/StatCard"
-import { useDataStore } from "@/store/data-store"
-import { simulateLatency, formatCurrency, formatDate } from "@/lib/mock-api"
-import { analyticsRecords } from "@/data/seed"
+import { adminDashboardApi, adminAnalyticsApi } from "@/lib/api"
+import { formatCurrency, formatDate } from "@/lib/mock-api"
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -40,154 +39,53 @@ const MONTHS = [
 
 const PIE_COLORS = ["#22c55e", "#6366f1", "#f59e0b"]
 
-function daysAgo(n: number) {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return d
-}
-
 export default function AdminDashboard() {
   const navigate = useNavigate()
-  const customers = useDataStore((s) => s.customers)
-  const cards = useDataStore((s) => s.cards)
-  const orders = useDataStore((s) => s.orders)
 
   const [monthFilter, setMonthFilter] = useState(String(new Date().getMonth()))
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["admin-dashboard", customers.length, cards.length, orders.length],
-    queryFn: () =>
-      simulateLatency({ customers, cards, orders }, 300),
+  const { data: stats, isLoading } = useQuery({
+    queryKey: ["admin-dashboard"],
+    queryFn: () => adminDashboardApi.get(),
   })
 
-  const stats = useMemo(() => {
-    if (!data) return null
-    const { customers, cards, orders } = data
+  // The month picker predates the real analytics endpoint (which only
+  // exposes a rolling "last N days" range, not an arbitrary calendar
+  // month) — map the selected month to a day count so the picker still
+  // does something meaningful against the real API.
+  const rangeDays = useMemo(() => {
+    const monthIdx = Number(monthFilter)
+    const now = new Date()
+    const isCurrentMonth = monthIdx === now.getMonth()
+    if (isCurrentMonth) return now.getDate()
+    const daysInMonth = new Date(now.getFullYear(), monthIdx + 1, 0).getDate()
+    return daysInMonth
+  }, [monthFilter])
 
-    const activeCustomers = customers.filter((c) => c.status === "Active").length
-    const activatedCards = cards.filter((c) => c.status === "Active").length
-    const nonCancelled = orders.filter((o) => o.status !== "Cancelled")
-    const totalRevenue = nonCancelled.reduce((s, o) => s + o.total, 0)
-    const pendingOrders = orders.filter((o) => o.status === "Pending").length
-
-    const todayKey = new Date().toISOString().slice(0, 10)
-    let todayOrders = orders.filter((o) => o.date.slice(0, 10) === todayKey)
-    if (todayOrders.length === 0 && orders.length > 0) {
-      const latestDay = [...orders].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-      )[0].date.slice(0, 10)
-      todayOrders = orders.filter((o) => o.date.slice(0, 10) === latestDay)
-    }
-    const todaysRevenue = todayOrders
-      .filter((o) => o.status !== "Cancelled")
-      .reduce((s, o) => s + o.total, 0)
-
-    // Data-driven trend: last 30 days vs previous 30 days.
-    const cutoff30 = daysAgo(30)
-    const cutoff60 = daysAgo(60)
-    const ordersLast30 = orders.filter((o) => new Date(o.date) >= cutoff30).length
-    const ordersPrev30 = orders.filter(
-      (o) => new Date(o.date) >= cutoff60 && new Date(o.date) < cutoff30,
-    ).length
-    const orderTrend =
-      ordersPrev30 === 0 ? (ordersLast30 > 0 ? 100 : 0) : ((ordersLast30 - ordersPrev30) / ordersPrev30) * 100
-
-    const customersLast30 = customers.filter((c) => new Date(c.joinedOn) >= cutoff30).length
-    const customersPrev30 = customers.filter(
-      (c) => new Date(c.joinedOn) >= cutoff60 && new Date(c.joinedOn) < cutoff30,
-    ).length
-    const customerTrend =
-      customersPrev30 === 0
-        ? (customersLast30 > 0 ? 100 : 0)
-        : ((customersLast30 - customersPrev30) / customersPrev30) * 100
-
-    const revenueLast30 = nonCancelled
-      .filter((o) => new Date(o.date) >= cutoff30)
-      .reduce((s, o) => s + o.total, 0)
-    const revenuePrev30 = nonCancelled
-      .filter((o) => new Date(o.date) >= cutoff60 && new Date(o.date) < cutoff30)
-      .reduce((s, o) => s + o.total, 0)
-    const revenueTrend =
-      revenuePrev30 === 0 ? (revenueLast30 > 0 ? 100 : 0) : ((revenueLast30 - revenuePrev30) / revenuePrev30) * 100
-
-    const cardsLast30 = cards.filter(
-      (c) => c.activatedOn && new Date(c.activatedOn) >= cutoff30,
-    ).length
-    const cardsPrev30 = cards.filter(
-      (c) =>
-        c.activatedOn &&
-        new Date(c.activatedOn) >= cutoff60 &&
-        new Date(c.activatedOn) < cutoff30,
-    ).length
-    const cardTrend =
-      cardsPrev30 === 0 ? (cardsLast30 > 0 ? 100 : 0) : ((cardsLast30 - cardsPrev30) / cardsPrev30) * 100
-
-    return {
-      totalCustomers: customers.length,
-      activeCustomers,
-      totalCards: cards.length,
-      activatedCards,
-      totalRevenue,
-      totalOrders: orders.length,
-      pendingOrders,
-      todaysRevenue,
-      orderTrend,
-      customerTrend,
-      revenueTrend,
-      cardTrend,
-    }
-  }, [data])
+  const { data: analytics } = useQuery({
+    queryKey: ["admin-dashboard-analytics", rangeDays],
+    queryFn: () => adminAnalyticsApi.summary({ range: rangeDays }),
+  })
 
   const tapsChartData = useMemo(() => {
-    const monthIdx = Number(monthFilter)
-    const now = new Date()
-    const year = now.getFullYear()
-    const daysInMonth = new Date(year, monthIdx + 1, 0).getDate()
-    const byDay = new Map<number, number>()
-    for (const rec of analyticsRecords) {
-      const d = new Date(rec.date)
-      if (d.getMonth() === monthIdx && d.getFullYear() === year) {
-        byDay.set(d.getDate(), (byDay.get(d.getDate()) ?? 0) + rec.taps)
-      }
-    }
-    return Array.from({ length: daysInMonth }, (_, i) => ({
-      day: i + 1,
-      taps: byDay.get(i + 1) ?? 0,
+    if (!analytics) return []
+    return analytics.byDay.map((d) => ({
+      day: new Date(d.date).getDate(),
+      taps: d.count,
     }))
-  }, [monthFilter])
+  }, [analytics])
 
   const platformData = useMemo(() => {
-    const monthIdx = Number(monthFilter)
-    const now = new Date()
-    const year = now.getFullYear()
-    const byDevice = new Map<string, number>()
-    let total = 0
-    for (const rec of analyticsRecords) {
-      const d = new Date(rec.date)
-      if (d.getMonth() === monthIdx && d.getFullYear() === year) {
-        byDevice.set(rec.device, (byDevice.get(rec.device) ?? 0) + rec.taps)
-        total += rec.taps
-      }
-    }
-    if (total === 0) {
-      // fall back to all-time distribution so the chart isn't empty for older months
-      for (const rec of analyticsRecords) {
-        byDevice.set(rec.device, (byDevice.get(rec.device) ?? 0) + rec.taps)
-        total += rec.taps
-      }
-    }
-    return Array.from(byDevice.entries()).map(([device, taps]) => ({
-      name: device,
-      value: taps,
-      pct: total > 0 ? (taps / total) * 100 : 0,
+    if (!analytics) return []
+    const total = analytics.byDevice.reduce((s, d) => s + d.count, 0)
+    return analytics.byDevice.map((d) => ({
+      name: d.device,
+      value: d.count,
+      pct: total > 0 ? (d.count / total) * 100 : 0,
     }))
-  }, [monthFilter])
+  }, [analytics])
 
-  const recentActivity = useMemo(() => {
-    return [...orders]
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 6)
-  }, [orders])
+  const recentActivity = stats?.recentOrders ?? []
 
   if (isLoading || !stats) {
     return (

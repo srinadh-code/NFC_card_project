@@ -17,10 +17,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCustomerAuthStore } from "@/store/auth-store"
 import { useDataStore, selectCustomerById } from "@/store/data-store"
 import { useCustomerSettingsStore } from "@/store/customer-settings-store"
 import { useThemeStore } from "@/store/theme-store"
+import { authApi, profileApi, ApiError } from "@/lib/api"
 import type { ThemeMode } from "@/types"
 
 const THEME_OPTIONS: { value: ThemeMode; label: string; icon: typeof Sun; description: string }[] = [
@@ -31,6 +33,7 @@ const THEME_OPTIONS: { value: ThemeMode; label: string; icon: typeof Sun; descri
 
 export default function CustomerSettings() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const authCustomer = useCustomerAuthStore((s) => s.customer)
   const logout = useCustomerAuthStore((s) => s.logout)
   const customerRecord = useDataStore(selectCustomerById(authCustomer?.id ?? ""))
@@ -55,21 +58,42 @@ export default function CustomerSettings() {
   const [currentPw, setCurrentPw] = useState("")
   const [newPw, setNewPw] = useState("")
   const [confirmPw, setConfirmPw] = useState("")
+  const [changingPw, setChangingPw] = useState(false)
 
   const [sessionsOpen, setSessionsOpen] = useState(false)
 
   const [dangerOpen, setDangerOpen] = useState<"deactivate" | "delete" | null>(null)
   const [confirmText, setConfirmText] = useState("")
 
+  // Privacy toggles already have an exact backend match on profiles.Profile
+  // (profile_public / show_contact_info / show_in_search) via profileApi —
+  // unlike the Notification Preferences section below, which has no
+  // corresponding fields on the backend yet and stays on local mock state.
+  const { data: privacy } = useQuery({
+    queryKey: ["privacy-settings", authCustomer?.id],
+    queryFn: profileApi.getPrivacySettings,
+    enabled: Boolean(authCustomer),
+  })
+  const privacyMutation = useMutation({
+    mutationFn: profileApi.updatePrivacySettings,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["privacy-settings"] }),
+    onError: () => toast.error("Couldn't save that privacy setting. Please try again."),
+  })
+
   if (!authCustomer) return null
 
-  function handleSaveAccount() {
+  async function handleSaveAccount() {
     if (!authCustomer) return
     updateCustomer(authCustomer.id, { name, email })
-    toast.success("Account settings saved.")
+    try {
+      await profileApi.updateMine({ fullName: name })
+      toast.success("Account settings saved.")
+    } catch {
+      toast.error("Couldn't save your name. Please try again.")
+    }
   }
 
-  function handleChangePassword() {
+  async function handleChangePassword() {
     if (!currentPw || !newPw || !confirmPw) {
       toast.error("Please fill in all password fields.")
       return
@@ -82,11 +106,19 @@ export default function CustomerSettings() {
       toast.error("New password must be at least 8 characters.")
       return
     }
-    toast.success("Password changed successfully.")
-    setCurrentPw("")
-    setNewPw("")
-    setConfirmPw("")
-    setPwOpen(false)
+    setChangingPw(true)
+    try {
+      await authApi.changePassword({ current_password: currentPw, new_password: newPw })
+      toast.success("Password changed successfully.")
+      setCurrentPw("")
+      setNewPw("")
+      setConfirmPw("")
+      setPwOpen(false)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't change your password. Please try again.")
+    } finally {
+      setChangingPw(false)
+    }
   }
 
   function handleToggle2fa(checked: boolean) {
@@ -188,7 +220,10 @@ export default function CustomerSettings() {
                 </p>
               </div>
             </div>
-            <Switch checked={settings.profilePublic} onCheckedChange={settings.setProfilePublic} />
+            <Switch
+              checked={privacy?.profilePublic ?? true}
+              onCheckedChange={(v) => privacyMutation.mutate({ profilePublic: v })}
+            />
           </div>
           <Separator />
           <div className="flex items-center justify-between">
@@ -201,7 +236,10 @@ export default function CustomerSettings() {
                 </p>
               </div>
             </div>
-            <Switch checked={settings.showContactInfo} onCheckedChange={settings.setShowContactInfo} />
+            <Switch
+              checked={privacy?.showContactInfo ?? true}
+              onCheckedChange={(v) => privacyMutation.mutate({ showContactInfo: v })}
+            />
           </div>
           <Separator />
           <div className="flex items-center justify-between">
@@ -212,7 +250,10 @@ export default function CustomerSettings() {
                 <p className="text-xs text-muted-foreground">Allow your profile to be discoverable via search.</p>
               </div>
             </div>
-            <Switch checked={settings.showInSearch} onCheckedChange={settings.setShowInSearch} />
+            <Switch
+              checked={privacy?.showInSearch ?? true}
+              onCheckedChange={(v) => privacyMutation.mutate({ showInSearch: v })}
+            />
           </div>
         </CardContent>
       </Card>
@@ -332,7 +373,9 @@ export default function CustomerSettings() {
             <Button variant="outline" onClick={() => setPwOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleChangePassword}>Update Password</Button>
+            <Button onClick={handleChangePassword} disabled={changingPw}>
+              {changingPw ? "Updating..." : "Update Password"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

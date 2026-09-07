@@ -443,7 +443,21 @@ export const useDataStore = create<DataState>()(
     }),
     {
       name: "taplink-data",
-      version: 5,
+      // v6: seed.ts no longer ships generated demo rows — force any
+      // browser that already persisted the old faker-generated dataset
+      // to drop it and start from the (now empty) seed arrays.
+      version: 6,
+      migrate: (_persistedState, version) =>
+        version < 6
+          ? {
+              customers: seedCustomers,
+              cards: seedCards,
+              orders: seedOrders,
+              profiles: seedProfiles,
+              tickets: seedTickets,
+              transactions: seedTransactions,
+            }
+          : (_persistedState as DataState),
     },
   ),
 )

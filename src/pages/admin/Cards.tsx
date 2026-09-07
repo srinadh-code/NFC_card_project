@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useEffect, useState } from "react"
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
 import { toast } from "sonner"
 import {
   Search,
@@ -36,9 +36,10 @@ import {
 import { StatusBadge } from "@/components/admin/StatusBadge"
 import { TablePagination } from "@/components/admin/TablePagination"
 import { CardFormDialog, type CardFormValues } from "@/components/admin/CardFormDialog"
+import { CustomerPicker } from "@/components/admin/CustomerPicker"
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog"
-import { useDataStore } from "@/store/data-store"
-import { simulateLatency, formatDate } from "@/lib/mock-api"
+import { adminNfcApi, ApiError } from "@/lib/api"
+import { formatDate } from "@/lib/mock-api"
 import type { CardStatus, NfcCard } from "@/types"
 
 const PAGE_SIZE = 10
@@ -52,16 +53,14 @@ const STATUS_OPTIONS: (CardStatus | "All")[] = [
   "Unassigned",
 ]
 
+function errorMessage(err: unknown, fallback: string) {
+  return err instanceof ApiError ? err.message : fallback
+}
+
 export default function AdminCards() {
   const queryClient = useQueryClient()
-  const addCard = useDataStore((s) => s.addCard)
-  const updateCard = useDataStore((s) => s.updateCard)
-  const deleteCard = useDataStore((s) => s.deleteCard)
-  const assignCard = useDataStore((s) => s.assignCard)
-  const blockCard = useDataStore((s) => s.blockCard)
-  const markLost = useDataStore((s) => s.markLost)
-  const customers = useDataStore((s) => s.customers)
 
+  const [searchInput, setSearchInput] = useState("")
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<CardStatus | "All">("All")
   const [page, setPage] = useState(1)
@@ -69,128 +68,123 @@ export default function AdminCards() {
   const [editing, setEditing] = useState<NfcCard | null>(null)
   const [deleting, setDeleting] = useState<NfcCard | null>(null)
   const [assigning, setAssigning] = useState<NfcCard | null>(null)
-  const [assignTarget, setAssignTarget] = useState<string>("")
+  const [assignEmail, setAssignEmail] = useState("")
 
-  const { data: cards = [], isLoading } = useQuery({
-    queryKey: ["admin-cards"],
-    queryFn: () => simulateLatency(useDataStore.getState().cards, 300),
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(searchInput)
+      setPage(1)
+    }, 300)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ["admin-cards", page, search, statusFilter],
+    queryFn: () => adminNfcApi.list({ page, search: search || undefined, status: statusFilter }),
+    placeholderData: keepPreviousData,
   })
 
+  const cards = data?.data ?? []
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin-cards"] })
 
   const addMutation = useMutation({
-    mutationFn: async (values: CardFormValues) => {
-      const customer = customers.find((c) => c.id === values.customerId)
-      return addCard({
-        uid: values.uid || `04${Math.random().toString(16).slice(2, 10).toUpperCase()}`,
-        serialNumber: values.serialNumber,
+    mutationFn: (values: CardFormValues) =>
+      adminNfcApi.create({
+        uid: values.uid || undefined,
+        serialNumber: values.serialNumber || undefined,
         cardType: values.cardType,
         color: values.color,
-        customerId: values.customerId || null,
-        customerName: customer?.name ?? null,
         status: values.status,
-        assignedOn: values.customerId ? new Date().toISOString() : null,
-        activatedOn: values.status === "Active" ? new Date().toISOString() : null,
-        purchaseDate: new Date(values.purchaseDate).toISOString(),
-        notes: values.notes || undefined,
-      })
-    },
+        purchaseDate: values.purchaseDate,
+        notes: values.notes,
+        customerEmail: values.customerEmail,
+      }),
     onSuccess: () => {
       invalidate()
       toast.success("Card added successfully.")
       setFormOpen(false)
     },
+    onError: (err) => toast.error(errorMessage(err, "Could not add card.")),
   })
 
   const editMutation = useMutation({
-    mutationFn: async ({ id, values }: { id: string; values: CardFormValues }) => {
-      const customer = customers.find((c) => c.id === values.customerId)
-      updateCard(id, {
+    mutationFn: ({ id, values }: { id: string; values: CardFormValues }) =>
+      adminNfcApi.update(id, {
         uid: values.uid,
         serialNumber: values.serialNumber,
         cardType: values.cardType,
         color: values.color,
-        customerId: values.customerId || null,
-        customerName: customer?.name ?? null,
         status: values.status,
-        purchaseDate: new Date(values.purchaseDate).toISOString(),
-        notes: values.notes || undefined,
-      })
-    },
+        purchaseDate: values.purchaseDate,
+        notes: values.notes,
+        customerEmail: values.customerEmail,
+      }),
     onSuccess: () => {
       invalidate()
       toast.success("Card updated successfully.")
       setFormOpen(false)
       setEditing(null)
     },
+    onError: (err) => toast.error(errorMessage(err, "Could not update card.")),
   })
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => deleteCard(id),
+    mutationFn: (id: string) => adminNfcApi.remove(id),
     onSuccess: () => {
       invalidate()
       toast.success("Card deleted.")
+      setDeleting(null)
     },
+    onError: (err) => toast.error(errorMessage(err, "Could not delete card.")),
   })
 
   const activateMutation = useMutation({
-    mutationFn: async (id: string) => updateCard(id, { status: "Active", activatedOn: new Date().toISOString() }),
+    mutationFn: (id: string) => adminNfcApi.activate(id),
     onSuccess: () => {
       invalidate()
       toast.success("Card activated.")
     },
+    onError: (err) => toast.error(errorMessage(err, "Could not activate card.")),
   })
 
   const blockMutation = useMutation({
-    mutationFn: async (id: string) => blockCard(id),
+    mutationFn: (id: string) => adminNfcApi.block(id),
     onSuccess: () => {
       invalidate()
       toast.success("Card blocked.")
     },
+    onError: (err) => toast.error(errorMessage(err, "Could not block card.")),
   })
 
   const lostMutation = useMutation({
-    mutationFn: async (id: string) => markLost(id),
+    mutationFn: (id: string) => adminNfcApi.markLost(id),
     onSuccess: () => {
       invalidate()
       toast.success("Card marked as lost.")
     },
+    onError: (err) => toast.error(errorMessage(err, "Could not update card.")),
   })
 
   const assignMutation = useMutation({
-    mutationFn: async ({ id, customerId }: { id: string; customerId: string }) => assignCard(id, customerId),
+    mutationFn: ({ id, email }: { id: string; email: string }) => adminNfcApi.assign(id, email),
     onSuccess: () => {
       invalidate()
       toast.success("Card assigned to customer.")
       setAssigning(null)
-      setAssignTarget("")
+      setAssignEmail("")
     },
+    onError: (err) => toast.error(errorMessage(err, "Could not assign card.")),
   })
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return cards.filter((c) => {
-      const matchesQuery =
-        !q ||
-        c.id.toLowerCase().includes(q) ||
-        c.uid.toLowerCase().includes(q) ||
-        (c.customerName ?? "").toLowerCase().includes(q)
-      const matchesStatus = statusFilter === "All" || c.status === statusFilter
-      return matchesQuery && matchesStatus
-    })
-  }, [cards, search, statusFilter])
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-
-  const suggestedSerial = `SN${String(cards.length + 1).padStart(6, "0")}`
+  const totalItems = data?.count ?? 0
+  const totalPages = Math.max(1, data?.numPages ?? 1)
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">NFC Cards</h1>
-          <p className="text-sm text-muted-foreground">{cards.length} cards in inventory</p>
+          <p className="text-sm text-muted-foreground">{totalItems} cards in inventory</p>
         </div>
         <Button
           onClick={() => {
@@ -210,11 +204,8 @@ export default function AdminCards() {
               <Input
                 placeholder="Search by card ID, UID, or customer..."
                 className="pl-9"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value)
-                  setPage(1)
-                }}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
               />
             </div>
             <Select
@@ -257,8 +248,8 @@ export default function AdminCards() {
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
-                  {pageItems.map((c) => (
+                <TableBody className={isFetching ? "opacity-60" : undefined}>
+                  {cards.map((c) => (
                     <TableRow key={c.id}>
                       <TableCell className="font-medium">{c.id}</TableCell>
                       <TableCell className="text-muted-foreground">{c.uid}</TableCell>
@@ -294,7 +285,7 @@ export default function AdminCards() {
                             <DropdownMenuItem
                               onClick={() => {
                                 setAssigning(c)
-                                setAssignTarget(c.customerId ?? "")
+                                setAssignEmail(c.customerEmail ?? "")
                               }}
                             >
                               <UserPlus /> Assign
@@ -318,7 +309,7 @@ export default function AdminCards() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {pageItems.length === 0 && (
+                  {cards.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                         No cards found.
@@ -334,7 +325,7 @@ export default function AdminCards() {
             page={page}
             totalPages={totalPages}
             onPageChange={setPage}
-            totalItems={filtered.length}
+            totalItems={totalItems}
             pageSize={PAGE_SIZE}
           />
         </CardContent>
@@ -344,8 +335,6 @@ export default function AdminCards() {
         open={formOpen}
         onOpenChange={setFormOpen}
         card={editing}
-        customers={customers}
-        suggestedSerial={suggestedSerial}
         onSubmit={(values) => {
           if (editing) editMutation.mutate({ id: editing.id, values })
           else addMutation.mutate(values)
@@ -364,29 +353,16 @@ export default function AdminCards() {
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Assign Card</DialogTitle>
-            <DialogDescription>
-              Assign card {assigning?.id} to a customer.
-            </DialogDescription>
+            <DialogDescription>Assign card {assigning?.id} to a customer.</DialogDescription>
           </DialogHeader>
-          <Select value={assignTarget} onValueChange={setAssignTarget}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select a customer" />
-            </SelectTrigger>
-            <SelectContent>
-              {customers.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name} ({c.id})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <CustomerPicker value={assignEmail} onChange={setAssignEmail} placeholder="Select a customer..." />
           <DialogFooter>
             <Button variant="outline" onClick={() => setAssigning(null)}>
               Cancel
             </Button>
             <Button
-              disabled={!assignTarget}
-              onClick={() => assigning && assignMutation.mutate({ id: assigning.id, customerId: assignTarget })}
+              disabled={!assignEmail || assignMutation.isPending}
+              onClick={() => assigning && assignMutation.mutate({ id: assigning.id, email: assignEmail })}
             >
               Assign
             </Button>

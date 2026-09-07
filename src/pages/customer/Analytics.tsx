@@ -32,21 +32,27 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { ChartContainer } from "@/components/ui/chart-container"
 import { StatCard } from "@/components/customer/StatCard"
 import { useCustomerAuthStore } from "@/store/auth-store"
-import { analyticsRecords } from "@/data/seed"
-import { simulateLatency } from "@/lib/mock-api"
-import type { AnalyticsRecord, TrafficSource } from "@/types"
+import { customerAnalyticsApi, customerLeadApi, type AnalyticsEventItem } from "@/lib/api"
+import type { TrafficSource } from "@/types"
 
 type Period = "daily" | "weekly" | "monthly"
 
 // Validated categorical palette (see dataviz skill) — fixed hue order, never cycled.
 const PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#4a3aa7"]
 
-const DEVICE_COLORS: Record<AnalyticsRecord["device"], string> = {
-  Android: PALETTE[0],
-  iOS: PALETTE[1],
-  Other: PALETTE[2],
+// The tracking endpoint reports whatever device string the visitor's
+// browser resolves to server-side — not the fixed Android/iOS/Other enum
+// the old mock data used — so colors are assigned by first-seen order
+// instead of a fixed lookup table.
+function colorForDevice(index: number) {
+  return PALETTE[index % PALETTE.length]
 }
 
+// Only two of the mock's five traffic sources have a real signal today:
+// NFC_TAP events (tagged source="nfc") and QR_SCAN events (source="qr").
+// Social Media/Search/Referral would need referrer tracking that doesn't
+// exist server-side yet, so they're simply never added to the map below —
+// already-existing "filter to sources present" logic keeps them off the chart.
 const TRAFFIC_ORDER: TrafficSource[] = ["Direct Tap", "Social Media", "QR Scan", "Search", "Referral"]
 const TRAFFIC_COLORS: Record<TrafficSource, string> = {
   "Direct Tap": PALETTE[0],
@@ -54,10 +60,6 @@ const TRAFFIC_COLORS: Record<TrafficSource, string> = {
   "QR Scan": PALETTE[2],
   Search: PALETTE[3],
   Referral: PALETTE[4],
-}
-
-function sumBy<T>(items: T[], fn: (item: T) => number) {
-  return items.reduce((s, item) => s + fn(item), 0)
 }
 
 function startOfWeek(d: Date) {
@@ -69,7 +71,7 @@ function startOfWeek(d: Date) {
   return copy
 }
 
-function buildSeries(records: AnalyticsRecord[], period: Period) {
+function buildSeries(events: AnalyticsEventItem[], period: Period) {
   const now = new Date()
   const cutoff = new Date(now)
   if (period === "daily") cutoff.setDate(now.getDate() - 6)
@@ -77,15 +79,15 @@ function buildSeries(records: AnalyticsRecord[], period: Period) {
   else cutoff.setMonth(now.getMonth() - 5) // last ~6 months
   cutoff.setHours(0, 0, 0, 0)
 
-  const inWindow = records.filter((r) => new Date(r.date) >= cutoff)
+  const inWindow = events.filter((e) => new Date(e.createdAt) >= cutoff)
   const buckets = new Map<string, { label: string; taps: number }>()
 
-  for (const r of inWindow) {
-    const d = new Date(r.date)
+  for (const e of inWindow) {
+    const d = new Date(e.createdAt)
     let key: string
     let label: string
     if (period === "daily") {
-      key = r.date
+      key = d.toISOString().slice(0, 10)
       label = d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })
     } else if (period === "weekly") {
       const weekStart = startOfWeek(d)
@@ -96,8 +98,8 @@ function buildSeries(records: AnalyticsRecord[], period: Period) {
       label = d.toLocaleDateString("en-IN", { month: "short", year: "2-digit" })
     }
     const existing = buckets.get(key)
-    if (existing) existing.taps += r.taps
-    else buckets.set(key, { label, taps: r.taps })
+    if (existing) existing.taps += 1
+    else buckets.set(key, { label, taps: 1 })
   }
 
   return Array.from(buckets.entries())
@@ -105,28 +107,38 @@ function buildSeries(records: AnalyticsRecord[], period: Period) {
     .map(([, v]) => v)
 }
 
-function computeAnalytics(customerId: string, period: Period) {
-  const records = analyticsRecords.filter((r) => r.customerId === customerId)
+async function computeAnalytics(period: Period) {
+  const [summary, tapEvents, viewEvents, scanEvents, leads] = await Promise.all([
+    customerAnalyticsApi.summary(),
+    customerAnalyticsApi.taps(),
+    customerAnalyticsApi.views(),
+    customerAnalyticsApi.scans(),
+    customerLeadApi.count(),
+  ])
 
   const totals = {
-    taps: sumBy(records, (r) => r.taps),
-    qrScans: sumBy(records, (r) => r.qrScans),
-    profileViews: sumBy(records, (r) => r.profileViews),
-    uniqueVisitors: sumBy(records, (r) => r.uniqueVisitors),
-    shares: sumBy(records, (r) => r.shares),
-    leads: sumBy(records, (r) => r.leads),
+    taps: summary.totals.nfcTaps,
+    qrScans: summary.totals.qrScans,
+    profileViews: summary.totals.profileViews,
+    // No unique-visitor dedup exists server-side yet (would need
+    // IP/session tracking) — 0 until that's built.
+    uniqueVisitors: 0,
+    shares: summary.totals.socialClicks,
+    leads,
   }
 
-  const series = buildSeries(records, period)
+  const series = buildSeries(tapEvents, period)
 
-  const byDevice = new Map<AnalyticsRecord["device"], number>()
-  for (const r of records) byDevice.set(r.device, (byDevice.get(r.device) ?? 0) + r.taps)
+  const allEvents = [...tapEvents, ...viewEvents, ...scanEvents]
+  const byDevice = new Map<string, number>()
+  for (const e of allEvents) byDevice.set(e.device, (byDevice.get(e.device) ?? 0) + 1)
   const deviceData = Array.from(byDevice.entries())
-    .map(([device, taps]) => ({ device, taps }))
+    .map(([device, taps], index) => ({ device, taps, color: colorForDevice(index) }))
     .sort((a, b) => b.taps - a.taps)
 
   const bySource = new Map<TrafficSource, number>()
-  for (const r of records) bySource.set(r.source, (bySource.get(r.source) ?? 0) + 1)
+  for (const _e of tapEvents) bySource.set("Direct Tap", (bySource.get("Direct Tap") ?? 0) + 1)
+  for (const _e of scanEvents) bySource.set("QR Scan", (bySource.get("QR Scan") ?? 0) + 1)
   const totalSourceCount = Array.from(bySource.values()).reduce((s, v) => s + v, 0) || 1
   const trafficData = TRAFFIC_ORDER.filter((s) => bySource.has(s)).map((source) => {
     const count = bySource.get(source) ?? 0
@@ -134,13 +146,9 @@ function computeAnalytics(customerId: string, period: Period) {
     return { source, count, pctLabel: `${pct.toFixed(0)}%` }
   })
 
-  const byLocation = new Map<string, number>()
-  for (const r of records) byLocation.set(r.location, (byLocation.get(r.location) ?? 0) + r.taps)
-  const totalLocationTaps = Array.from(byLocation.values()).reduce((s, v) => s + v, 0) || 1
-  const topLocations = Array.from(byLocation.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
-    .map(([location, taps]) => ({ location, taps, pct: (taps / totalLocationTaps) * 100 }))
+  // No location data is captured by the tracking endpoints yet — the
+  // widget below already renders a graceful "no data" state for this.
+  const topLocations: { location: string; taps: number; pct: number }[] = []
 
   return { totals, series, deviceData, trafficData, topLocations }
 }
@@ -157,7 +165,7 @@ export default function CustomerAnalytics() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["customer-analytics", customer?.id, period],
-    queryFn: () => simulateLatency(computeAnalytics(customer?.id ?? "", period), 300),
+    queryFn: () => computeAnalytics(period),
     enabled: Boolean(customer?.id),
   })
 
@@ -271,7 +279,7 @@ export default function CustomerAnalytics() {
                     label={({ percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`}
                   >
                     {data.deviceData.map((entry) => (
-                      <Cell key={entry.device} fill={DEVICE_COLORS[entry.device]} stroke="var(--card)" strokeWidth={2} />
+                      <Cell key={entry.device} fill={entry.color} stroke="var(--card)" strokeWidth={2} />
                     ))}
                   </Pie>
                   <Legend verticalAlign="bottom" height={32} iconType="circle" wrapperStyle={{ fontSize: 12 }} />

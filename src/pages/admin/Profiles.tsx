@@ -22,36 +22,14 @@ import {
 } from "@/components/ui/dialog"
 import { StatusBadge } from "@/components/admin/StatusBadge"
 import { TablePagination } from "@/components/admin/TablePagination"
-import { useDataStore } from "@/store/data-store"
-import { simulateLatency, formatDate } from "@/lib/mock-api"
-import type { Profile, SocialLink } from "@/types"
+import { adminProfileApi, adminCustomerApi } from "@/lib/api"
+import { formatDate } from "@/lib/mock-api"
+import type { Profile } from "@/types"
 
 const PAGE_SIZE = 10
 
-const DEFAULT_SOCIAL_PLATFORMS: SocialLink["platform"][] = [
-  "LinkedIn",
-  "Instagram",
-  "Facebook",
-  "WhatsApp",
-  "YouTube",
-  "Twitter",
-  "Website",
-]
-
-function nextProfileId(existing: Profile[]) {
-  let max = 0
-  for (const p of existing) {
-    const n = Number(p.id.replace("PRO", ""))
-    if (!Number.isNaN(n) && n > max) max = n
-  }
-  return `PRO${String(max + 1).padStart(3, "0")}`
-}
-
 export default function AdminProfiles() {
   const queryClient = useQueryClient()
-  const customers = useDataStore((s) => s.customers)
-  const updateProfile = useDataStore((s) => s.updateProfile)
-  const setProfileStatus = useDataStore((s) => s.setProfileStatus)
 
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
@@ -68,80 +46,63 @@ export default function AdminProfiles() {
     bio: "",
   })
 
-  const { data: profiles = [], isLoading } = useQuery({
-    queryKey: ["admin-profiles"],
-    queryFn: () => simulateLatency(useDataStore.getState().profiles, 300),
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin-profiles", search],
+    queryFn: () => adminProfileApi.list({ search: search || undefined }),
   })
+  const profiles = data?.data ?? []
+
+  // Every customer already has a profile from registration — this dialog
+  // only matters for the rare legacy account that predates that, so a
+  // single large customer page is enough for the picker.
+  const { data: customerPage } = useQuery({
+    queryKey: ["admin-customers-for-profile"],
+    queryFn: () => adminCustomerApi.list({}),
+  })
+  const customers = customerPage?.data ?? []
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin-profiles"] })
 
+  // AdminProfileSerializer doesn't expose the underlying user id (only the
+  // profile's own pk, which lives in a separate id space) — email is the
+  // one field both sides share and is unique per user, so match on that.
   const customersWithoutProfile = useMemo(
-    () => customers.filter((c) => !profiles.some((p) => p.customerId === c.id)),
+    () => customers.filter((c) => !profiles.some((p) => p.email === c.email)),
     [customers, profiles],
   )
 
   const addMutation = useMutation({
-    mutationFn: async (customerId: string) => {
-      const customer = customers.find((c) => c.id === customerId)
-      if (!customer) throw new Error("Customer not found")
-      const newProfile: Profile = {
-        id: nextProfileId(useDataStore.getState().profiles),
-        customerId: customer.id,
-        username: customer.username,
-        fullName: customer.name,
-        designation: customer.designation,
-        company: customer.company,
-        email: customer.email,
-        phone: customer.phone,
-        website: "",
-        address: `${customer.address.city}, ${customer.address.state}, India`,
-        bio: `${customer.designation} at ${customer.company}.`,
-        avatar: customer.avatar,
-        status: "Active",
-        createdOn: new Date().toISOString(),
-        socialLinks: DEFAULT_SOCIAL_PLATFORMS.map((platform, order) => ({
-          platform,
-          url: "",
-          enabled: false,
-          order,
-        })),
-        customLinks: [],
-        customFields: [],
-      }
-      // No dedicated "addProfile" action exists on the store; profiles are
-      // normally auto-created on card activation. We append directly via the
-      // store's own setState (still the single source of truth / localStorage
-      // persisted state) rather than introducing a parallel data layer.
-      useDataStore.setState((s) => ({ profiles: [newProfile, ...s.profiles] }))
-      return newProfile
-    },
+    mutationFn: (customerId: string) => adminProfileApi.create(customerId),
     onSuccess: () => {
       invalidate()
       toast.success("Profile created for customer.")
       setAddOpen(false)
       setSelectedCustomerId("")
     },
+    onError: () => toast.error("Couldn't create the profile. Please try again."),
   })
 
   const editMutation = useMutation({
-    mutationFn: async () => {
-      if (!editing) return
-      updateProfile(editing.id, editValues)
+    mutationFn: () => {
+      if (!editing) throw new Error("No profile selected")
+      return adminProfileApi.update(editing.id, editValues)
     },
     onSuccess: () => {
       invalidate()
       toast.success("Profile updated successfully.")
       setEditing(null)
     },
+    onError: () => toast.error("Couldn't update the profile. Please try again."),
   })
 
   const statusMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: Profile["status"] }) =>
-      setProfileStatus(id, status),
+    mutationFn: ({ id, status }: { id: string; status: Profile["status"] }) =>
+      status === "Active" ? adminProfileApi.activate(id) : adminProfileApi.suspend(id),
     onSuccess: (_d, vars) => {
       invalidate()
       toast.success(`Profile ${vars.status === "Active" ? "activated" : "suspended"}.`)
     },
+    onError: () => toast.error("Couldn't update the profile status. Please try again."),
   })
 
   useEffect(() => {

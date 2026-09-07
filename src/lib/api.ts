@@ -1,7 +1,23 @@
 // Centralized API client for the Django backend. Replaces the old
 // mock-api.ts / Zustand-as-backend pattern for the Phase A slice
 // (auth, profile, social/custom links, NFC cards, public profile).
-import type { CustomField, CustomLink, NfcCard, Profile, SocialLink } from "@/types"
+import type {
+  Address,
+  CustomField,
+  CustomLink,
+  NfcCard,
+  Order,
+  OrderStatus,
+  PaymentMethod,
+  PaymentStatus,
+  Profile,
+  SocialLink,
+  SupportTicket,
+  TicketPriority,
+  TicketStatus,
+  Transaction,
+  TrackingStep,
+} from "@/types"
 
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || "http://localhost:8000/api"
 
@@ -38,6 +54,14 @@ interface Envelope<T> {
   message: string
   data?: T
   errors?: Record<string, unknown>
+  pagination?: {
+    count: number
+    page: number
+    num_pages: number
+    page_size: number
+    next: string | null
+    previous: string | null
+  }
 }
 
 let refreshInFlight: Promise<boolean> | null = null
@@ -73,7 +97,7 @@ interface RequestOptions {
   isFormData?: boolean
 }
 
-async function request<T>(path: string, options: RequestOptions = {}, retried = false): Promise<T> {
+async function requestEnvelope<T>(path: string, options: RequestOptions = {}, retried = false): Promise<Envelope<T>> {
   const { method = "GET", body, auth = true, isFormData = false } = options
 
   const headers: Record<string, string> = {}
@@ -91,7 +115,7 @@ async function request<T>(path: string, options: RequestOptions = {}, retried = 
 
   if (res.status === 401 && auth && !retried && getRefreshToken()) {
     const refreshed = await refreshAccessToken()
-    if (refreshed) return request<T>(path, options, true)
+    if (refreshed) return requestEnvelope<T>(path, options, true)
     clearTokens()
   }
 
@@ -107,7 +131,11 @@ async function request<T>(path: string, options: RequestOptions = {}, retried = 
     throw new ApiError(message, res.status, json?.errors ?? {})
   }
 
-  return json.data as T
+  return json
+}
+
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  return (await requestEnvelope<T>(path, options)).data as T
 }
 
 // ---------------------------------------------------------------------
@@ -489,4 +517,1156 @@ export const nfcApi = {
 
   resolve: (identifier: string) =>
     request<{ redirect_url: string }>(`/nfc/cards/${encodeURIComponent(identifier)}/`, { auth: false }),
+}
+
+// ---------------------------------------------------------------------
+// NFC cards — admin inventory management
+// ---------------------------------------------------------------------
+
+interface ApiAdminNfcCard extends ApiNfcCard {
+  customer_id: number | null
+  customer_email: string | null
+}
+
+const CARD_TYPE_REVERSE_MAP: Record<NfcCard["cardType"], string> = {
+  Standard: "STANDARD",
+  Premium: "PREMIUM",
+  Wooden: "WOODEN",
+  Metal: "METAL",
+}
+const CARD_STATUS_REVERSE_MAP: Record<NfcCard["status"], string> = {
+  Active: "ACTIVE",
+  Assigned: "ASSIGNED",
+  Inactive: "INACTIVE",
+  Blocked: "BLOCKED",
+  Lost: "LOST",
+  Unassigned: "UNASSIGNED",
+}
+
+function toFrontendAdminCard(c: ApiAdminNfcCard): NfcCard {
+  return {
+    ...toFrontendCard(c),
+    customerId: c.customer_id !== null ? String(c.customer_id) : null,
+    customerEmail: c.customer_email,
+  }
+}
+
+export interface AdminCardWrite {
+  uid?: string
+  serialNumber?: string
+  cardType?: NfcCard["cardType"]
+  color?: string
+  status?: NfcCard["status"]
+  purchaseDate?: string
+  notes?: string
+  customerEmail?: string
+}
+
+function toApiCardPayload(values: AdminCardWrite): Record<string, unknown> {
+  const body: Record<string, unknown> = {}
+  if (values.uid !== undefined) body.uid = values.uid
+  if (values.serialNumber !== undefined) body.serial_number = values.serialNumber
+  if (values.cardType !== undefined) body.card_type = CARD_TYPE_REVERSE_MAP[values.cardType]
+  if (values.color !== undefined) body.color = values.color
+  if (values.status !== undefined) body.status = CARD_STATUS_REVERSE_MAP[values.status]
+  if (values.purchaseDate !== undefined) body.purchase_date = values.purchaseDate || null
+  if (values.notes !== undefined) body.notes = values.notes
+  if (values.customerEmail !== undefined) body.customer_email = values.customerEmail
+  return body
+}
+
+export interface AdminCardPage {
+  data: NfcCard[]
+  count: number
+  page: number
+  numPages: number
+}
+
+export const adminNfcApi = {
+  list: async (params: { page?: number; search?: string; status?: NfcCard["status"] | "All" }): Promise<AdminCardPage> => {
+    const qs = new URLSearchParams()
+    if (params.page) qs.set("page", String(params.page))
+    if (params.search) qs.set("search", params.search)
+    if (params.status && params.status !== "All") qs.set("status", CARD_STATUS_REVERSE_MAP[params.status])
+    const query = qs.toString()
+    const envelope = await requestEnvelope<ApiAdminNfcCard[]>(`/nfc/admin/cards/${query ? `?${query}` : ""}`)
+    return {
+      data: (envelope.data ?? []).map(toFrontendAdminCard),
+      count: envelope.pagination?.count ?? 0,
+      page: envelope.pagination?.page ?? 1,
+      numPages: envelope.pagination?.num_pages ?? 1,
+    }
+  },
+
+  create: async (values: AdminCardWrite): Promise<NfcCard> =>
+    toFrontendAdminCard(
+      await request<ApiAdminNfcCard>("/nfc/admin/cards/", { method: "POST", body: toApiCardPayload(values) }),
+    ),
+
+  update: async (id: string, values: AdminCardWrite): Promise<NfcCard> =>
+    toFrontendAdminCard(
+      await request<ApiAdminNfcCard>(`/nfc/admin/cards/${id}/`, {
+        method: "PATCH",
+        body: toApiCardPayload(values),
+      }),
+    ),
+
+  remove: (id: string) => request<null>(`/nfc/admin/cards/${id}/`, { method: "DELETE" }),
+
+  assign: async (id: string, email: string): Promise<NfcCard> =>
+    toFrontendAdminCard(
+      await request<ApiAdminNfcCard>(`/nfc/admin/cards/${id}/assign/`, { method: "POST", body: { email } }),
+    ),
+
+  activate: async (id: string): Promise<NfcCard> =>
+    toFrontendAdminCard(await request<ApiAdminNfcCard>(`/nfc/admin/cards/${id}/activate/`, { method: "POST" })),
+
+  block: async (id: string): Promise<NfcCard> =>
+    toFrontendAdminCard(await request<ApiAdminNfcCard>(`/nfc/admin/cards/${id}/block/`, { method: "POST" })),
+
+  markLost: async (id: string): Promise<NfcCard> =>
+    toFrontendAdminCard(await request<ApiAdminNfcCard>(`/nfc/admin/cards/${id}/mark-lost/`, { method: "POST" })),
+}
+
+// ---------------------------------------------------------------------
+// Admin customer directory
+// ---------------------------------------------------------------------
+
+interface ApiAdminCustomerListItem {
+  id: number
+  name: string
+  email: string
+  phone: string
+  company: string
+  designation: string
+  username: string
+  status: "Active" | "Inactive"
+  avatar: string
+  joined_on: string
+  card_count: number
+}
+
+interface ApiNfcCardMini {
+  id: number
+  uid: string
+  serial_number: string
+  card_type: string
+  color: string
+  status: string
+  assigned_on: string | null
+  activated_on: string | null
+  purchase_date: string | null
+}
+
+interface ApiAdminCustomerDetail extends ApiAdminCustomerListItem {
+  website: string
+  address: string
+  bio: string
+  profile_status: "ACTIVE" | "SUSPENDED"
+  social_links: ApiSocialLink[]
+  cards: ApiNfcCardMini[]
+}
+
+export interface AdminCustomerListItem {
+  id: string
+  name: string
+  email: string
+  phone: string
+  company: string
+  designation: string
+  username: string
+  status: "Active" | "Inactive"
+  avatar: string
+  joinedOn: string
+  cardCount: number
+}
+
+export interface AdminCustomerDetail extends AdminCustomerListItem {
+  website: string
+  address: string
+  bio: string
+  profileStatus: "Active" | "Suspended"
+  socialLinks: SocialLink[]
+  cards: NfcCard[]
+}
+
+function toFrontendCustomerListItem(c: ApiAdminCustomerListItem): AdminCustomerListItem {
+  return {
+    id: String(c.id),
+    name: c.name,
+    email: c.email,
+    phone: c.phone,
+    company: c.company,
+    designation: c.designation,
+    username: c.username,
+    status: c.status,
+    avatar: c.avatar,
+    joinedOn: c.joined_on,
+    cardCount: c.card_count,
+  }
+}
+
+function toFrontendMiniCard(c: ApiNfcCardMini, customerId: string, customerName: string): NfcCard {
+  return {
+    id: String(c.id),
+    uid: c.uid,
+    serialNumber: c.serial_number,
+    cardType: CARD_TYPE_MAP[c.card_type] ?? "Standard",
+    color: c.color,
+    customerId,
+    customerName,
+    status: CARD_STATUS_MAP[c.status] ?? "Unassigned",
+    assignedOn: c.assigned_on,
+    activatedOn: c.activated_on,
+    purchaseDate: c.purchase_date ?? "",
+  }
+}
+
+export interface AdminCustomerPage {
+  data: AdminCustomerListItem[]
+  count: number
+  page: number
+  numPages: number
+}
+
+export const adminCustomerApi = {
+  list: async (params: {
+    page?: number
+    search?: string
+    status?: "Active" | "Inactive" | "All"
+  }): Promise<AdminCustomerPage> => {
+    const qs = new URLSearchParams()
+    if (params.page) qs.set("page", String(params.page))
+    if (params.search) qs.set("search", params.search)
+    if (params.status && params.status !== "All") qs.set("status", params.status)
+    const query = qs.toString()
+    const envelope = await requestEnvelope<ApiAdminCustomerListItem[]>(
+      `/profiles/admin/customers/${query ? `?${query}` : ""}`,
+    )
+    return {
+      data: (envelope.data ?? []).map(toFrontendCustomerListItem),
+      count: envelope.pagination?.count ?? 0,
+      page: envelope.pagination?.page ?? 1,
+      numPages: envelope.pagination?.num_pages ?? 1,
+    }
+  },
+
+  get: async (id: string): Promise<AdminCustomerDetail> => {
+    const c = await request<ApiAdminCustomerDetail>(`/profiles/admin/customers/${id}/`)
+    return {
+      ...toFrontendCustomerListItem(c),
+      website: c.website,
+      address: c.address,
+      bio: c.bio,
+      profileStatus: c.profile_status === "ACTIVE" ? "Active" : "Suspended",
+      socialLinks: c.social_links
+        .slice()
+        .sort((a, b) => a.display_order - b.display_order)
+        .map((l) => ({ platform: l.platform, url: l.url, enabled: l.enabled, order: l.display_order })),
+      cards: c.cards.map((card) => toFrontendMiniCard(card, String(c.id), c.name)),
+    }
+  },
+}
+
+// ---------------------------------------------------------------------
+// Shared order/payment enum mappings (admin_api + customer_management
+// both use these UPPER_CASE backend enums for the same domain concepts).
+// ---------------------------------------------------------------------
+
+const ORDER_STATUS_MAP: Record<string, OrderStatus> = {
+  PENDING: "Pending",
+  PROCESSING: "Processing",
+  SHIPPED: "Shipped",
+  DELIVERED: "Delivered",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+}
+const ORDER_STATUS_REVERSE_MAP: Record<OrderStatus, string> = {
+  Pending: "PENDING",
+  Processing: "PROCESSING",
+  Shipped: "SHIPPED",
+  Delivered: "DELIVERED",
+  Completed: "COMPLETED",
+  Cancelled: "CANCELLED",
+}
+const PAYMENT_METHOD_MAP: Record<string, PaymentMethod> = {
+  UPI: "UPI",
+  CARD: "Card",
+  NET_BANKING: "Net Banking",
+  RAZORPAY: "Razorpay",
+  COD: "COD",
+}
+const PAYMENT_METHOD_REVERSE_MAP: Record<PaymentMethod, string> = {
+  UPI: "UPI",
+  Card: "CARD",
+  "Net Banking": "NET_BANKING",
+  Razorpay: "RAZORPAY",
+  COD: "COD",
+}
+const PAYMENT_STATUS_MAP: Record<string, PaymentStatus> = {
+  PAID: "Paid",
+  REFUNDED: "Refunded",
+  FAILED: "Failed",
+  PENDING: "Pending",
+}
+const PAYMENT_STATUS_REVERSE_MAP: Record<PaymentStatus, string> = {
+  Paid: "PAID",
+  Refunded: "REFUNDED",
+  Failed: "FAILED",
+  Pending: "PENDING",
+}
+const TICKET_STATUS_MAP: Record<string, TicketStatus> = {
+  OPEN: "Open",
+  IN_PROGRESS: "In Progress",
+  RESOLVED: "Resolved",
+  CLOSED: "Closed",
+}
+const TICKET_STATUS_REVERSE_MAP: Record<TicketStatus, string> = {
+  Open: "OPEN",
+  "In Progress": "IN_PROGRESS",
+  Resolved: "RESOLVED",
+  Closed: "CLOSED",
+}
+const TICKET_PRIORITY_MAP: Record<string, TicketPriority> = {
+  LOW: "Low",
+  MEDIUM: "Medium",
+  HIGH: "High",
+}
+const TICKET_PRIORITY_REVERSE_MAP: Record<TicketPriority, string> = {
+  Low: "LOW",
+  Medium: "MEDIUM",
+  High: "HIGH",
+}
+
+// ---------------------------------------------------------------------
+// Admin dashboard
+// ---------------------------------------------------------------------
+
+interface ApiAdminDashboard {
+  total_customers: number
+  active_customers: number
+  total_cards: number
+  activated_cards: number
+  total_orders: number
+  pending_orders: number
+  total_revenue: number
+  todays_revenue: number
+  customer_trend: number
+  order_trend: number
+  revenue_trend: number
+  card_trend: number
+  recent_orders: { id: number; customer_name: string; total: number; status: string; date: string }[]
+}
+
+export interface AdminDashboardStats {
+  totalCustomers: number
+  activeCustomers: number
+  totalCards: number
+  activatedCards: number
+  totalOrders: number
+  pendingOrders: number
+  totalRevenue: number
+  todaysRevenue: number
+  customerTrend: number
+  orderTrend: number
+  revenueTrend: number
+  cardTrend: number
+  recentOrders: { id: string; customerName: string; total: number; status: OrderStatus; date: string }[]
+}
+
+export const adminDashboardApi = {
+  get: async (): Promise<AdminDashboardStats> => {
+    const d = await request<ApiAdminDashboard>("/admin/dashboard/")
+    return {
+      totalCustomers: d.total_customers,
+      activeCustomers: d.active_customers,
+      totalCards: d.total_cards,
+      activatedCards: d.activated_cards,
+      totalOrders: d.total_orders,
+      pendingOrders: d.pending_orders,
+      totalRevenue: d.total_revenue,
+      todaysRevenue: d.todays_revenue,
+      customerTrend: d.customer_trend,
+      orderTrend: d.order_trend,
+      revenueTrend: d.revenue_trend,
+      cardTrend: d.card_trend,
+      recentOrders: d.recent_orders.map((o) => ({
+        id: String(o.id),
+        customerName: o.customer_name,
+        total: o.total,
+        status: ORDER_STATUS_MAP[o.status] ?? "Pending",
+        date: o.date,
+      })),
+    }
+  },
+}
+
+// ---------------------------------------------------------------------
+// Admin orders
+// ---------------------------------------------------------------------
+
+interface ApiAdminOrderItem {
+  product_id: string
+  name: string
+  card_type: string
+  color: string
+  qty: number
+  price: string
+}
+interface ApiAdminOrder {
+  id: number
+  customer_id: number
+  customer_name: string
+  customer_email: string
+  customer_phone: string
+  items: ApiAdminOrderItem[]
+  amount: string
+  shipping: string
+  total: string
+  payment_method: string
+  payment_status: string
+  status: string
+  address: Address
+  tracking: { label: string; date: string | null; done: boolean }[]
+  assigned_card_id: number | null
+  placed_at: string
+}
+
+function toFrontendOrder(o: ApiAdminOrder): Order {
+  return {
+    id: String(o.id),
+    customerId: String(o.customer_id),
+    customerName: o.customer_name,
+    customerEmail: o.customer_email,
+    customerPhone: o.customer_phone,
+    items: o.items.map((it) => ({
+      productId: it.product_id,
+      name: it.name,
+      cardType: CARD_TYPE_MAP[it.card_type] ?? "Standard",
+      color: it.color,
+      qty: it.qty,
+      price: Number(it.price),
+    })),
+    amount: Number(o.amount),
+    shipping: Number(o.shipping),
+    total: Number(o.total),
+    paymentMethod: PAYMENT_METHOD_MAP[o.payment_method] ?? "UPI",
+    paymentStatus: PAYMENT_STATUS_MAP[o.payment_status] ?? "Pending",
+    status: ORDER_STATUS_MAP[o.status] ?? "Pending",
+    date: o.placed_at,
+    address: o.address,
+    tracking: o.tracking as TrackingStep[],
+    assignedCardId: o.assigned_card_id !== null ? String(o.assigned_card_id) : null,
+  }
+}
+
+export interface AdminOrderPage {
+  data: Order[]
+  count: number
+  page: number
+  numPages: number
+}
+
+export const adminOrderApi = {
+  list: async (params: { page?: number; search?: string; status?: OrderStatus | "All" }): Promise<AdminOrderPage> => {
+    const qs = new URLSearchParams()
+    if (params.page) qs.set("page", String(params.page))
+    if (params.search) qs.set("search", params.search)
+    if (params.status && params.status !== "All") qs.set("status", ORDER_STATUS_REVERSE_MAP[params.status])
+    qs.set("page_size", "100")
+    const envelope = await requestEnvelope<ApiAdminOrder[]>(`/admin/orders/?${qs.toString()}`)
+    return {
+      data: (envelope.data ?? []).map(toFrontendOrder),
+      count: envelope.pagination?.count ?? 0,
+      page: envelope.pagination?.page ?? 1,
+      numPages: envelope.pagination?.num_pages ?? 1,
+    }
+  },
+
+  get: async (id: string): Promise<Order> => toFrontendOrder(await request<ApiAdminOrder>(`/admin/orders/${id}/`)),
+
+  updateStatus: async (id: string, status: OrderStatus): Promise<Order> =>
+    toFrontendOrder(
+      await request<ApiAdminOrder>(`/admin/orders/${id}/status/`, {
+        method: "POST",
+        body: { status: ORDER_STATUS_REVERSE_MAP[status] },
+      }),
+    ),
+
+  assignCard: async (id: string, cardId: string): Promise<Order> =>
+    toFrontendOrder(
+      await request<ApiAdminOrder>(`/admin/orders/${id}/assign-card/`, {
+        method: "POST",
+        body: { card_id: Number(cardId) },
+      }),
+    ),
+}
+
+// ---------------------------------------------------------------------
+// Admin support tickets
+// ---------------------------------------------------------------------
+
+interface ApiAdminTicketMessage {
+  id: number
+  sender: "CUSTOMER" | "SUPPORT"
+  text: string
+  created_at: string
+}
+interface ApiAdminTicket {
+  id: number
+  customer_id: number
+  customer_name: string
+  customer_email: string
+  subject: string
+  description: string
+  priority: string
+  status: string
+  messages: ApiAdminTicketMessage[]
+  created_at: string
+  updated_at: string
+}
+
+function toFrontendTicket(t: ApiAdminTicket): SupportTicket {
+  return {
+    id: String(t.id),
+    customerId: String(t.customer_id),
+    customerName: t.customer_name,
+    subject: t.subject,
+    description: t.description,
+    priority: TICKET_PRIORITY_MAP[t.priority] ?? "Medium",
+    status: TICKET_STATUS_MAP[t.status] ?? "Open",
+    createdOn: t.created_at,
+    updatedOn: t.updated_at,
+    messages: t.messages.map((m) => ({
+      from: m.sender === "SUPPORT" ? "support" : "customer",
+      text: m.text,
+      date: m.created_at,
+    })),
+  }
+}
+
+export interface AdminTicketPage {
+  data: SupportTicket[]
+  count: number
+  page: number
+  numPages: number
+}
+
+export const adminSupportApi = {
+  list: async (params: {
+    page?: number
+    search?: string
+    status?: TicketStatus | "All"
+    priority?: TicketPriority | "All"
+  }): Promise<AdminTicketPage> => {
+    const qs = new URLSearchParams()
+    if (params.page) qs.set("page", String(params.page))
+    if (params.search) qs.set("search", params.search)
+    if (params.status && params.status !== "All") qs.set("status", TICKET_STATUS_REVERSE_MAP[params.status])
+    if (params.priority && params.priority !== "All") qs.set("priority", TICKET_PRIORITY_REVERSE_MAP[params.priority])
+    qs.set("page_size", "100")
+    const envelope = await requestEnvelope<ApiAdminTicket[]>(`/admin/support/?${qs.toString()}`)
+    return {
+      data: (envelope.data ?? []).map(toFrontendTicket),
+      count: envelope.pagination?.count ?? 0,
+      page: envelope.pagination?.page ?? 1,
+      numPages: envelope.pagination?.num_pages ?? 1,
+    }
+  },
+
+  create: async (values: { customerEmail: string; subject: string; description: string; priority?: TicketPriority }) =>
+    toFrontendTicket(
+      await request<ApiAdminTicket>("/admin/support/", {
+        method: "POST",
+        body: {
+          customer_email: values.customerEmail,
+          subject: values.subject,
+          description: values.description,
+          priority: values.priority ? TICKET_PRIORITY_REVERSE_MAP[values.priority] : undefined,
+        },
+      }),
+    ),
+
+  updateStatus: async (id: string, status: TicketStatus): Promise<SupportTicket> =>
+    toFrontendTicket(
+      await request<ApiAdminTicket>(`/admin/support/${id}/status/`, {
+        method: "POST",
+        body: { status: TICKET_STATUS_REVERSE_MAP[status] },
+      }),
+    ),
+
+  addMessage: async (id: string, text: string): Promise<SupportTicket> =>
+    toFrontendTicket(
+      await request<ApiAdminTicket>(`/admin/support/${id}/messages/`, { method: "POST", body: { text } }),
+    ),
+}
+
+// ---------------------------------------------------------------------
+// Admin transactions
+// ---------------------------------------------------------------------
+
+interface ApiAdminTransaction {
+  id: number
+  order_id: number
+  customer_id: number
+  customer_name: string
+  amount: string
+  method: string
+  status: string
+  created_at: string
+}
+
+function toFrontendTransaction(t: ApiAdminTransaction): Transaction {
+  return {
+    id: String(t.id),
+    orderId: String(t.order_id),
+    customerId: String(t.customer_id),
+    customerName: t.customer_name,
+    amount: Number(t.amount),
+    method: PAYMENT_METHOD_MAP[t.method] ?? "UPI",
+    status: PAYMENT_STATUS_MAP[t.status] ?? "Pending",
+    date: t.created_at,
+  }
+}
+
+export interface AdminTransactionPage {
+  data: Transaction[]
+  count: number
+  page: number
+  numPages: number
+}
+
+export const adminTransactionApi = {
+  list: async (params: {
+    page?: number
+    search?: string
+    method?: PaymentMethod | "All"
+    status?: PaymentStatus | "All"
+  }): Promise<AdminTransactionPage> => {
+    const qs = new URLSearchParams()
+    if (params.page) qs.set("page", String(params.page))
+    if (params.search) qs.set("search", params.search)
+    if (params.method && params.method !== "All") qs.set("method", PAYMENT_METHOD_REVERSE_MAP[params.method])
+    if (params.status && params.status !== "All") qs.set("status", PAYMENT_STATUS_REVERSE_MAP[params.status])
+    qs.set("page_size", "100")
+    const envelope = await requestEnvelope<ApiAdminTransaction[]>(`/admin/transactions/?${qs.toString()}`)
+    return {
+      data: (envelope.data ?? []).map(toFrontendTransaction),
+      count: envelope.pagination?.count ?? 0,
+      page: envelope.pagination?.page ?? 1,
+      numPages: envelope.pagination?.num_pages ?? 1,
+    }
+  },
+}
+
+// ---------------------------------------------------------------------
+// Admin reports (unpaginated, plain arrays)
+// ---------------------------------------------------------------------
+
+export interface SalesReportRow {
+  orderId: string
+  customer: string
+  amount: number
+  shipping: number
+  total: number
+  paymentStatus: PaymentStatus
+  orderStatus: OrderStatus
+  date: string
+}
+export interface TapAnalyticsReportRow {
+  customerId: string
+  customerName: string
+  taps: number
+  qrScans: number
+  profileViews: number
+}
+export interface CustomerReportRow {
+  id: string
+  name: string
+  email: string
+  phone: string
+  status: "Active" | "Inactive"
+  totalOrders: number
+  totalSpent: number
+  totalTaps: number
+  joinedOn: string
+}
+export interface OrderReportRow {
+  orderId: string
+  customer: string
+  items: number
+  total: number
+  status: OrderStatus
+  paymentMethod: PaymentMethod
+  date: string
+}
+
+export const adminReportApi = {
+  sales: async (): Promise<SalesReportRow[]> => {
+    const rows = await request<
+      { order_id: number; customer: string; amount: string; shipping: string; total: string; payment_status: string; order_status: string; date: string }[]
+    >("/admin/reports/sales/")
+    return rows.map((r) => ({
+      orderId: String(r.order_id),
+      customer: r.customer,
+      amount: Number(r.amount),
+      shipping: Number(r.shipping),
+      total: Number(r.total),
+      paymentStatus: PAYMENT_STATUS_MAP[r.payment_status] ?? "Pending",
+      orderStatus: ORDER_STATUS_MAP[r.order_status] ?? "Pending",
+      date: r.date,
+    }))
+  },
+
+  tapAnalytics: async (): Promise<TapAnalyticsReportRow[]> => {
+    const rows = await request<
+      { customer_id: number; customer_name: string; taps: number; qr_scans: number; profile_views: number }[]
+    >("/admin/reports/tap-analytics/")
+    return rows.map((r) => ({
+      customerId: String(r.customer_id),
+      customerName: r.customer_name,
+      taps: r.taps,
+      qrScans: r.qr_scans,
+      profileViews: r.profile_views,
+    }))
+  },
+
+  customers: async (): Promise<CustomerReportRow[]> => {
+    const rows = await request<
+      { id: number; name: string; email: string; phone: string; status: "Active" | "Inactive"; total_orders: number; total_spent: number; total_taps: number; joined_on: string }[]
+    >("/admin/reports/customers/")
+    return rows.map((r) => ({
+      id: String(r.id),
+      name: r.name,
+      email: r.email,
+      phone: r.phone,
+      status: r.status,
+      totalOrders: r.total_orders,
+      totalSpent: r.total_spent,
+      totalTaps: r.total_taps,
+      joinedOn: r.joined_on,
+    }))
+  },
+
+  orders: async (): Promise<OrderReportRow[]> => {
+    const rows = await request<
+      { order_id: number; customer: string; items: number; total: string; status: string; payment_method: string; date: string }[]
+    >("/admin/reports/orders/")
+    return rows.map((r) => ({
+      orderId: String(r.order_id),
+      customer: r.customer,
+      items: r.items,
+      total: Number(r.total),
+      status: ORDER_STATUS_MAP[r.status] ?? "Pending",
+      paymentMethod: PAYMENT_METHOD_MAP[r.payment_method] ?? "UPI",
+      date: r.date,
+    }))
+  },
+}
+
+// ---------------------------------------------------------------------
+// Admin analytics summary
+// ---------------------------------------------------------------------
+
+export interface AdminAnalyticsSummary {
+  rangeDays: number
+  totalTaps: number
+  qrScans: number
+  profileViews: number
+  contactSaves: number
+  shares: number
+  uniqueVisitors: number
+  byDay: { date: string; count: number }[]
+  byDevice: { device: string; count: number }[]
+  topLocations: { location: string; count: number }[]
+}
+
+export const adminAnalyticsApi = {
+  summary: async (params: { range?: number; customerId?: string } = {}): Promise<AdminAnalyticsSummary> => {
+    const qs = new URLSearchParams()
+    if (params.range) qs.set("range", String(params.range))
+    if (params.customerId) qs.set("customer_id", params.customerId)
+    const query = qs.toString()
+    const d = await request<{
+      range_days: number
+      total_taps: number
+      qr_scans: number
+      profile_views: number
+      contact_saves: number
+      shares: number
+      unique_visitors: number
+      by_day: { date: string; count: number }[]
+      by_device: { device: string; count: number }[]
+      top_locations: { location: string; count: number }[]
+    }>(`/admin/analytics/summary/${query ? `?${query}` : ""}`)
+    return {
+      rangeDays: d.range_days,
+      totalTaps: d.total_taps,
+      qrScans: d.qr_scans,
+      profileViews: d.profile_views,
+      contactSaves: d.contact_saves,
+      shares: d.shares,
+      uniqueVisitors: d.unique_visitors,
+      byDay: d.by_day,
+      byDevice: d.by_device,
+      topLocations: d.top_locations,
+    }
+  },
+}
+
+// ---------------------------------------------------------------------
+// Admin digital profiles (admin_api.profiles — distinct from
+// adminCustomerApi, which lists the User/Customer directory)
+// ---------------------------------------------------------------------
+
+interface ApiAdminProfile {
+  id: number
+  full_name: string
+  username: string
+  designation: string
+  company: string
+  email: string
+  phone: string
+  bio: string
+  avatar: string
+  profile_link: string
+  status: "ACTIVE" | "SUSPENDED"
+  social_links: ApiSocialLink[]
+  created_at: string
+}
+
+function toFrontendAdminProfile(p: ApiAdminProfile): Profile {
+  return {
+    id: String(p.id),
+    customerId: String(p.id),
+    username: p.username,
+    fullName: p.full_name,
+    designation: p.designation,
+    company: p.company,
+    email: p.email,
+    phone: p.phone,
+    website: "",
+    address: "",
+    bio: p.bio,
+    avatar: p.avatar,
+    status: p.status === "ACTIVE" ? "Active" : "Suspended",
+    createdOn: p.created_at,
+    socialLinks: p.social_links
+      .slice()
+      .sort((a, b) => a.display_order - b.display_order)
+      .map((l) => ({ platform: l.platform, url: l.url, enabled: l.enabled, order: l.display_order })),
+    customLinks: [],
+    customFields: [],
+  }
+}
+
+export interface AdminProfilePage {
+  data: Profile[]
+  count: number
+  page: number
+  numPages: number
+}
+
+export const adminProfileApi = {
+  list: async (params: { page?: number; search?: string }): Promise<AdminProfilePage> => {
+    const qs = new URLSearchParams()
+    if (params.page) qs.set("page", String(params.page))
+    if (params.search) qs.set("search", params.search)
+    qs.set("page_size", "100")
+    const envelope = await requestEnvelope<ApiAdminProfile[]>(`/admin/profiles/?${qs.toString()}`)
+    return {
+      data: (envelope.data ?? []).map(toFrontendAdminProfile),
+      count: envelope.pagination?.count ?? 0,
+      page: envelope.pagination?.page ?? 1,
+      numPages: envelope.pagination?.num_pages ?? 1,
+    }
+  },
+
+  create: async (userId: string): Promise<Profile> =>
+    toFrontendAdminProfile(await request<ApiAdminProfile>("/admin/profiles/", { method: "POST", body: { user_id: Number(userId) } })),
+
+  update: async (
+    id: string,
+    patch: { fullName?: string; designation?: string; company?: string; phone?: string; bio?: string },
+  ): Promise<Profile> => {
+    const body: Record<string, unknown> = {}
+    if (patch.fullName !== undefined) body.full_name = patch.fullName
+    if (patch.designation !== undefined) body.designation = patch.designation
+    if (patch.company !== undefined) body.company = patch.company
+    if (patch.phone !== undefined) body.phone = patch.phone
+    if (patch.bio !== undefined) body.bio = patch.bio
+    return toFrontendAdminProfile(await request<ApiAdminProfile>(`/admin/profiles/${id}/`, { method: "PATCH", body }))
+  },
+
+  activate: async (id: string): Promise<Profile> =>
+    toFrontendAdminProfile(await request<ApiAdminProfile>(`/admin/profiles/${id}/activate/`, { method: "POST" })),
+
+  suspend: async (id: string): Promise<Profile> =>
+    toFrontendAdminProfile(await request<ApiAdminProfile>(`/admin/profiles/${id}/suspend/`, { method: "POST" })),
+}
+
+// ---------------------------------------------------------------------
+// Customer orders (customer_management.customer_orders)
+// ---------------------------------------------------------------------
+
+interface ApiCustomerOrderItem {
+  id: number
+  card_type: string
+  color: string
+  quantity: number
+  unit_price: string
+  line_total: string
+}
+interface ApiCustomerOrder {
+  id: number
+  order_number: string
+  status: string
+  shipping_full_name: string
+  shipping_phone: string
+  shipping_address: string
+  shipping_city: string
+  shipping_state: string
+  shipping_country: string
+  shipping_postal_code: string
+  subtotal: string
+  discount: string
+  total: string
+  tracking_number: string | null
+  notes: string
+  items: ApiCustomerOrderItem[]
+  status_history: { status: string; note: string; created_at: string }[]
+  created_at: string
+  updated_at: string
+}
+
+// customer_orders has no per-item product line/name or shipping-cost
+// field, and its Status enum ("PENDING","PROCESSING",...) doesn't carry a
+// tracking timeline — synthesize the 5-step timeline the same way
+// AdminOrderSerializer does, so the existing Order-shaped UI (which
+// expects `tracking`) still renders sensibly.
+const CUSTOMER_ORDER_STEP_ORDER = ["PENDING", "PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED"]
+const CUSTOMER_ORDER_TRACKING_LABELS = ["Order Placed", "Order Confirmed", "Shipped", "Out for Delivery", "Delivered"]
+
+function toFrontendCustomerOrder(o: ApiCustomerOrder): Order {
+  const reached = CUSTOMER_ORDER_STEP_ORDER.indexOf(o.status)
+  const cancelled = o.status === "CANCELLED"
+  const tracking: TrackingStep[] = CUSTOMER_ORDER_TRACKING_LABELS.map((label, i) => {
+    const done = cancelled ? i === 0 : reached >= 0 && i <= reached
+    return { label, done, date: done ? o.updated_at : null }
+  })
+  return {
+    id: String(o.id),
+    customerId: "",
+    customerName: o.shipping_full_name,
+    customerEmail: "",
+    customerPhone: o.shipping_phone,
+    items: o.items.map((it) => ({
+      productId: String(it.id),
+      name: `${CARD_TYPE_MAP[it.card_type] ?? "Standard"} Card`,
+      cardType: CARD_TYPE_MAP[it.card_type] ?? "Standard",
+      color: it.color,
+      qty: it.quantity,
+      price: Number(it.unit_price),
+    })),
+    amount: Number(o.subtotal),
+    shipping: 0,
+    total: Number(o.total),
+    paymentMethod: "COD",
+    paymentStatus: "Pending",
+    status: ORDER_STATUS_MAP[o.status] ?? "Pending",
+    date: o.created_at,
+    address: {
+      line1: o.shipping_address,
+      city: o.shipping_city,
+      state: o.shipping_state,
+      pincode: o.shipping_postal_code,
+      country: o.shipping_country,
+    },
+    tracking,
+    assignedCardId: null,
+  }
+}
+
+export const customerOrderApi = {
+  mine: async (): Promise<Order[]> => {
+    const envelope = await requestEnvelope<ApiCustomerOrder[]>("/customer/orders/?page_size=100")
+    return (envelope.data ?? []).map(toFrontendCustomerOrder)
+  },
+
+  get: async (id: string): Promise<Order> =>
+    toFrontendCustomerOrder(await request<ApiCustomerOrder>(`/customer/orders/${id}/`)),
+}
+
+// ---------------------------------------------------------------------
+// Customer analytics (customer_management.customer_analytics)
+// ---------------------------------------------------------------------
+
+export interface CustomerAnalyticsSummary {
+  profileViews: { today: number; week: number; month: number; year: number }
+  nfcTaps: { today: number; week: number; month: number; year: number }
+  qrScans: { today: number; week: number; month: number; year: number }
+  socialClicks: { today: number; week: number; month: number; year: number }
+  totals: { profileViews: number; nfcTaps: number; qrScans: number; socialClicks: number }
+}
+
+interface ApiPeriodBucket {
+  today: number
+  week: number
+  month: number
+  year: number
+}
+
+export interface AnalyticsEventItem {
+  device: string
+  source: string
+  createdAt: string
+}
+
+async function fetchAnalyticsEvents(path: string): Promise<AnalyticsEventItem[]> {
+  const envelope = await requestEnvelope<{ device: string; source: string; created_at: string }[]>(
+    `${path}?page_size=100`,
+  )
+  return (envelope.data ?? []).map((e) => ({ device: e.device, source: e.source, createdAt: e.created_at }))
+}
+
+export const customerAnalyticsApi = {
+  summary: async (): Promise<CustomerAnalyticsSummary> => {
+    const d = await request<{
+      profile_views: ApiPeriodBucket
+      nfc_taps: ApiPeriodBucket
+      qr_scans: ApiPeriodBucket
+      social_clicks: ApiPeriodBucket
+      totals: { profile_views: number; nfc_taps: number; qr_scans: number; social_clicks: number }
+    }>("/customer/analytics/summary/")
+    return {
+      profileViews: d.profile_views,
+      nfcTaps: d.nfc_taps,
+      qrScans: d.qr_scans,
+      socialClicks: d.social_clicks,
+      totals: {
+        profileViews: d.totals.profile_views,
+        nfcTaps: d.totals.nfc_taps,
+        qrScans: d.totals.qr_scans,
+        socialClicks: d.totals.social_clicks,
+      },
+    }
+  },
+
+  // Event-level detail for building charts (day-bucketed series, device
+  // breakdown) the summary endpoint above can't provide — it only gives
+  // cumulative today/week/month/year buckets. Capped at one page (100
+  // events): plenty for a recent-activity chart, not meant for full export.
+  taps: async (): Promise<AnalyticsEventItem[]> => fetchAnalyticsEvents("/customer/analytics/taps/"),
+  views: async (): Promise<AnalyticsEventItem[]> => fetchAnalyticsEvents("/customer/analytics/views/"),
+  scans: async (): Promise<AnalyticsEventItem[]> => fetchAnalyticsEvents("/customer/analytics/scans/"),
+}
+
+// ---------------------------------------------------------------------
+// Customer leads (customer_management.customer_leads) — only the count is
+// needed today (Analytics' "Leads Generated" stat); no leads list screen
+// exists yet, so nothing else from this app is wired up.
+// ---------------------------------------------------------------------
+
+export const customerLeadApi = {
+  count: async (): Promise<number> => {
+    const envelope = await requestEnvelope<unknown[]>("/customer/leads/?page_size=1")
+    return envelope.pagination?.count ?? 0
+  },
+}
+
+// ---------------------------------------------------------------------
+// Customer dashboard (customer_management.customer_dashboard)
+// ---------------------------------------------------------------------
+
+export interface CustomerDashboardData {
+  totals: { profileViews: number; nfcTaps: number; qrScans: number; leads: number; orders: number }
+}
+
+export const customerDashboardApi = {
+  get: async (): Promise<CustomerDashboardData> => {
+    const d = await request<{
+      totals: { profile_views: number; nfc_taps: number; qr_scans: number; leads: number; orders: number }
+    }>("/customer/dashboard/")
+    return {
+      totals: {
+        profileViews: d.totals.profile_views,
+        nfcTaps: d.totals.nfc_taps,
+        qrScans: d.totals.qr_scans,
+        leads: d.totals.leads,
+        orders: d.totals.orders,
+      },
+    }
+  },
+}
+
+// ---------------------------------------------------------------------
+// Customer settings (customer_management.customer_settings) — privacy +
+// notification preferences. Distinct from `profileApi.getPrivacySettings`
+// (which reads/writes profiles.Profile.profile_public etc. directly);
+// this backs the separate CustomerSettings model added alongside it.
+// ---------------------------------------------------------------------
+
+export interface CustomerSettingsData {
+  showEmail: boolean
+  showPhone: boolean
+  showCompany: boolean
+  showSocialLinks: boolean
+  language: string
+  timezone: string
+  notifyOrderUpdates: boolean
+  notifyNfcUpdates: boolean
+  notifyProfileViews: boolean
+  notifySystemMessages: boolean
+}
+
+interface ApiCustomerSettings {
+  id: number
+  show_email: boolean
+  show_phone: boolean
+  show_company: boolean
+  show_social_links: boolean
+  language: string
+  timezone: string
+  notify_order_updates: boolean
+  notify_nfc_updates: boolean
+  notify_profile_views: boolean
+  notify_system_messages: boolean
+  updated_at: string
+}
+
+function toFrontendCustomerSettings(s: ApiCustomerSettings): CustomerSettingsData {
+  return {
+    showEmail: s.show_email,
+    showPhone: s.show_phone,
+    showCompany: s.show_company,
+    showSocialLinks: s.show_social_links,
+    language: s.language,
+    timezone: s.timezone,
+    notifyOrderUpdates: s.notify_order_updates,
+    notifyNfcUpdates: s.notify_nfc_updates,
+    notifyProfileViews: s.notify_profile_views,
+    notifySystemMessages: s.notify_system_messages,
+  }
+}
+
+export const customerSettingsApi = {
+  get: async (): Promise<CustomerSettingsData> =>
+    toFrontendCustomerSettings(await request<ApiCustomerSettings>("/customer/settings/")),
+
+  update: async (patch: Partial<CustomerSettingsData>): Promise<CustomerSettingsData> => {
+    const body: Record<string, unknown> = {}
+    if (patch.showEmail !== undefined) body.show_email = patch.showEmail
+    if (patch.showPhone !== undefined) body.show_phone = patch.showPhone
+    if (patch.showCompany !== undefined) body.show_company = patch.showCompany
+    if (patch.showSocialLinks !== undefined) body.show_social_links = patch.showSocialLinks
+    if (patch.language !== undefined) body.language = patch.language
+    if (patch.timezone !== undefined) body.timezone = patch.timezone
+    if (patch.notifyOrderUpdates !== undefined) body.notify_order_updates = patch.notifyOrderUpdates
+    if (patch.notifyNfcUpdates !== undefined) body.notify_nfc_updates = patch.notifyNfcUpdates
+    if (patch.notifyProfileViews !== undefined) body.notify_profile_views = patch.notifyProfileViews
+    if (patch.notifySystemMessages !== undefined) body.notify_system_messages = patch.notifySystemMessages
+    return toFrontendCustomerSettings(
+      await request<ApiCustomerSettings>("/customer/settings/", { method: "PUT", body }),
+    )
+  },
 }

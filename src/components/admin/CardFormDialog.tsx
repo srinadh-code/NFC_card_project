@@ -12,26 +12,27 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { Customer, NfcCard, CardType, CardStatus } from "@/types"
+import { CustomerPicker } from "@/components/admin/CustomerPicker"
+import type { NfcCard, CardType, CardStatus } from "@/types"
 
 export interface CardFormValues {
   uid: string
   serialNumber: string
   cardType: CardType
   color: string
-  customerId: string // "" = unassigned
+  customerEmail: string // "" = unassigned
   status: CardStatus
   purchaseDate: string
   notes: string
 }
 
-function emptyValues(suggestedSerial: string): CardFormValues {
+function emptyValues(): CardFormValues {
   return {
     uid: "",
-    serialNumber: suggestedSerial,
+    serialNumber: "",
     cardType: "Standard",
     color: "Black",
-    customerId: "",
+    customerEmail: "",
     status: "Unassigned",
     purchaseDate: new Date().toISOString().slice(0, 10),
     notes: "",
@@ -46,18 +47,14 @@ export function CardFormDialog({
   open,
   onOpenChange,
   card,
-  customers,
-  suggestedSerial,
   onSubmit,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   card?: NfcCard | null
-  customers: Customer[]
-  suggestedSerial: string
   onSubmit: (values: CardFormValues) => void
 }) {
-  const [values, setValues] = useState<CardFormValues>(emptyValues(suggestedSerial))
+  const [values, setValues] = useState<CardFormValues>(emptyValues())
 
   useEffect(() => {
     if (open) {
@@ -68,15 +65,15 @@ export function CardFormDialog({
               serialNumber: card.serialNumber,
               cardType: card.cardType,
               color: card.color,
-              customerId: card.customerId ?? "",
+              customerEmail: card.customerEmail ?? "",
               status: card.status,
               purchaseDate: card.purchaseDate.slice(0, 10),
               notes: card.notes ?? "",
             }
-          : emptyValues(suggestedSerial),
+          : emptyValues(),
       )
     }
-  }, [open, card, suggestedSerial])
+  }, [open, card])
 
   function set<K extends keyof CardFormValues>(key: K, value: CardFormValues[K]) {
     setValues((v) => ({ ...v, [key]: value }))
@@ -97,7 +94,7 @@ export function CardFormDialog({
             <Label htmlFor="nf-uid">Card UID</Label>
             <Input
               id="nf-uid"
-              placeholder="04AABBCC0001"
+              placeholder="Leave blank to auto-generate"
               value={values.uid}
               onChange={(e) => set("uid", e.target.value)}
             />
@@ -106,6 +103,7 @@ export function CardFormDialog({
             <Label htmlFor="nf-serial">Serial Number</Label>
             <Input
               id="nf-serial"
+              placeholder="Leave blank to auto-generate"
               value={values.serialNumber}
               onChange={(e) => set("serialNumber", e.target.value)}
             />
@@ -141,23 +139,23 @@ export function CardFormDialog({
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="nf-customer">Assign to Customer</Label>
-            <Select
-              value={values.customerId || "none"}
-              onValueChange={(v) => set("customerId", v === "none" ? "" : v)}
-            >
-              <SelectTrigger id="nf-customer" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Unassigned</SelectItem>
-                {customers.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name} ({c.id})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="nf-customer">Assign to Customer</Label>
+              {values.customerEmail && (
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                  onClick={() => set("customerEmail", "")}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <CustomerPicker
+              value={values.customerEmail}
+              onChange={(email) => set("customerEmail", email)}
+              placeholder="Unassigned"
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="nf-status">Status</Label>
