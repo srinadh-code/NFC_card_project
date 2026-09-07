@@ -52,6 +52,10 @@ INSTALLED_APPS = [
     "accounts",
     "profiles",
     "nfc_cards",
+    "orders",
+    "support",
+    "analytics",
+    "admin_api",
 ]
 
 MIDDLEWARE = [

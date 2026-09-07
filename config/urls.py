@@ -8,6 +8,7 @@ urlpatterns = [
     path("api/auth/", include("accounts.urls")),
     path("api/profiles/", include("profiles.urls")),
     path("api/nfc/", include("nfc_cards.urls")),
+    path("api/admin/", include("admin_api.urls")),
 ]
 
 if settings.DEBUG:

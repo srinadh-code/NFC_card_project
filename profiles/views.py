@@ -1,10 +1,11 @@
-from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 
+from analytics.models import TapEvent
+from analytics.tracking import log_event
 from common.response import error, success
 
 from .models import CustomField, CustomLink, Profile, SocialLink
@@ -113,5 +114,7 @@ class PublicProfileView(APIView):
             # so a probing request can't distinguish "doesn't exist" from
             # "exists but is private".
             return error("This profile is not available.", status=404)
+
+        log_event(request, action=TapEvent.Action.PROFILE_VIEW, customer=profile.user)
 
         return success(PublicProfileSerializer(profile).data)
