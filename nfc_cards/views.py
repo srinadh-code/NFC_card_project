@@ -5,7 +5,19 @@ from rest_framework.views import APIView
 from common.response import error, success
 
 from .models import NfcCard
-from .serializers import ActivateCardSerializer, NfcCardSerializer
+from .serializers import ActivateCardSerializer, DeactivateCardSerializer, NfcCardSerializer
+
+
+def _notify_card_activated(user, card):
+    from customer_management.customer_notifications.models import Notification
+    from customer_management.customer_notifications.services import notify
+
+    notify(
+        user,
+        "NFC card activated",
+        f"Card {card.serial_number} is now active on your account.",
+        type=Notification.Type.NFC_UPDATE,
+    )
 
 
 class MyCardsView(APIView):
@@ -46,6 +58,7 @@ class ActivateCardView(APIView):
         card.activated_on = now
         card.save(update_fields=["user", "status", "assigned_on", "activated_on", "updated_at"])
 
+        _notify_card_activated(request.user, card)
         return success(NfcCardSerializer(card).data, message="Card activated.")
 
 
@@ -67,7 +80,34 @@ class ActivateAssignedCardView(APIView):
         card.activated_on = timezone.now()
         card.save(update_fields=["status", "activated_on", "updated_at"])
 
+        _notify_card_activated(request.user, card)
         return success(NfcCardSerializer(card).data, message="Card activated.")
+
+
+class DeactivateCardView(APIView):
+    """Customer takes their own card out of service (lets them re-activate later)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = DeactivateCardSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        uid = serializer.validated_data["uid"].strip()
+
+        card = NfcCard.objects.filter(uid__iexact=uid).first()
+        if card is None:
+            return error("No card found with that ID.", status=404)
+
+        if card.user_id != request.user.id:
+            return error("This card is not linked to your account.", status=403)
+
+        if card.status not in (NfcCard.Status.ACTIVE, NfcCard.Status.ASSIGNED):
+            return error("This card is not currently active.", status=400)
+
+        card.status = NfcCard.Status.INACTIVE
+        card.save(update_fields=["status", "updated_at"])
+
+        return success(NfcCardSerializer(card).data, message="Card deactivated.")
 
 
 class CardResolveView(APIView):
@@ -90,5 +130,10 @@ class CardResolveView(APIView):
         profile = getattr(card.user, "profile", None) if card.user_id else None
         if profile is None or not profile.profile_public:
             return error("This card's profile is not available.", status=404)
+
+        from customer_management.customer_analytics.models import AnalyticsEvent
+        from customer_management.customer_analytics.services import record_event
+
+        record_event(card.user, AnalyticsEvent.EventType.NFC_TAP, request=request, source="nfc")
 
         return success({"redirect_url": profile.public_url_path})

@@ -100,9 +100,11 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     email = serializers.SerializerMethodField()
     phone = serializers.SerializerMethodField()
     avatar = serializers.SerializerMethodField()
+    cover_image = serializers.SerializerMethodField()
     social_links = serializers.SerializerMethodField()
     custom_links = serializers.SerializerMethodField()
     custom_fields = CustomFieldSerializer(many=True, read_only=True)
+    services = serializers.SerializerMethodField()
 
     class Meta:
         model = Profile
@@ -115,17 +117,32 @@ class PublicProfileSerializer(serializers.ModelSerializer):
             "phone",
             "website",
             "address",
+            "city",
+            "state",
+            "country",
+            "google_maps_url",
             "bio",
             "avatar",
+            "cover_image",
             "social_links",
             "custom_links",
             "custom_fields",
+            "services",
         ]
+
+    def _absolute_url(self, url):
+        request = self.context.get("request")
+        return request.build_absolute_uri(url) if request else url
 
     def get_avatar(self, obj):
         if obj.avatar:
-            return obj.avatar.url
+            return self._absolute_url(obj.avatar.url)
         return obj.user.avatar_url
+
+    def get_cover_image(self, obj):
+        if not obj.cover_image:
+            return None
+        return self._absolute_url(obj.cover_image.url)
 
     def get_email(self, obj):
         return obj.user.email if obj.show_contact_info else None
@@ -140,3 +157,10 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     def get_custom_links(self, obj):
         links = [link for link in obj.custom_links.all() if link.enabled]
         return CustomLinkSerializer(links, many=True).data
+
+    def get_services(self, obj):
+        from customer_management.customer_services.models import CustomerService
+        from customer_management.customer_services.serializers import CustomerServiceSerializer
+
+        services = CustomerService.objects.filter(user=obj.user, is_active=True)
+        return CustomerServiceSerializer(services, many=True).data

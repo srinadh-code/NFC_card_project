@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
@@ -40,18 +41,18 @@ class RegisterView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        user = User.objects.create_user(
-            email=data["email"],
-            password=data["password"],
-            full_name=data["full_name"],
-            phone=data.get("phone", ""),
-            is_active=True,
-            email_verified=True,
-        )
-
         from profiles.models import Profile
 
-        Profile.ensure_for_user(user)
+        with transaction.atomic():
+            user = User.objects.create_user(
+                email=data["email"],
+                password=data["password"],
+                full_name=data["full_name"],
+                phone=data.get("phone", ""),
+                is_active=True,
+                email_verified=True,
+            )
+            Profile.ensure_for_user(user)
 
         return success(_auth_payload(user), message="Account created.", status=201)
 
@@ -81,15 +82,16 @@ class VerifyEmailView(APIView):
         if otp is None or otp.code != code or not otp.is_valid():
             return error("Invalid or expired verification code.", status=400)
 
-        otp.is_used = True
-        otp.save(update_fields=["is_used"])
-
-        user.email_verified = True
-        user.save(update_fields=["email_verified"])
-
         from profiles.models import Profile
 
-        Profile.ensure_for_user(user)
+        with transaction.atomic():
+            otp.is_used = True
+            otp.save(update_fields=["is_used"])
+
+            user.email_verified = True
+            user.save(update_fields=["email_verified"])
+
+            Profile.ensure_for_user(user)
 
         return success(_auth_payload(user), message="Email verified.")
 
@@ -185,11 +187,12 @@ class ResetPasswordView(APIView):
         if otp is None or otp.code != data["otp"] or not otp.is_valid():
             return error("Invalid or expired reset code.", status=400)
 
-        otp.is_used = True
-        otp.save(update_fields=["is_used"])
+        with transaction.atomic():
+            otp.is_used = True
+            otp.save(update_fields=["is_used"])
 
-        user.set_password(data["new_password"])
-        user.save(update_fields=["password"])
+            user.set_password(data["new_password"])
+            user.save(update_fields=["password"])
 
         return success(message="Password reset. You can now log in.")
 

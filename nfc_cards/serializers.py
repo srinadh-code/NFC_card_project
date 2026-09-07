@@ -29,3 +29,7 @@ class NfcCardSerializer(serializers.ModelSerializer):
 
 class ActivateCardSerializer(serializers.Serializer):
     uid = serializers.CharField(max_length=32)
+
+
+class DeactivateCardSerializer(serializers.Serializer):
+    uid = serializers.CharField(max_length=32)

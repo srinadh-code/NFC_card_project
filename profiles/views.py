@@ -114,4 +114,11 @@ class PublicProfileView(APIView):
             # "exists but is private".
             return error("This profile is not available.", status=404)
 
-        return success(PublicProfileSerializer(profile).data)
+        from customer_management.customer_analytics.models import AnalyticsEvent
+        from customer_management.customer_analytics.services import record_event
+
+        record_event(profile.user, AnalyticsEvent.EventType.PROFILE_VIEW, request=request)
+        if request.query_params.get("src") == "qr":
+            record_event(profile.user, AnalyticsEvent.EventType.QR_SCAN, request=request, source="qr")
+
+        return success(PublicProfileSerializer(profile, context={"request": request}).data)

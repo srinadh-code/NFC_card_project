@@ -52,6 +52,16 @@ INSTALLED_APPS = [
     "accounts",
     "profiles",
     "nfc_cards",
+    "customer_management.customer_profiles",
+    "customer_management.customer_social_links",
+    "customer_management.customer_qr_codes",
+    "customer_management.customer_analytics",
+    "customer_management.customer_orders",
+    "customer_management.customer_leads",
+    "customer_management.customer_notifications",
+    "customer_management.customer_settings",
+    "customer_management.customer_dashboard",
+    "customer_management.customer_services",
 ]
 
 MIDDLEWARE = [
@@ -169,6 +179,7 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "common.response.custom_exception_handler",
     "DEFAULT_THROTTLE_RATES": {
         "otp": "5/min",
+        "lead_submit": "10/min",
     },
 }
 
