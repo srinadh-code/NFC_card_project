@@ -49,4 +49,9 @@ urlpatterns = [
         name="nfc-cards-admin-mark-lost",
     ),
     path("cards/<str:identifier>/", views.CardResolveView.as_view(), name="nfc-cards-resolve"),
+    # Aliases matching the customer-module API spec — same views/behavior as
+    # the `cards/...` routes above, kept so neither naming scheme breaks.
+    path("my-card/", views.MyCardsView.as_view(), name="nfc-my-card"),
+    path("activate/", views.ActivateCardView.as_view(), name="nfc-activate"),
+    path("deactivate/", views.DeactivateCardView.as_view(), name="nfc-deactivate"),
 ]

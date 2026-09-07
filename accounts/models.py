@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.models import PermissionsMixin
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 
@@ -101,13 +101,14 @@ class EmailOTP(models.Model):
 
     @classmethod
     def issue(cls, user, purpose, lifetime_minutes=10):
-        cls.objects.filter(user=user, purpose=purpose, is_used=False).update(is_used=True)
-        return cls.objects.create(
-            user=user,
-            code=cls.generate_code(),
-            purpose=purpose,
-            expires_at=timezone.now() + timedelta(minutes=lifetime_minutes),
-        )
+        with transaction.atomic():
+            cls.objects.filter(user=user, purpose=purpose, is_used=False).update(is_used=True)
+            return cls.objects.create(
+                user=user,
+                code=cls.generate_code(),
+                purpose=purpose,
+                expires_at=timezone.now() + timedelta(minutes=lifetime_minutes),
+            )
 
     @property
     def is_expired(self):

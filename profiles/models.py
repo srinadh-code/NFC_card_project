@@ -1,6 +1,22 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import URLValidator
 from django.db import models
 from django.utils.text import slugify
+
+GOOGLE_MAPS_URL_MARKERS = ("google.com/maps", "maps.google.", "goo.gl/maps", "maps.app.goo.gl")
+
+
+def validate_google_maps_url(value):
+    """Must be a well-formed URL that's recognizably a Google Maps link —
+    loose on purpose (Google Maps links come from many regional domains and
+    shortened goo.gl forms), just enough to catch an unrelated URL."""
+    if not value:
+        return
+    URLValidator()(value)
+    if not any(marker in value.lower() for marker in GOOGLE_MAPS_URL_MARKERS):
+        raise ValidationError("Enter a valid Google Maps link.")
+
 
 SOCIAL_PLATFORMS = [
     "LinkedIn",
@@ -26,10 +42,16 @@ class Profile(models.Model):
     username = models.SlugField(max_length=60, unique=True, db_index=True)
     designation = models.CharField(max_length=150, blank=True)
     company = models.CharField(max_length=150, blank=True)
+    alternate_phone = models.CharField(max_length=20, blank=True)
     website = models.URLField(blank=True)
     address = models.CharField(max_length=255, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    state = models.CharField(max_length=100, blank=True)
+    country = models.CharField(max_length=100, blank=True)
+    google_maps_url = models.URLField(blank=True, validators=[validate_google_maps_url])
     bio = models.TextField(blank=True)
     avatar = models.ImageField(upload_to="profile_avatars/", null=True, blank=True)
+    cover_image = models.ImageField(upload_to="profile_covers/", null=True, blank=True)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.ACTIVE)
 
     # Per-profile privacy settings (replaces the frontend's single global

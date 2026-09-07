@@ -60,3 +60,7 @@ class TrackEventSerializer(serializers.Serializer):
 
     uid = serializers.CharField(max_length=32)
     action = serializers.ChoiceField(choices=["contact_saved", "shared"])
+
+
+class DeactivateCardSerializer(serializers.Serializer):
+    uid = serializers.CharField(max_length=32)
