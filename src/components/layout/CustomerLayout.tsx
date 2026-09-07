@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { Navigate, Outlet } from "react-router-dom"
 import { useCustomerAuthStore, useAdminAuthStore } from "@/store/auth-store"
 import { CustomerSidebar } from "@/components/layout/CustomerSidebar"
@@ -7,17 +7,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 
 export default function CustomerLayout() {
   const customer = useCustomerAuthStore((s) => s.customer)
-  const repairSession = useCustomerAuthStore((s) => s.repairSession)
   const admin = useAdminAuthStore((s) => s.admin)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-
-  // Heals any session created before automatic onboarding existed (or any
-  // other way a customer could end up without a matching Profile record) —
-  // idempotent, so it's cheap to run on every customer-portal page load.
-  useEffect(() => {
-    if (customer) repairSession()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customer?.id])
 
   if (!customer) {
     // Signed in as the other role — send them to their own dashboard

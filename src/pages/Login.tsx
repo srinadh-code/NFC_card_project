@@ -1,7 +1,7 @@
-﻿import { useState } from "react"
+import { useState } from "react"
 import { Navigate, Link, useNavigate, useLocation } from "react-router-dom"
 import { toast } from "sonner"
-import { CreditCard, Fingerprint, Sparkles, Zap } from "lucide-react"
+import { Fingerprint, Sparkles, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -14,18 +14,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  useAdminAuthStore,
-  useCustomerAuthStore,
-  ADMIN_DEMO_CREDENTIALS,
-  CUSTOMER_DEMO_CREDENTIALS,
-} from "@/store/auth-store"
+import { useAdminAuthStore, useCustomerAuthStore } from "@/store/auth-store"
+import { ApiError, authApi } from "@/lib/api"
 
 /**
- * Single unified login for both roles. Tries the customer store first (it
- * also covers self-registered accounts), then the admin store — each store's
- * own `login()` still owns its credential check, so this page only decides
- * where to send the user once one of them succeeds.
+ * Single unified login for both roles. Tries the customer login first, then
+ * the admin login — each is a real API call validated against that role
+ * server-side, so this page only decides where to send the user once one
+ * of them succeeds.
  */
 export default function Login() {
   const navigate = useNavigate()
@@ -45,42 +41,46 @@ export default function Login() {
   const [password, setPassword] = useState("")
   const [remember, setRemember] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
   const [forgotOpen, setForgotOpen] = useState(false)
 
   if (admin) return <Navigate to="/admin/dashboard" replace />
   if (customer) return <Navigate to={redirectTo} replace />
 
-  function attemptLogin(loginEmail: string, loginPassword: string) {
-    const customerResult = customerLogin(loginEmail, loginPassword)
-    if (customerResult.success) return { success: true as const, role: "customer" as const }
-
-    const adminResult = adminLogin(loginEmail, loginPassword)
-    if (adminResult.success) return { success: true as const, role: "admin" as const }
-
-    return { success: false as const, error: customerResult.error ?? adminResult.error }
-  }
-
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const result = attemptLogin(email, password)
-    if (result.success) {
-      if (result.role === "admin") {
-        toast.success("Welcome back, Admin!")
-        navigate("/admin/dashboard")
-      } else {
+    setSubmitting(true)
+    setError(null)
+    try {
+      const customerResult = await customerLogin(email, password)
+      if (customerResult.success) {
         toast.success("Logged in successfully. Welcome back!")
         navigate(redirectTo)
+        return
       }
-    } else {
-      setError(result.error ?? "Invalid credentials.")
-      toast.error(result.error ?? "Invalid credentials.")
+
+      const adminResult = await adminLogin(email, password)
+      if (adminResult.success) {
+        toast.success("Welcome back, Admin!")
+        navigate("/admin/dashboard")
+        return
+      }
+
+      const message = customerResult.error ?? adminResult.error ?? "Invalid credentials."
+      setError(message)
+      toast.error(message)
+    } finally {
+      setSubmitting(false)
     }
   }
 
-  function handleGoogleLogin() {
-    customerLogin(CUSTOMER_DEMO_CREDENTIALS.email, CUSTOMER_DEMO_CREDENTIALS.password)
-    toast.success("Signed in with Google (demo)")
-    navigate(redirectTo)
+  async function handleGoogleLogin() {
+    try {
+      await authApi.google()
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : "Google sign-in isn't available right now."
+      toast.error(message)
+    }
   }
 
   return (
@@ -187,8 +187,8 @@ export default function Login() {
               </button>
             </div>
 
-            <Button type="submit" className="w-full" size="lg">
-              Login
+            <Button type="submit" className="w-full" size="lg" disabled={submitting}>
+              {submitting ? "Signing in..." : "Login"}
             </Button>
           </form>
 
@@ -230,48 +230,126 @@ export default function Login() {
               Sign Up
             </Link>
           </p>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border bg-muted/40 p-4 text-xs text-muted-foreground">
-              <p className="mb-1 flex items-center gap-1.5 font-semibold text-foreground">
-                <CreditCard className="size-3.5" /> Customer demo
-              </p>
-              <p>
-                Email: <span className="font-mono text-foreground">{CUSTOMER_DEMO_CREDENTIALS.email}</span>
-              </p>
-              <p>
-                Password: <span className="font-mono text-foreground">{CUSTOMER_DEMO_CREDENTIALS.password}</span>
-              </p>
-            </div>
-            <div className="rounded-xl border bg-muted/40 p-4 text-xs text-muted-foreground">
-              <p className="mb-1 flex items-center gap-1.5 font-semibold text-foreground">
-                <CreditCard className="size-3.5" /> Admin demo
-              </p>
-              <p>
-                Email: <span className="font-mono text-foreground">{ADMIN_DEMO_CREDENTIALS.email}</span>
-              </p>
-              <p>
-                Password: <span className="font-mono text-foreground">{ADMIN_DEMO_CREDENTIALS.password}</span>
-              </p>
-            </div>
-          </div>
         </div>
       </div>
 
-      <Dialog open={forgotOpen} onOpenChange={setForgotOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Forgot Password</DialogTitle>
-            <DialogDescription>
-              Password reset isn&apos;t available in this demo — please use one of the demo
-              credentials shown on the login page to sign in.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button onClick={() => setForgotOpen(false)}>Got it</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ForgotPasswordDialog open={forgotOpen} onOpenChange={setForgotOpen} />
     </div>
+  )
+}
+
+function ForgotPasswordDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const [step, setStep] = useState<1 | 2>(1)
+  const [email, setEmail] = useState("")
+  const [otp, setOtp] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+
+  function reset() {
+    setStep(1)
+    setEmail("")
+    setOtp("")
+    setNewPassword("")
+  }
+
+  async function handleRequestCode(e: React.FormEvent) {
+    e.preventDefault()
+    if (!email.trim()) return
+    setSubmitting(true)
+    try {
+      await authApi.forgotPassword({ email: email.trim() })
+      toast.success("If that account exists, a reset code has been sent to it.")
+      setStep(2)
+    } catch {
+      toast.error("Something went wrong. Please try again.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleReset(e: React.FormEvent) {
+    e.preventDefault()
+    if (otp.length !== 6 || !newPassword) return
+    setSubmitting(true)
+    try {
+      await authApi.resetPassword({ email: email.trim(), otp, new_password: newPassword })
+      toast.success("Password reset. You can now log in.")
+      onOpenChange(false)
+      reset()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Invalid or expired code.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        onOpenChange(v)
+        if (!v) reset()
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Forgot Password</DialogTitle>
+          <DialogDescription>
+            {step === 1
+              ? "Enter your account email and we'll send you a reset code."
+              : `Enter the 6-digit code sent to ${email} and choose a new password.`}
+          </DialogDescription>
+        </DialogHeader>
+
+        {step === 1 ? (
+          <form onSubmit={handleRequestCode} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="forgot-email">Email</Label>
+              <Input
+                id="forgot-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={submitting}>
+                {submitting ? "Sending..." : "Send Reset Code"}
+              </Button>
+            </DialogFooter>
+          </form>
+        ) : (
+          <form onSubmit={handleReset} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="forgot-otp">6-digit code</Label>
+              <Input
+                id="forgot-otp"
+                inputMode="numeric"
+                maxLength={6}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="forgot-new-password">New password</Label>
+              <Input
+                id="forgot-new-password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={submitting}>
+                {submitting ? "Resetting..." : "Reset Password"}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }

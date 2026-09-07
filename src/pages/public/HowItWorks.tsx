@@ -48,8 +48,8 @@ export default function HowItWorks() {
         subtitle="Get from unboxing to your first tap in five simple steps."
       />
 
-      <section className="bg-white px-4 py-20">
-        <div className="mx-auto max-w-7xl">
+      <section className="bg-white py-20">
+        <div className="container-page">
           <div className="relative grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-5">
             <div className="pointer-events-none absolute inset-x-0 top-14 hidden h-0.5 bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#22C55E] opacity-20 lg:block" />
             {STEPS.map((step, i) => (

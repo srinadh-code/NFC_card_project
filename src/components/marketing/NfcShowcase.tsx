@@ -8,8 +8,8 @@ const POINTS = [
 
 export default function NfcShowcase() {
   return (
-    <section className="bg-white px-4 py-20 sm:py-24">
-      <div className="mx-auto grid max-w-7xl items-center gap-16 lg:grid-cols-2">
+    <section className="overflow-hidden bg-white py-20 sm:py-24">
+      <div className="container-page grid items-center gap-16 lg:grid-cols-2">
         {/* Visual mockup */}
         <div className="relative order-2 flex items-center justify-center py-8 lg:order-1">
           <div className="absolute size-72 rounded-full bg-gradient-to-br from-[#4F46E5]/10 via-[#7C3AED]/10 to-[#EC4899]/10 blur-3xl" />

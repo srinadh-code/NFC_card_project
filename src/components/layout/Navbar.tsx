@@ -52,7 +52,7 @@ export default function Navbar() {
       {/* Premium floating glass navbar */}
       <header
         className={cn(
-          "relative mx-auto max-w-7xl overflow-hidden rounded-[24px] transition-all duration-[350ms] ease-in-out",
+          "relative mx-auto max-w-[1440px] overflow-hidden rounded-[24px] transition-all duration-[350ms] ease-in-out",
           scrolled ? "backdrop-blur-[16px] shadow-[0_14px_46px_rgba(124,58,237,0.12)]" : "backdrop-blur-[12px] shadow-[0_10px_40px_rgba(124,58,237,0.08)]",
         )}
         style={{
@@ -67,7 +67,7 @@ export default function Navbar() {
           style={{ background: "radial-gradient(circle at center, rgba(124,58,237,0.08), transparent 70%)" }}
         />
 
-        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-5 sm:px-6">
+        <div className="mx-auto flex h-20 max-w-[1440px] items-center justify-between px-5 sm:px-6 lg:px-10">
           <Logo />
 
           <nav className="hidden items-center gap-2 lg:flex">

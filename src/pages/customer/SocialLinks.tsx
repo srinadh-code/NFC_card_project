@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
 import { SortableContext, arrayMove, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable"
@@ -18,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { useDataStore } from "@/store/data-store"
+import { profileApi } from "@/lib/api"
 import { getSocialIcon } from "@/components/customer/social-icons"
 import { ProfileNotReady } from "@/components/customer/ProfileNotReady"
 import { useEnsuredProfile } from "@/hooks/use-ensured-profile"
@@ -155,7 +156,11 @@ function SortableCustomRow({
 
 export default function CustomerSocialLinks() {
   const { customer, profile, stuck, retry } = useEnsuredProfile()
-  const updateProfile = useDataStore((s) => s.updateProfile)
+  const queryClient = useQueryClient()
+
+  function refreshProfile() {
+    queryClient.invalidateQueries({ queryKey: ["profile-me"] })
+  }
 
   const [socialLinks, setSocialLinks] = useState<SocialLink[] | null>(null)
   const [customLinks, setCustomLinks] = useState<CustomLink[] | null>(null)
@@ -217,17 +222,20 @@ export default function CustomerSocialLinks() {
     setCustomLinks((prev) => prev && prev.map((l) => (l.id === id ? { ...l, enabled: !l.enabled } : l)))
   }
 
-  function handleCustomDelete(id: string) {
-    setCustomLinks((prev) => {
-      if (!prev) return prev
-      const next = reindex(prev.filter((l) => l.id !== id))
-      if (profile) updateProfile(profile.id, { customLinks: next })
-      return next
-    })
-    toast.success("Link removed.")
+  async function handleCustomDelete(id: string) {
+    if (!customLinks) return
+    const next = reindex(customLinks.filter((l) => l.id !== id))
+    setCustomLinks(next)
+    try {
+      await profileApi.saveCustomLinks(next)
+      toast.success("Link removed.")
+      refreshProfile()
+    } catch {
+      toast.error("Couldn't remove the link. Please try again.")
+    }
   }
 
-  function handleAddCustomLink() {
+  async function handleAddCustomLink() {
     const label = newLabel.trim()
     const url = newUrl.trim()
     if (!label || !url) {
@@ -238,61 +246,69 @@ export default function CustomerSocialLinks() {
       toast.error("That URL doesn't look valid.")
       return
     }
-    setCustomLinks((prev) => {
-      const base = prev ?? []
-      const next: CustomLink[] = [
-        ...base,
-        { id: `CLK${Date.now()}`, label, url, enabled: true, order: base.length },
-      ]
-      if (profile) updateProfile(profile.id, { customLinks: next })
-      return next
-    })
+    const base = customLinks ?? []
+    const next: CustomLink[] = [...base, { id: `new-${Date.now()}`, label, url, enabled: true, order: base.length }]
+    setCustomLinks(next)
     setNewLabel("")
     setNewUrl("")
     setAddOpen(false)
-    toast.success("Custom link added.")
+    try {
+      await profileApi.saveCustomLinks(next)
+      toast.success("Custom link added.")
+      refreshProfile()
+    } catch {
+      toast.error("Couldn't add the link. Please try again.")
+    }
   }
 
-  function handleSocialDragEnd(event: DragEndEvent) {
+  async function handleSocialDragEnd(event: DragEndEvent) {
     const { active, over } = event
-    if (!over || active.id === over.id) return
-    setSocialLinks((prev) => {
-      if (!prev) return prev
-      const oldIndex = prev.findIndex((l) => l.platform === active.id)
-      const newIndex = prev.findIndex((l) => l.platform === over.id)
-      const next = reindex(arrayMove(prev, oldIndex, newIndex))
-      if (profile) updateProfile(profile.id, { socialLinks: next })
-      return next
-    })
-    toast.success("Order updated.")
+    if (!over || active.id === over.id || !socialLinks) return
+    const oldIndex = socialLinks.findIndex((l) => l.platform === active.id)
+    const newIndex = socialLinks.findIndex((l) => l.platform === over.id)
+    const next = reindex(arrayMove(socialLinks, oldIndex, newIndex))
+    setSocialLinks(next)
+    try {
+      await profileApi.saveSocialLinks(next)
+      toast.success("Order updated.")
+    } catch {
+      toast.error("Couldn't save the new order. Please try again.")
+    }
   }
 
-  function handleCustomDragEnd(event: DragEndEvent) {
+  async function handleCustomDragEnd(event: DragEndEvent) {
     const { active, over } = event
-    if (!over || active.id === over.id) return
-    setCustomLinks((prev) => {
-      if (!prev) return prev
-      const oldIndex = prev.findIndex((l) => l.id === active.id)
-      const newIndex = prev.findIndex((l) => l.id === over.id)
-      const next = reindex(arrayMove(prev, oldIndex, newIndex))
-      if (profile) updateProfile(profile.id, { customLinks: next })
-      return next
-    })
-    toast.success("Order updated.")
+    if (!over || active.id === over.id || !customLinks) return
+    const oldIndex = customLinks.findIndex((l) => l.id === active.id)
+    const newIndex = customLinks.findIndex((l) => l.id === over.id)
+    const next = reindex(arrayMove(customLinks, oldIndex, newIndex))
+    setCustomLinks(next)
+    try {
+      await profileApi.saveCustomLinks(next)
+      toast.success("Order updated.")
+      refreshProfile()
+    } catch {
+      toast.error("Couldn't save the new order. Please try again.")
+    }
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!profile || !socialLinks || !customLinks) return
     if (hasBlockingError) {
       toast.error("Fix the invalid URLs before saving — disable the link or correct its URL.")
       return
     }
     setSaving(true)
-    updateProfile(profile.id, { socialLinks, customLinks })
-    setTimeout(() => {
-      setSaving(false)
+    try {
+      await profileApi.saveSocialLinks(socialLinks)
+      await profileApi.saveCustomLinks(customLinks)
       toast.success("Social links saved.")
-    }, 300)
+      refreshProfile()
+    } catch {
+      toast.error("Something went wrong while saving. Please try again.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (

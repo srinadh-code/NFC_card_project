@@ -75,8 +75,8 @@ export default function Home() {
   return (
     <div>
       {/* Hero */}
-      <section className="relative overflow-hidden bg-white px-4 pb-20 pt-16 sm:pt-20">
-        <div className="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-2">
+      <section className="relative overflow-hidden bg-white pb-20 pt-16 sm:pt-20">
+        <div className="container-page grid items-center gap-12 lg:grid-cols-2">
           <div>
             <span className="inline-flex items-center rounded-full bg-[#4F46E5]/10 px-3 py-1 text-xs font-semibold tracking-wide text-[#4F46E5]">
               VR&apos;S NEXORA · DIGITAL IDENTITY PLATFORM
@@ -219,8 +219,8 @@ export default function Home() {
       <NfcShowcase />
 
       {/* Trusted by */}
-      <section className="border-y border-[#E2E8F0] bg-[#F8FAFC] px-4 py-10">
-        <div className="mx-auto max-w-7xl">
+      <section className="border-y border-[#E2E8F0] bg-[#F8FAFC] py-10">
+        <div className="container-page">
           <p className="text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             Trusted by professionals at
           </p>
@@ -244,8 +244,8 @@ export default function Home() {
       </section>
 
       {/* Our Story */}
-      <section className="bg-[#F8FAFC] px-4 py-20">
-        <div className="mx-auto max-w-7xl">
+      <section className="bg-[#F8FAFC] py-20">
+        <div className="container-page">
           <div className="grid items-center gap-12 lg:grid-cols-2">
             <div>
               <h2 className="text-3xl font-bold tracking-tight text-foreground">Our Story</h2>
@@ -280,8 +280,8 @@ export default function Home() {
       </section>
 
       {/* Why choose */}
-      <section className="bg-white px-4 py-20">
-        <div className="mx-auto max-w-7xl">
+      <section className="bg-white py-20">
+        <div className="container-page">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight text-foreground">Why Choose VR's NEXORA?</h2>
             <p className="mt-3 text-muted-foreground">
@@ -297,8 +297,8 @@ export default function Home() {
       </section>
 
       {/* Testimonials */}
-      <section className="bg-[#F8FAFC] px-4 py-20">
-        <div className="mx-auto max-w-7xl">
+      <section className="bg-[#F8FAFC] py-20">
+        <div className="container-page">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight text-foreground">
               Loved by Professionals Everywhere

@@ -92,7 +92,7 @@ export default function Shop() {
         <div
           className={cn(
             cardClass,
-            "mx-auto grid max-w-6xl gap-12 p-6 hover:translate-y-0 hover:shadow-[0_10px_30px_rgba(0,0,0,0.06)] sm:p-10 lg:grid-cols-2",
+            "mx-auto grid max-w-[1320px] gap-12 p-6 hover:translate-y-0 hover:shadow-[0_10px_30px_rgba(0,0,0,0.06)] sm:p-10 lg:grid-cols-2",
           )}
         >
           {/* Left: product info + configurator */}

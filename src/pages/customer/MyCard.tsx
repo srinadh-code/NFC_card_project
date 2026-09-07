@@ -1,6 +1,6 @@
 ﻿import { useState } from "react"
 import { Link } from "react-router-dom"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import {
   CheckCircle2,
@@ -31,15 +31,18 @@ import { StatusBadge } from "@/components/admin/StatusBadge"
 import { StatCard } from "@/components/customer/StatCard"
 import { NfcCardFace } from "@/components/marketing/NfcCardShowcase"
 import { useCustomerAuthStore } from "@/store/auth-store"
-import {
-  useDataStore,
-  selectCardsByCustomer,
-  selectOrdersByCustomer,
-  selectProfileByCustomer,
-} from "@/store/data-store"
+import { useDataStore, selectOrdersByCustomer } from "@/store/data-store"
+import { useEnsuredProfile } from "@/hooks/use-ensured-profile"
 import { analyticsRecords } from "@/data/seed"
 import { formatDate } from "@/lib/mock-api"
 import { downloadQrPng, shareOrCopyLink } from "@/components/customer/qr-utils"
+import { nfcApi } from "@/lib/api"
+
+// Known demo UIDs seeded by `python manage.py seed_demo_cards` on the
+// backend — used only to prefill the manual-entry/"simulate scan" demo
+// helpers below, since a customer has no API to browse all unassigned
+// cards (correctly — that's admin-only).
+const DEMO_UNASSIGNED_UID = "04AABBCC0001"
 
 function InfoRow({ icon: Icon, label, value, mono }: { icon: typeof Mail; label: string; value: string; mono?: boolean }) {
   return (
@@ -59,13 +62,15 @@ const IN_PROGRESS_ORDER_STATUSES = ["Pending", "Processing", "Shipped"]
 
 export default function CustomerMyCard() {
   const customer = useCustomerAuthStore((s) => s.customer)
-  const cards = useDataStore(selectCardsByCustomer(customer?.id ?? ""))
   const orders = useDataStore(selectOrdersByCustomer(customer?.id ?? ""))
-  const allCards = useDataStore((s) => s.cards)
-  const activateCard = useDataStore((s) => s.activateCard)
-  const activateAssignedCard = useDataStore((s) => s.activateAssignedCard)
-  const profile = useDataStore(selectProfileByCustomer(customer?.id ?? ""))
+  const { profile } = useEnsuredProfile()
   const queryClient = useQueryClient()
+
+  const { data: cards = [] } = useQuery({
+    queryKey: ["nfc-cards-mine"],
+    queryFn: nfcApi.mine,
+    enabled: Boolean(customer),
+  })
 
   const activeCard = cards.find((c) => c.status === "Active") ?? null
   const assignedCard = cards.find((c) => c.status === "Assigned") ?? null
@@ -79,15 +84,11 @@ export default function CustomerMyCard() {
   const [downloading, setDownloading] = useState(false)
 
   const mutation = useMutation({
-    mutationFn: async (cardUid: string) => {
-      const result = activateCard(cardUid, customer?.id ?? "")
-      if (!result) throw new Error("not found")
-      return result
-    },
+    mutationFn: (cardUid: string) => nfcApi.activate(cardUid),
     onSuccess: () => {
       toast.success("Card activated successfully!")
       setUid("")
-      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+      queryClient.invalidateQueries({ queryKey: ["nfc-cards-mine"] })
     },
     onError: () => {
       toast.error("We couldn't find a card with that ID. Please check and try again.")
@@ -95,40 +96,21 @@ export default function CustomerMyCard() {
   })
 
   const activateAssignedMutation = useMutation({
-    mutationFn: async (cardId: string) => {
-      const result = activateAssignedCard(cardId)
-      if (!result) throw new Error("not found")
-      return result
-    },
+    mutationFn: (cardId: string) => nfcApi.activateAssigned(cardId),
     onSuccess: () => {
       toast.success("Card activated successfully! Your profile is now live.")
-      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+      queryClient.invalidateQueries({ queryKey: ["nfc-cards-mine"] })
     },
     onError: () => toast.error("Something went wrong activating your card. Please try again."),
   })
 
-  function findDemoUnassignedUid() {
-    const unassigned = allCards.find((c) => c.status === "Unassigned")
-    return unassigned?.uid ?? null
-  }
-
   function handleUseDemoCard() {
-    const demoUid = findDemoUnassignedUid()
-    if (!demoUid) {
-      toast.error("No unassigned demo cards are available right now.")
-      return
-    }
-    setUid(demoUid)
+    setUid(DEMO_UNASSIGNED_UID)
     toast.success("Demo card ID filled in. Click Activate Card to continue.")
   }
 
   function handleSimulateScan() {
-    const demoUid = findDemoUnassignedUid()
-    if (!demoUid) {
-      toast.error("No unassigned demo cards are available right now.")
-      return
-    }
-    mutation.mutate(demoUid)
+    mutation.mutate(DEMO_UNASSIGNED_UID)
   }
 
   function handleActivate(e: React.FormEvent) {

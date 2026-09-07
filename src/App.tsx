@@ -1,6 +1,8 @@
+import { useEffect } from "react"
 import { Route, Routes } from "react-router-dom"
 
 import { ScrollToTop } from "@/components/ScrollToTop"
+import { useAuthStore } from "@/store/auth-store"
 import PublicLayout from "@/components/layout/PublicLayout"
 import AdminLayout from "@/components/layout/AdminLayout"
 import CustomerLayout from "@/components/layout/CustomerLayout"
@@ -47,6 +49,16 @@ import PublicProfile from "@/pages/profile/PublicProfile"
 import NotFound from "@/pages/NotFound"
 
 function App() {
+  const bootstrap = useAuthStore((s) => s.bootstrap)
+
+  // Re-validates the persisted session against the server once on load, so
+  // a revoked/expired token gets cleared instead of leaving a stale "logged
+  // in" UI state around.
+  useEffect(() => {
+    bootstrap()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
     <>
       <ScrollToTop />

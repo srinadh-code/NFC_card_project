@@ -44,7 +44,7 @@ export default function Features() {
   return (
     <div className="overflow-x-hidden">
       {/* ============ HERO ============ */}
-      <section className="relative overflow-hidden bg-white px-4 pb-24 pt-16 sm:pt-20">
+      <section className="relative overflow-hidden bg-white pb-24 pt-16 sm:pt-20">
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.35]"
           style={{
@@ -55,7 +55,7 @@ export default function Features() {
         />
         <div className="pointer-events-none absolute right-0 top-0 size-[32rem] rounded-full bg-gradient-to-br from-[#7C3AED]/20 to-[#EC4899]/10 blur-[100px]" />
 
-        <div className="relative mx-auto grid max-w-7xl items-center gap-16 lg:grid-cols-2">
+        <div className="relative container-page grid items-center gap-16 lg:grid-cols-2">
           <div>
             <span className="inline-flex items-center gap-2 rounded-full border border-border bg-white px-3 py-1 text-xs font-semibold text-muted-foreground shadow-sm">
               <span className="rounded-full bg-[#4F46E5]/10 px-2 py-0.5 text-[#4F46E5]">FEATURES</span>
@@ -183,8 +183,8 @@ export default function Features() {
       </Dialog>
 
       {/* ============ FEATURE GRID ============ */}
-      <section className="bg-[#F8FAFC] px-4 py-20">
-        <div className="mx-auto max-w-7xl">
+      <section className="bg-[#F8FAFC] py-20">
+        <div className="container-page">
           <Reveal>
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
@@ -221,8 +221,8 @@ export default function Features() {
       </section>
 
       {/* ============ ANALYTICS SHOWCASE ============ */}
-      <section className="bg-white px-4 py-20">
-        <div className="mx-auto max-w-7xl">
+      <section className="bg-white py-20">
+        <div className="container-page">
           <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-[#EEF2FF] via-[#F5F3FF] to-[#FDF2F8] p-8 sm:p-14">
             <div className="pointer-events-none absolute -left-16 -top-16 size-72 rounded-full bg-[#7C3AED]/15 blur-3xl" />
             <div className="pointer-events-none absolute -bottom-16 -right-16 size-72 rounded-full bg-[#2563EB]/15 blur-3xl" />

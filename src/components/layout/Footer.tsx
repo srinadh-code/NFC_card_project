@@ -60,7 +60,7 @@ export default function Footer() {
 
   return (
     <footer className="bg-[#0F172A]">
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10">
+      <div className="container-page py-8 sm:py-10">
         <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-6 lg:gap-6">
           <div className="col-span-2 sm:col-span-3 lg:col-span-2">
             <Link to="/" className="flex items-center gap-2">
@@ -162,7 +162,7 @@ export default function Footer() {
       </div>
 
       <div className="border-t border-white/10">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-4 py-3.5 sm:flex-row">
+        <div className="container-page flex flex-col items-center justify-between gap-2 py-3.5 sm:flex-row">
           <p className="text-xs text-slate-500">
             © 2026 VR's NEXORA. All rights reserved.
           </p>

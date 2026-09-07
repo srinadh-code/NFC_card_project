@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Camera, Globe } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -9,12 +9,11 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useDataStore } from "@/store/data-store"
 import { CustomFieldsEditor } from "@/components/customer/CustomFieldsEditor"
 import { ProfileNotReady } from "@/components/customer/ProfileNotReady"
 import { useEnsuredProfile } from "@/hooks/use-ensured-profile"
 import type { CustomField } from "@/types"
-import { simulateLatency } from "@/lib/mock-api"
+import { profileApi } from "@/lib/api"
 
 interface FormState {
   fullName: string
@@ -30,8 +29,7 @@ interface FormState {
 
 export default function CustomerProfile() {
   const { customer, profile, stuck, retry } = useEnsuredProfile()
-  const updateProfile = useDataStore((s) => s.updateProfile)
-  const updateCustomer = useDataStore((s) => s.updateCustomer)
+  const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [form, setForm] = useState<FormState | null>(null)
@@ -58,29 +56,31 @@ export default function CustomerProfile() {
   const mutation = useMutation({
     mutationFn: async (payload: { form: FormState; customFields: CustomField[] }) => {
       if (!profile || !customer) throw new Error("missing profile")
-      updateProfile(profile.id, {
+      await profileApi.updateMine({
         fullName: payload.form.fullName,
         designation: payload.form.designation,
         company: payload.form.company,
-        email: payload.form.email,
         phone: payload.form.phone,
         website: payload.form.website,
         address: payload.form.address,
         bio: payload.form.bio,
-        avatar: payload.form.avatar,
-        customFields: payload.customFields,
       })
-      updateCustomer(customer.id, {
-        name: payload.form.fullName,
-        email: payload.form.email,
-        phone: payload.form.phone,
-        designation: payload.form.designation,
-        company: payload.form.company,
-      })
-      return simulateLatency(true)
+      await profileApi.saveCustomFields(payload.customFields)
     },
-    onSuccess: () => toast.success("Profile updated successfully."),
+    onSuccess: () => {
+      toast.success("Profile updated successfully.")
+      queryClient.invalidateQueries({ queryKey: ["profile-me"] })
+    },
     onError: () => toast.error("Something went wrong while saving your profile."),
+  })
+
+  const avatarMutation = useMutation({
+    mutationFn: (file: File) => profileApi.uploadAvatar(file),
+    onSuccess: () => {
+      toast.success("Photo updated.")
+      queryClient.invalidateQueries({ queryKey: ["profile-me"] })
+    },
+    onError: () => toast.error("Couldn't update your photo. Please try again."),
   })
 
   function handleChange<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -94,10 +94,8 @@ export default function CustomerProfile() {
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file || !profile) return
-    const objectUrl = URL.createObjectURL(file)
-    handleChange("avatar", objectUrl)
-    updateProfile(profile.id, { avatar: objectUrl })
-    toast.success("Photo updated.")
+    handleChange("avatar", URL.createObjectURL(file))
+    avatarMutation.mutate(file)
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -191,12 +189,10 @@ export default function CustomerProfile() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={form.email}
-                onChange={(e) => handleChange("email", e.target.value)}
-              />
+              <Input id="email" type="email" value={form.email} disabled />
+              <p className="text-xs text-muted-foreground">
+                Your login email can&apos;t be changed here. Contact support if you need it updated.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="phone">Phone</Label>

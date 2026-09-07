@@ -1,50 +1,41 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCustomerAuthStore } from "@/store/auth-store"
-import { useDataStore, selectProfileByCustomer } from "@/store/data-store"
+import { profileApi } from "@/lib/api"
 
 /**
- * Reads the signed-in customer's Profile, self-healing if it's missing
- * (e.g. a session created before automatic onboarding existed). This is a
- * second, page-level line of defense on top of the repair CustomerLayout
- * already runs on every route change — so Profile/Social Links/QR Code
- * never get stuck on a permanently-missing record, even if this hook is
- * ever used somewhere outside that layout.
- *
- * `stuck` flips true only if the profile is still missing ~1.2s after
- * mount (repair is normally synchronous/instant) — pages should render a
- * real empty state with a retry action when `stuck` is true, never an
- * indefinite skeleton.
+ * Reads the signed-in customer's Profile from the real backend. The backend
+ * auto-creates the Profile row (with a unique username) the first time it's
+ * fetched after email verification, so there's no real "missing profile"
+ * state anymore — `stuck` only flips true if the request itself keeps
+ * failing (e.g. the API is unreachable), so pages can still show a retry
+ * action instead of an indefinite skeleton.
  */
 export function useEnsuredProfile() {
   const customer = useCustomerAuthStore((s) => s.customer)
-  const profile = useDataStore(selectProfileByCustomer(customer?.id ?? ""))
+  const queryClient = useQueryClient()
   const [stuck, setStuck] = useState(false)
 
-  useEffect(() => {
-    if (!customer || profile) {
-      setStuck(false)
-      return
-    }
-    useDataStore.getState().ensureCustomerProfile({
-      id: customer.id,
-      name: customer.name,
-      email: customer.email,
-      avatar: customer.avatar,
-    })
-    const t = setTimeout(() => setStuck(true), 1200)
-    return () => clearTimeout(t)
-  }, [customer, profile])
+  const query = useQuery({
+    queryKey: ["profile-me"],
+    queryFn: async () => {
+      try {
+        const profile = await profileApi.getMine()
+        setStuck(false)
+        return profile
+      } catch (err) {
+        setStuck(true)
+        throw err
+      }
+    },
+    enabled: Boolean(customer),
+    retry: 1,
+  })
 
   function retry() {
-    if (!customer) return
-    useDataStore.getState().ensureCustomerProfile({
-      id: customer.id,
-      name: customer.name,
-      email: customer.email,
-      avatar: customer.avatar,
-    })
     setStuck(false)
+    queryClient.invalidateQueries({ queryKey: ["profile-me"] })
   }
 
-  return { customer, profile, stuck, retry }
+  return { customer, profile: query.data ?? null, stuck, retry }
 }

@@ -17,9 +17,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { ChartContainer } from "@/components/ui/chart-container"
 import { StatCard } from "@/components/customer/StatCard"
 import { useCustomerAuthStore } from "@/store/auth-store"
-import { useDataStore, selectCardsByCustomer } from "@/store/data-store"
 import { analyticsRecords } from "@/data/seed"
 import { simulateLatency } from "@/lib/mock-api"
+import { nfcApi } from "@/lib/api"
 
 function sumBy<T>(items: T[], fn: (item: T) => number) {
   return items.reduce((s, item) => s + fn(item), 0)
@@ -87,7 +87,11 @@ function computeDashboardStats(customerId: string) {
 
 export default function CustomerDashboard() {
   const customer = useCustomerAuthStore((s) => s.customer)
-  const cards = useDataStore(selectCardsByCustomer(customer?.id ?? ""))
+  const { data: cards = [] } = useQuery({
+    queryKey: ["nfc-cards-mine"],
+    queryFn: nfcApi.mine,
+    enabled: Boolean(customer),
+  })
   const activeCard = useMemo(() => cards.find((c) => c.status === "Active") ?? cards[0] ?? null, [cards])
 
   const { data, isLoading } = useQuery({

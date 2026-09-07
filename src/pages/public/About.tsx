@@ -53,8 +53,8 @@ export default function About() {
       />
 
       {/* Premium hero showcase — story left, NFC card product render right */}
-      <section className="bg-white px-4 py-16 sm:py-20">
-        <div className="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-2">
+      <section className="bg-white py-16 sm:py-20">
+        <div className="container-page grid items-center gap-12 lg:grid-cols-2">
           <div>
             <span className="inline-flex items-center rounded-full bg-[#4F46E5]/10 px-3 py-1 text-xs font-semibold tracking-wide text-[#4F46E5]">
               OUR STORY
@@ -98,8 +98,8 @@ export default function About() {
       <StatsShowcaseCard />
 
       {/* Why Choose VR's NEXORA */}
-      <section className="bg-white px-4 py-20">
-        <div className="mx-auto max-w-7xl">
+      <section className="bg-white py-20">
+        <div className="container-page">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight text-foreground">Why Choose VR's NEXORA?</h2>
             <p className="mt-3 text-muted-foreground">
@@ -130,8 +130,8 @@ export default function About() {
       </section>
 
       {/* Our Story + Values */}
-      <section className="bg-[#F8FAFC] px-4 py-20">
-        <div className="mx-auto max-w-7xl">
+      <section className="bg-[#F8FAFC] py-20">
+        <div className="container-page">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight text-foreground">Built From Experience</h2>
             <p className="mt-3 text-muted-foreground">

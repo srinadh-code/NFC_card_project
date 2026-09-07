@@ -1,12 +1,13 @@
-﻿import { useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { useParams, Link } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
 import QRCode from "qrcode"
 import { Lock, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { DigitalCardPreview } from "@/components/customer/DigitalCardPreview"
-import { useDataStore, selectProfileByUsername } from "@/store/data-store"
-import { useCustomerSettingsStore } from "@/store/customer-settings-store"
+import { profileApi } from "@/lib/api"
 import { downloadQrPng } from "@/components/customer/qr-utils"
 
 function EmptyShell({ title, description }: { title: string; description: string }) {
@@ -31,18 +32,19 @@ function EmptyShell({ title, description }: { title: string; description: string
 }
 
 /**
- * The public, scannable version of a customer's digital card. This renders
- * the exact same <DigitalCardPreview> component the customer sees in their
- * own QR Code dashboard page (src/pages/customer/QrCode.tsx) against the
- * exact same `profiles` record (selected by username here, by customerId
- * there) — one rendering path, one data source, so the two can never drift
- * out of sync with each other.
+ * The public, scannable version of a customer's digital card. Fetches the
+ * real backend's public profile endpoint, which already filters out
+ * disabled links and strips contact info per the owner's own privacy
+ * settings — this page just renders whatever it gets back.
  */
 export default function PublicProfile() {
   const { username } = useParams<{ username: string }>()
-  const profile = useDataStore(selectProfileByUsername(username ?? ""))
-  const profilePublic = useCustomerSettingsStore((s) => s.profilePublic)
-  const showContactInfo = useCustomerSettingsStore((s) => s.showContactInfo)
+
+  const { data: profile, isLoading } = useQuery({
+    queryKey: ["public-profile", username],
+    queryFn: () => profileApi.getPublic(username ?? ""),
+    enabled: Boolean(username),
+  })
 
   const currentUrl = typeof window !== "undefined" ? window.location.href : ""
   const [qrDataUrl, setQrDataUrl] = useState("")
@@ -61,20 +63,19 @@ export default function PublicProfile() {
     }
   }, [currentUrl])
 
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#EEF2FF] via-white to-[#FDF2F8] p-6">
+        <Skeleton className="h-[560px] w-[300px] rounded-[36px]" />
+      </div>
+    )
+  }
+
   if (!profile) {
     return (
       <EmptyShell
         title="This profile doesn't exist"
-        description="The card you scanned may have expired, or the link is incorrect."
-      />
-    )
-  }
-
-  if (!profilePublic) {
-    return (
-      <EmptyShell
-        title="This profile is private"
-        description={`${profile.fullName} has made this card private. Ask them to enable public visibility in Settings.`}
+        description="The card you scanned may have expired, the link is incorrect, or the owner has made it private."
       />
     )
   }
@@ -126,7 +127,7 @@ export default function PublicProfile() {
           downloading={downloading}
           onDownloadQr={handleDownloadQr}
           onShare={handleShare}
-          showContactInfo={showContactInfo}
+          showContactInfo={Boolean(profile.email || profile.phone)}
         />
 
         <p className="pt-6 text-center text-xs text-muted-foreground">
