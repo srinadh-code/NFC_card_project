@@ -1,9 +1,19 @@
 import { useEffect, useState } from "react"
 import { Link, NavLink, useNavigate } from "react-router-dom"
-import { Menu, ShoppingCart } from "lucide-react"
+import { LayoutDashboard, LogOut, Menu, ShoppingCart } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from "@/components/ui/sheet"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useCartStore } from "@/store/cart-store"
+import { useCustomerAuthStore } from "@/store/auth-store"
 import { cn } from "@/lib/utils"
 
 const NAV_LINKS = [
@@ -37,6 +47,22 @@ export default function Navbar() {
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const itemCount = useCartStore((s) => s.lines.reduce((sum, l) => sum + l.qty, 0))
+  // Reflects the REAL, token-backed customer session (see hasValidSession
+  // in auth-store.ts) — this is what previously always showed "Login" even
+  // to an already-authenticated customer, which is exactly the kind of
+  // mismatch between displayed UI state and actual auth state that made a
+  // real session look like a logged-out one.
+  const customer = useCustomerAuthStore((s) => s.customer)
+  const logout = useCustomerAuthStore((s) => s.logout)
+
+  const initials = customer?.name
+    ? customer.name
+        .split(" ")
+        .map((p) => p[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase()
+    : "U"
 
   useEffect(() => {
     function onScroll() {
@@ -113,12 +139,46 @@ export default function Navbar() {
                 </span>
               )}
             </Button>
-            <Link
-              to="/login"
-              className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-all duration-300 hover:bg-primary/5 hover:text-primary"
-            >
-              Login
-            </Link>
+            {customer ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center gap-2 rounded-full outline-none ring-primary/40 focus-visible:ring-2">
+                    <Avatar className="size-9">
+                      <AvatarImage src={customer.avatar} alt={customer.name} />
+                      <AvatarFallback>{initials}</AvatarFallback>
+                    </Avatar>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>
+                    <p className="truncate text-sm font-medium">{customer.name}</p>
+                    <p className="truncate text-xs font-normal text-muted-foreground">{customer.email}</p>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate("/dashboard")}>
+                    <LayoutDashboard />
+                    My Dashboard
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() => {
+                      logout()
+                      navigate("/")
+                    }}
+                  >
+                    <LogOut />
+                    Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Link
+                to="/login"
+                className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-all duration-300 hover:bg-primary/5 hover:text-primary"
+              >
+                Login
+              </Link>
+            )}
             <Button
               variant="gradient"
               className="rounded-full px-6 shadow-[0_8px_24px_rgba(124,58,237,0.28)] transition-all duration-300 hover:scale-[1.03] hover:shadow-[0_10px_32px_rgba(124,58,237,0.4)]"
@@ -173,14 +233,39 @@ export default function Navbar() {
                       </NavLink>
                     </SheetClose>
                   ))}
-                  <SheetClose asChild>
-                    <NavLink
-                      to="/login"
-                      className="rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors duration-300 hover:bg-primary/10 hover:text-primary"
-                    >
-                      Login
-                    </NavLink>
-                  </SheetClose>
+                  {customer ? (
+                    <>
+                      <SheetClose asChild>
+                        <NavLink
+                          to="/dashboard"
+                          className="rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors duration-300 hover:bg-primary/10 hover:text-primary"
+                        >
+                          My Dashboard
+                        </NavLink>
+                      </SheetClose>
+                      <SheetClose asChild>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            logout()
+                            navigate("/")
+                          }}
+                          className="rounded-md px-3 py-2.5 text-left text-sm font-medium text-destructive transition-colors duration-300 hover:bg-destructive/10"
+                        >
+                          Logout
+                        </button>
+                      </SheetClose>
+                    </>
+                  ) : (
+                    <SheetClose asChild>
+                      <NavLink
+                        to="/login"
+                        className="rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors duration-300 hover:bg-primary/10 hover:text-primary"
+                      >
+                        Login
+                      </NavLink>
+                    </SheetClose>
+                  )}
                 </nav>
                 <div className="mt-auto px-4 pb-4">
                   <SheetClose asChild>

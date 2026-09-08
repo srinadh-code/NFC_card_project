@@ -1,12 +1,6 @@
-<<<<<<< HEAD
 // Centralized API client for the Django backend. Every customer-facing
 // page reads/writes through this file — no page should hold its own
 // fetch() call or mock data.
-import type { CustomField, CustomLink, NfcCard, Profile, Service, SocialLink } from "@/types"
-=======
-// Centralized API client for the Django backend. Replaces the old
-// mock-api.ts / Zustand-as-backend pattern for the Phase A slice
-// (auth, profile, social/custom links, NFC cards, public profile).
 import type {
   Address,
   CustomField,
@@ -17,6 +11,7 @@ import type {
   PaymentMethod,
   PaymentStatus,
   Profile,
+  Service,
   SocialLink,
   SupportTicket,
   TicketPriority,
@@ -24,7 +19,6 @@ import type {
   Transaction,
   TrackingStep,
 } from "@/types"
->>>>>>> b82680aac13f3627b3ea99a2417041dd3442cc04
 
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || "http://localhost:8000/api"
 
@@ -80,18 +74,7 @@ interface Envelope<T> {
   message: string
   data?: T
   errors?: Record<string, unknown>
-<<<<<<< HEAD
   pagination?: PaginationMeta
-=======
-  pagination?: {
-    count: number
-    page: number
-    num_pages: number
-    page_size: number
-    next: string | null
-    previous: string | null
-  }
->>>>>>> b82680aac13f3627b3ea99a2417041dd3442cc04
 }
 
 let refreshInFlight: Promise<boolean> | null = null
@@ -127,7 +110,6 @@ interface RequestOptions {
   isFormData?: boolean
 }
 
-<<<<<<< HEAD
 /** Network-level failure (server unreachable, DNS, offline, CORS) — distinct
  *  from ApiError, which means "the server responded, but with an error". */
 export class NetworkError extends Error {
@@ -137,9 +119,6 @@ export class NetworkError extends Error {
 }
 
 async function rawRequest<T>(path: string, options: RequestOptions = {}, retried = false): Promise<Envelope<T>> {
-=======
-async function requestEnvelope<T>(path: string, options: RequestOptions = {}, retried = false): Promise<Envelope<T>> {
->>>>>>> b82680aac13f3627b3ea99a2417041dd3442cc04
   const { method = "GET", body, auth = true, isFormData = false } = options
 
   const headers: Record<string, string> = {}
@@ -160,17 +139,11 @@ async function requestEnvelope<T>(path: string, options: RequestOptions = {}, re
     throw new NetworkError()
   }
 
-<<<<<<< HEAD
   if (res.status === 401 && auth) {
     if (!retried && getRefreshToken()) {
       const refreshed = await refreshAccessToken()
       if (refreshed) return rawRequest<T>(path, options, true)
     }
-=======
-  if (res.status === 401 && auth && !retried && getRefreshToken()) {
-    const refreshed = await refreshAccessToken()
-    if (refreshed) return requestEnvelope<T>(path, options, true)
->>>>>>> b82680aac13f3627b3ea99a2417041dd3442cc04
     clearTokens()
     unauthorizedHandler?.()
   }
@@ -191,12 +164,8 @@ async function requestEnvelope<T>(path: string, options: RequestOptions = {}, re
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-<<<<<<< HEAD
   const json = await rawRequest<T>(path, options)
   return json.data as T
-=======
-  return (await requestEnvelope<T>(path, options)).data as T
->>>>>>> b82680aac13f3627b3ea99a2417041dd3442cc04
 }
 
 async function requestPaginated<T>(
@@ -330,6 +299,16 @@ interface ApiCustomerProfile {
   updated_at: string
 }
 
+interface ApiCustomerService {
+  id: number
+  title: string
+  description: string
+  display_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
 interface ApiPublicProfile {
   username: string
   full_name: string
@@ -350,16 +329,6 @@ interface ApiPublicProfile {
   custom_links: ApiCustomLink[]
   custom_fields: ApiCustomField[]
   services: ApiCustomerService[]
-}
-
-interface ApiCustomerService {
-  id: number
-  title: string
-  description: string
-  display_order: number
-  is_active: boolean
-  created_at: string
-  updated_at: string
 }
 
 // platform -> backend id, refreshed on every profile fetch.
@@ -754,15 +723,6 @@ export const nfcApi = {
 }
 
 // ---------------------------------------------------------------------
-<<<<<<< HEAD
-// QR code
-// ---------------------------------------------------------------------
-
-export interface ApiQrCode {
-  id: number
-  image: string
-  target_url: string
-=======
 // NFC cards — admin inventory management
 // ---------------------------------------------------------------------
 
@@ -832,7 +792,7 @@ export const adminNfcApi = {
     if (params.search) qs.set("search", params.search)
     if (params.status && params.status !== "All") qs.set("status", CARD_STATUS_REVERSE_MAP[params.status])
     const query = qs.toString()
-    const envelope = await requestEnvelope<ApiAdminNfcCard[]>(`/nfc/admin/cards/${query ? `?${query}` : ""}`)
+    const envelope = await rawRequest<ApiAdminNfcCard[]>(`/nfc/admin/cards/${query ? `?${query}` : ""}`)
     return {
       data: (envelope.data ?? []).map(toFrontendAdminCard),
       count: envelope.pagination?.count ?? 0,
@@ -983,7 +943,7 @@ export const adminCustomerApi = {
     if (params.search) qs.set("search", params.search)
     if (params.status && params.status !== "All") qs.set("status", params.status)
     const query = qs.toString()
-    const envelope = await requestEnvelope<ApiAdminCustomerListItem[]>(
+    const envelope = await rawRequest<ApiAdminCustomerListItem[]>(
       `/profiles/admin/customers/${query ? `?${query}` : ""}`,
     )
     return {
@@ -1217,7 +1177,7 @@ export const adminOrderApi = {
     if (params.search) qs.set("search", params.search)
     if (params.status && params.status !== "All") qs.set("status", ORDER_STATUS_REVERSE_MAP[params.status])
     qs.set("page_size", "100")
-    const envelope = await requestEnvelope<ApiAdminOrder[]>(`/admin/orders/?${qs.toString()}`)
+    const envelope = await rawRequest<ApiAdminOrder[]>(`/admin/orders/?${qs.toString()}`)
     return {
       data: (envelope.data ?? []).map(toFrontendOrder),
       count: envelope.pagination?.count ?? 0,
@@ -1265,78 +1225,10 @@ interface ApiAdminTicket {
   priority: string
   status: string
   messages: ApiAdminTicketMessage[]
->>>>>>> b82680aac13f3627b3ea99a2417041dd3442cc04
   created_at: string
   updated_at: string
 }
 
-<<<<<<< HEAD
-export const qrApi = {
-  get: async (): Promise<ApiQrCode | null> => {
-    try {
-      return await request<ApiQrCode>("/customer/qr/")
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) return null
-      throw err
-    }
-  },
-  generate: () => request<ApiQrCode>("/customer/qr/generate/", { method: "POST" }),
-  regenerate: () => request<ApiQrCode>("/customer/qr/regenerate/", { method: "POST" }),
-  /** Fetches the existing QR, generating one on first use. */
-  getOrCreate: async (): Promise<ApiQrCode> => (await qrApi.get()) ?? qrApi.generate(),
-}
-
-// ---------------------------------------------------------------------
-// Analytics
-// ---------------------------------------------------------------------
-
-export interface ApiAnalyticsEvent {
-  id: number
-  event_type: "PROFILE_VIEW" | "NFC_TAP" | "QR_SCAN" | "SOCIAL_CLICK"
-  device: string
-  ip_address: string | null
-  source: string
-  metadata: string
-  created_at: string
-}
-
-interface PeriodBreakdown {
-  today: number
-  week: number
-  month: number
-  year: number
-}
-
-export interface ApiAnalyticsSummary {
-  profile_views: PeriodBreakdown
-  nfc_taps: PeriodBreakdown
-  qr_scans: PeriodBreakdown
-  social_clicks: PeriodBreakdown
-  totals: { profile_views: number; nfc_taps: number; qr_scans: number; social_clicks: number }
-}
-
-export interface ApiAnalyticsOverview {
-  totals: ApiAnalyticsSummary["totals"]
-  recent: ApiAnalyticsEvent[]
-}
-
-export const analyticsApi = {
-  getOverview: () => request<ApiAnalyticsOverview>("/customer/analytics/"),
-  getSummary: () => request<ApiAnalyticsSummary>("/customer/analytics/summary/"),
-  getViews: (page = 1, pageSize = 100) =>
-    requestPaginated<ApiAnalyticsEvent>(`/customer/analytics/views/?page=${page}&page_size=${pageSize}`),
-  getTaps: (page = 1, pageSize = 100) =>
-    requestPaginated<ApiAnalyticsEvent>(`/customer/analytics/taps/?page=${page}&page_size=${pageSize}`),
-  getScans: (page = 1, pageSize = 100) =>
-    requestPaginated<ApiAnalyticsEvent>(`/customer/analytics/scans/?page=${page}&page_size=${pageSize}`),
-}
-
-// ---------------------------------------------------------------------
-// Orders
-// ---------------------------------------------------------------------
-
-export interface ApiOrderItem {
-=======
 function toFrontendTicket(t: ApiAdminTicket): SupportTicket {
   return {
     id: String(t.id),
@@ -1376,7 +1268,7 @@ export const adminSupportApi = {
     if (params.status && params.status !== "All") qs.set("status", TICKET_STATUS_REVERSE_MAP[params.status])
     if (params.priority && params.priority !== "All") qs.set("priority", TICKET_PRIORITY_REVERSE_MAP[params.priority])
     qs.set("page_size", "100")
-    const envelope = await requestEnvelope<ApiAdminTicket[]>(`/admin/support/?${qs.toString()}`)
+    const envelope = await rawRequest<ApiAdminTicket[]>(`/admin/support/?${qs.toString()}`)
     return {
       data: (envelope.data ?? []).map(toFrontendTicket),
       count: envelope.pagination?.count ?? 0,
@@ -1460,7 +1352,7 @@ export const adminTransactionApi = {
     if (params.method && params.method !== "All") qs.set("method", PAYMENT_METHOD_REVERSE_MAP[params.method])
     if (params.status && params.status !== "All") qs.set("status", PAYMENT_STATUS_REVERSE_MAP[params.status])
     qs.set("page_size", "100")
-    const envelope = await requestEnvelope<ApiAdminTransaction[]>(`/admin/transactions/?${qs.toString()}`)
+    const envelope = await rawRequest<ApiAdminTransaction[]>(`/admin/transactions/?${qs.toString()}`)
     return {
       data: (envelope.data ?? []).map(toFrontendTransaction),
       count: envelope.pagination?.count ?? 0,
@@ -1656,10 +1548,16 @@ function toFrontendAdminProfile(p: ApiAdminProfile): Profile {
     company: p.company,
     email: p.email,
     phone: p.phone,
+    alternatePhone: "",
     website: "",
     address: "",
+    city: "",
+    state: "",
+    country: "",
+    googleMapsUrl: "",
     bio: p.bio,
     avatar: p.avatar,
+    coverImage: null,
     status: p.status === "ACTIVE" ? "Active" : "Suspended",
     createdOn: p.created_at,
     socialLinks: p.social_links
@@ -1668,6 +1566,7 @@ function toFrontendAdminProfile(p: ApiAdminProfile): Profile {
       .map((l) => ({ platform: l.platform, url: l.url, enabled: l.enabled, order: l.display_order })),
     customLinks: [],
     customFields: [],
+    services: [],
   }
 }
 
@@ -1684,7 +1583,7 @@ export const adminProfileApi = {
     if (params.page) qs.set("page", String(params.page))
     if (params.search) qs.set("search", params.search)
     qs.set("page_size", "100")
-    const envelope = await requestEnvelope<ApiAdminProfile[]>(`/admin/profiles/?${qs.toString()}`)
+    const envelope = await rawRequest<ApiAdminProfile[]>(`/admin/profiles/?${qs.toString()}`)
     return {
       data: (envelope.data ?? []).map(toFrontendAdminProfile),
       count: envelope.pagination?.count ?? 0,
@@ -1717,11 +1616,82 @@ export const adminProfileApi = {
 }
 
 // ---------------------------------------------------------------------
-// Customer orders (customer_management.customer_orders)
+// QR code
 // ---------------------------------------------------------------------
 
-interface ApiCustomerOrderItem {
->>>>>>> b82680aac13f3627b3ea99a2417041dd3442cc04
+export interface ApiQrCode {
+  id: number
+  image: string
+  target_url: string
+  created_at: string
+  updated_at: string
+}
+
+export const qrApi = {
+  get: async (): Promise<ApiQrCode | null> => {
+    try {
+      return await request<ApiQrCode>("/customer/qr/")
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) return null
+      throw err
+    }
+  },
+  generate: () => request<ApiQrCode>("/customer/qr/generate/", { method: "POST" }),
+  regenerate: () => request<ApiQrCode>("/customer/qr/regenerate/", { method: "POST" }),
+  /** Fetches the existing QR, generating one on first use. */
+  getOrCreate: async (): Promise<ApiQrCode> => (await qrApi.get()) ?? qrApi.generate(),
+}
+
+// ---------------------------------------------------------------------
+// Analytics
+// ---------------------------------------------------------------------
+
+export interface ApiAnalyticsEvent {
+  id: number
+  event_type: "PROFILE_VIEW" | "NFC_TAP" | "QR_SCAN" | "SOCIAL_CLICK"
+  device: string
+  ip_address: string | null
+  source: string
+  metadata: string
+  created_at: string
+}
+
+interface PeriodBreakdown {
+  today: number
+  week: number
+  month: number
+  year: number
+}
+
+export interface ApiAnalyticsSummary {
+  profile_views: PeriodBreakdown
+  nfc_taps: PeriodBreakdown
+  qr_scans: PeriodBreakdown
+  social_clicks: PeriodBreakdown
+  totals: { profile_views: number; nfc_taps: number; qr_scans: number; social_clicks: number }
+}
+
+export interface ApiAnalyticsOverview {
+  totals: ApiAnalyticsSummary["totals"]
+  recent: ApiAnalyticsEvent[]
+}
+
+export const analyticsApi = {
+  getOverview: () => request<ApiAnalyticsOverview>("/customer/analytics/"),
+  getSummary: () => request<ApiAnalyticsSummary>("/customer/analytics/summary/"),
+  getViews: (page = 1, pageSize = 100) =>
+    requestPaginated<ApiAnalyticsEvent>(`/customer/analytics/views/?page=${page}&page_size=${pageSize}`),
+  getTaps: (page = 1, pageSize = 100) =>
+    requestPaginated<ApiAnalyticsEvent>(`/customer/analytics/taps/?page=${page}&page_size=${pageSize}`),
+  getScans: (page = 1, pageSize = 100) =>
+    requestPaginated<ApiAnalyticsEvent>(`/customer/analytics/scans/?page=${page}&page_size=${pageSize}`),
+}
+
+// ---------------------------------------------------------------------
+// Orders
+// ---------------------------------------------------------------------
+
+export interface ApiOrderItem {
   id: number
   card_type: string
   color: string
@@ -1729,16 +1699,12 @@ interface ApiCustomerOrderItem {
   unit_price: string
   line_total: string
 }
-<<<<<<< HEAD
 export interface ApiOrderStatusHistory {
   status: string
   note: string
   created_at: string
 }
 export interface ApiOrder {
-=======
-interface ApiCustomerOrder {
->>>>>>> b82680aac13f3627b3ea99a2417041dd3442cc04
   id: number
   order_number: string
   status: string
@@ -1752,22 +1718,14 @@ interface ApiCustomerOrder {
   subtotal: string
   discount: string
   total: string
-<<<<<<< HEAD
   tracking_number: string
   notes: string
   items: ApiOrderItem[]
   status_history: ApiOrderStatusHistory[]
-=======
-  tracking_number: string | null
-  notes: string
-  items: ApiCustomerOrderItem[]
-  status_history: { status: string; note: string; created_at: string }[]
->>>>>>> b82680aac13f3627b3ea99a2417041dd3442cc04
   created_at: string
   updated_at: string
 }
 
-<<<<<<< HEAD
 export interface CreateOrderPayload {
   shipping_full_name: string
   shipping_phone: string
@@ -1833,189 +1791,6 @@ export const notificationsApi = {
 // ---------------------------------------------------------------------
 
 export interface ApiCustomerSettings {
-=======
-// customer_orders has no per-item product line/name or shipping-cost
-// field, and its Status enum ("PENDING","PROCESSING",...) doesn't carry a
-// tracking timeline — synthesize the 5-step timeline the same way
-// AdminOrderSerializer does, so the existing Order-shaped UI (which
-// expects `tracking`) still renders sensibly.
-const CUSTOMER_ORDER_STEP_ORDER = ["PENDING", "PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED"]
-const CUSTOMER_ORDER_TRACKING_LABELS = ["Order Placed", "Order Confirmed", "Shipped", "Out for Delivery", "Delivered"]
-
-function toFrontendCustomerOrder(o: ApiCustomerOrder): Order {
-  const reached = CUSTOMER_ORDER_STEP_ORDER.indexOf(o.status)
-  const cancelled = o.status === "CANCELLED"
-  const tracking: TrackingStep[] = CUSTOMER_ORDER_TRACKING_LABELS.map((label, i) => {
-    const done = cancelled ? i === 0 : reached >= 0 && i <= reached
-    return { label, done, date: done ? o.updated_at : null }
-  })
-  return {
-    id: String(o.id),
-    customerId: "",
-    customerName: o.shipping_full_name,
-    customerEmail: "",
-    customerPhone: o.shipping_phone,
-    items: o.items.map((it) => ({
-      productId: String(it.id),
-      name: `${CARD_TYPE_MAP[it.card_type] ?? "Standard"} Card`,
-      cardType: CARD_TYPE_MAP[it.card_type] ?? "Standard",
-      color: it.color,
-      qty: it.quantity,
-      price: Number(it.unit_price),
-    })),
-    amount: Number(o.subtotal),
-    shipping: 0,
-    total: Number(o.total),
-    paymentMethod: "COD",
-    paymentStatus: "Pending",
-    status: ORDER_STATUS_MAP[o.status] ?? "Pending",
-    date: o.created_at,
-    address: {
-      line1: o.shipping_address,
-      city: o.shipping_city,
-      state: o.shipping_state,
-      pincode: o.shipping_postal_code,
-      country: o.shipping_country,
-    },
-    tracking,
-    assignedCardId: null,
-  }
-}
-
-export const customerOrderApi = {
-  mine: async (): Promise<Order[]> => {
-    const envelope = await requestEnvelope<ApiCustomerOrder[]>("/customer/orders/?page_size=100")
-    return (envelope.data ?? []).map(toFrontendCustomerOrder)
-  },
-
-  get: async (id: string): Promise<Order> =>
-    toFrontendCustomerOrder(await request<ApiCustomerOrder>(`/customer/orders/${id}/`)),
-}
-
-// ---------------------------------------------------------------------
-// Customer analytics (customer_management.customer_analytics)
-// ---------------------------------------------------------------------
-
-export interface CustomerAnalyticsSummary {
-  profileViews: { today: number; week: number; month: number; year: number }
-  nfcTaps: { today: number; week: number; month: number; year: number }
-  qrScans: { today: number; week: number; month: number; year: number }
-  socialClicks: { today: number; week: number; month: number; year: number }
-  totals: { profileViews: number; nfcTaps: number; qrScans: number; socialClicks: number }
-}
-
-interface ApiPeriodBucket {
-  today: number
-  week: number
-  month: number
-  year: number
-}
-
-export interface AnalyticsEventItem {
-  device: string
-  source: string
-  createdAt: string
-}
-
-async function fetchAnalyticsEvents(path: string): Promise<AnalyticsEventItem[]> {
-  const envelope = await requestEnvelope<{ device: string; source: string; created_at: string }[]>(
-    `${path}?page_size=100`,
-  )
-  return (envelope.data ?? []).map((e) => ({ device: e.device, source: e.source, createdAt: e.created_at }))
-}
-
-export const customerAnalyticsApi = {
-  summary: async (): Promise<CustomerAnalyticsSummary> => {
-    const d = await request<{
-      profile_views: ApiPeriodBucket
-      nfc_taps: ApiPeriodBucket
-      qr_scans: ApiPeriodBucket
-      social_clicks: ApiPeriodBucket
-      totals: { profile_views: number; nfc_taps: number; qr_scans: number; social_clicks: number }
-    }>("/customer/analytics/summary/")
-    return {
-      profileViews: d.profile_views,
-      nfcTaps: d.nfc_taps,
-      qrScans: d.qr_scans,
-      socialClicks: d.social_clicks,
-      totals: {
-        profileViews: d.totals.profile_views,
-        nfcTaps: d.totals.nfc_taps,
-        qrScans: d.totals.qr_scans,
-        socialClicks: d.totals.social_clicks,
-      },
-    }
-  },
-
-  // Event-level detail for building charts (day-bucketed series, device
-  // breakdown) the summary endpoint above can't provide — it only gives
-  // cumulative today/week/month/year buckets. Capped at one page (100
-  // events): plenty for a recent-activity chart, not meant for full export.
-  taps: async (): Promise<AnalyticsEventItem[]> => fetchAnalyticsEvents("/customer/analytics/taps/"),
-  views: async (): Promise<AnalyticsEventItem[]> => fetchAnalyticsEvents("/customer/analytics/views/"),
-  scans: async (): Promise<AnalyticsEventItem[]> => fetchAnalyticsEvents("/customer/analytics/scans/"),
-}
-
-// ---------------------------------------------------------------------
-// Customer leads (customer_management.customer_leads) — only the count is
-// needed today (Analytics' "Leads Generated" stat); no leads list screen
-// exists yet, so nothing else from this app is wired up.
-// ---------------------------------------------------------------------
-
-export const customerLeadApi = {
-  count: async (): Promise<number> => {
-    const envelope = await requestEnvelope<unknown[]>("/customer/leads/?page_size=1")
-    return envelope.pagination?.count ?? 0
-  },
-}
-
-// ---------------------------------------------------------------------
-// Customer dashboard (customer_management.customer_dashboard)
-// ---------------------------------------------------------------------
-
-export interface CustomerDashboardData {
-  totals: { profileViews: number; nfcTaps: number; qrScans: number; leads: number; orders: number }
-}
-
-export const customerDashboardApi = {
-  get: async (): Promise<CustomerDashboardData> => {
-    const d = await request<{
-      totals: { profile_views: number; nfc_taps: number; qr_scans: number; leads: number; orders: number }
-    }>("/customer/dashboard/")
-    return {
-      totals: {
-        profileViews: d.totals.profile_views,
-        nfcTaps: d.totals.nfc_taps,
-        qrScans: d.totals.qr_scans,
-        leads: d.totals.leads,
-        orders: d.totals.orders,
-      },
-    }
-  },
-}
-
-// ---------------------------------------------------------------------
-// Customer settings (customer_management.customer_settings) — privacy +
-// notification preferences. Distinct from `profileApi.getPrivacySettings`
-// (which reads/writes profiles.Profile.profile_public etc. directly);
-// this backs the separate CustomerSettings model added alongside it.
-// ---------------------------------------------------------------------
-
-export interface CustomerSettingsData {
-  showEmail: boolean
-  showPhone: boolean
-  showCompany: boolean
-  showSocialLinks: boolean
-  language: string
-  timezone: string
-  notifyOrderUpdates: boolean
-  notifyNfcUpdates: boolean
-  notifyProfileViews: boolean
-  notifySystemMessages: boolean
-}
-
-interface ApiCustomerSettings {
->>>>>>> b82680aac13f3627b3ea99a2417041dd3442cc04
   id: number
   show_email: boolean
   show_phone: boolean
@@ -2030,7 +1805,6 @@ interface ApiCustomerSettings {
   updated_at: string
 }
 
-<<<<<<< HEAD
 export const customerSettingsApi = {
   getMine: () => request<ApiCustomerSettings>("/customer/settings/"),
   updateMine: (patch: Partial<Omit<ApiCustomerSettings, "id" | "updated_at">>) =>
@@ -2056,41 +1830,4 @@ export interface ApiDashboard {
 
 export const dashboardApi = {
   get: () => request<ApiDashboard>("/customer/dashboard/"),
-=======
-function toFrontendCustomerSettings(s: ApiCustomerSettings): CustomerSettingsData {
-  return {
-    showEmail: s.show_email,
-    showPhone: s.show_phone,
-    showCompany: s.show_company,
-    showSocialLinks: s.show_social_links,
-    language: s.language,
-    timezone: s.timezone,
-    notifyOrderUpdates: s.notify_order_updates,
-    notifyNfcUpdates: s.notify_nfc_updates,
-    notifyProfileViews: s.notify_profile_views,
-    notifySystemMessages: s.notify_system_messages,
-  }
-}
-
-export const customerSettingsApi = {
-  get: async (): Promise<CustomerSettingsData> =>
-    toFrontendCustomerSettings(await request<ApiCustomerSettings>("/customer/settings/")),
-
-  update: async (patch: Partial<CustomerSettingsData>): Promise<CustomerSettingsData> => {
-    const body: Record<string, unknown> = {}
-    if (patch.showEmail !== undefined) body.show_email = patch.showEmail
-    if (patch.showPhone !== undefined) body.show_phone = patch.showPhone
-    if (patch.showCompany !== undefined) body.show_company = patch.showCompany
-    if (patch.showSocialLinks !== undefined) body.show_social_links = patch.showSocialLinks
-    if (patch.language !== undefined) body.language = patch.language
-    if (patch.timezone !== undefined) body.timezone = patch.timezone
-    if (patch.notifyOrderUpdates !== undefined) body.notify_order_updates = patch.notifyOrderUpdates
-    if (patch.notifyNfcUpdates !== undefined) body.notify_nfc_updates = patch.notifyNfcUpdates
-    if (patch.notifyProfileViews !== undefined) body.notify_profile_views = patch.notifyProfileViews
-    if (patch.notifySystemMessages !== undefined) body.notify_system_messages = patch.notifySystemMessages
-    return toFrontendCustomerSettings(
-      await request<ApiCustomerSettings>("/customer/settings/", { method: "PUT", body }),
-    )
-  },
->>>>>>> b82680aac13f3627b3ea99a2417041dd3442cc04
 }

@@ -18,16 +18,9 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ErrorState } from "@/components/customer/ErrorState"
 import { useCustomerAuthStore } from "@/store/auth-store"
-<<<<<<< HEAD
 import { ordersApi, type ApiOrder } from "@/lib/api"
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/mock-api"
 import { orderStatusLabel } from "@/lib/order-status"
-=======
-import { useDataStore } from "@/store/data-store"
-import { customerOrderApi } from "@/lib/api"
-import { formatCurrency, formatDate } from "@/lib/mock-api"
-import type { Order, OrderStatus } from "@/types"
->>>>>>> b82680aac13f3627b3ea99a2417041dd3442cc04
 
 function productSummary(order: ApiOrder) {
   const [first, ...rest] = order.items
@@ -68,7 +61,6 @@ function downloadInvoice(order: ApiOrder) {
 
 export default function CustomerOrders() {
   const customer = useCustomerAuthStore((s) => s.customer)
-<<<<<<< HEAD
   const [page, setPage] = useState(1)
   const [trackOrder, setTrackOrder] = useState<ApiOrder | null>(null)
 
@@ -76,17 +68,6 @@ export default function CustomerOrders() {
     queryKey: ["customer-orders", page],
     queryFn: () => ordersApi.list(page),
     enabled: Boolean(customer),
-=======
-  // No customer-facing support-ticket API exists yet (admin_api/support is
-  // admin-only) — the "Contact Support" dialog below still logs into the
-  // local mock ticket store until that endpoint exists.
-  const addTicket = useDataStore((s) => s.addTicket)
-
-  const { data, isLoading } = useQuery({
-    queryKey: ["customer-orders", customer?.id],
-    queryFn: async () => (await customerOrderApi.mine()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-    enabled: Boolean(customer?.id),
->>>>>>> b82680aac13f3627b3ea99a2417041dd3442cc04
   })
 
   if (!customer) return null

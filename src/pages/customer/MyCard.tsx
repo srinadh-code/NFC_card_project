@@ -37,13 +37,9 @@ import { useEnsuredProfile } from "@/hooks/use-ensured-profile"
 import { formatDate } from "@/lib/mock-api"
 import { orderStatusLabel } from "@/lib/order-status"
 import { downloadQrPng, shareOrCopyLink } from "@/components/customer/qr-utils"
-<<<<<<< HEAD
 import { analyticsApi, nfcApi, ordersApi } from "@/lib/api"
 
 const IN_PROGRESS_ORDER_STATUSES = ["PENDING", "CONFIRMED", "PROCESSING", "PRINTED", "SHIPPED"]
-=======
-import { nfcApi, customerOrderApi, customerAnalyticsApi } from "@/lib/api"
->>>>>>> b82680aac13f3627b3ea99a2417041dd3442cc04
 
 // Known demo UIDs seeded by `python manage.py seed_demo_cards` on the
 // backend — used only to prefill the manual-entry/"simulate scan" demo
@@ -86,20 +82,6 @@ export default function CustomerMyCard() {
   const summaryQuery = useQuery({
     queryKey: ["customer-analytics-summary"],
     queryFn: analyticsApi.getSummary,
-    enabled: Boolean(customer),
-  })
-
-  const { data: orders = [] } = useQuery({
-    queryKey: ["customer-orders", customer?.id],
-    queryFn: customerOrderApi.mine,
-    enabled: Boolean(customer),
-  })
-
-  // Only fetched for the "assigned but not yet activated" state below, but
-  // called unconditionally here since hooks can't run inside a branch.
-  const { data: analyticsSummary } = useQuery({
-    queryKey: ["customer-analytics-summary", customer?.id],
-    queryFn: customerAnalyticsApi.summary,
     enabled: Boolean(customer),
   })
 
@@ -309,19 +291,7 @@ export default function CustomerMyCard() {
   // A card has already been assigned by admin but the customer hasn't
   // tapped "Activate" yet — no need to type/guess a UID, it's right here.
   if (assignedCard) {
-<<<<<<< HEAD
     const totals = summaryQuery.data?.totals
-=======
-    const totals = {
-      taps: analyticsSummary?.totals.nfcTaps ?? 0,
-      profileViews: analyticsSummary?.totals.profileViews ?? 0,
-      qrScans: analyticsSummary?.totals.qrScans ?? 0,
-      // No customer-facing "contact saved" event exists yet (that action is
-      // only tracked in an internal table with no customer API) — 0 until
-      // that's wired up, rather than mislabeling social-link clicks as this.
-      shares: 0,
-    }
->>>>>>> b82680aac13f3627b3ea99a2417041dd3442cc04
     const displayName = profile?.fullName ?? customer.name
     const displayAvatar = profile?.avatar ?? customer.avatar
     const displayEmail = profile?.email ?? customer.email

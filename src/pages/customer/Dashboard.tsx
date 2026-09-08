@@ -29,33 +29,10 @@ import { ChartContainer } from "@/components/ui/chart-container"
 import { ErrorState } from "@/components/customer/ErrorState"
 import { StatCard } from "@/components/customer/StatCard"
 import { useCustomerAuthStore } from "@/store/auth-store"
-<<<<<<< HEAD
 import { analyticsApi, dashboardApi, notificationsApi, toFrontendCard } from "@/lib/api"
-=======
-import { nfcApi, customerAnalyticsApi } from "@/lib/api"
-
-// customer_analytics only exposes cumulative today/week/month/year buckets,
-// not a clean "last 7 days vs previous 7 days" split — no real delta to
-// compute against, so this reports null (StatCard already renders that as
-// no arrow) rather than fabricating a week-over-week trend.
-function buildDashboardData(
-  summary: Awaited<ReturnType<typeof customerAnalyticsApi.summary>>,
-  tapEvents: Awaited<ReturnType<typeof customerAnalyticsApi.taps>>,
-) {
-  const totals = {
-    taps: summary.totals.nfcTaps,
-    // No unique-visitor dedup exists server-side yet (would need IP/session
-    // tracking) — 0 until that's built, rather than reusing an unrelated count.
-    uniqueVisitors: 0,
-    qrScans: summary.totals.qrScans,
-    profileViews: summary.totals.profileViews,
-  }
-  const deltas = { taps: null, uniqueVisitors: null, qrScans: null, profileViews: null }
->>>>>>> b82680aac13f3627b3ea99a2417041dd3442cc04
 
 function bucketTapsByDay(events: { created_at: string }[], days: number) {
   const now = new Date()
-<<<<<<< HEAD
   const cutoff = new Date(now)
   cutoff.setDate(now.getDate() - days)
   cutoff.setHours(0, 0, 0, 0)
@@ -65,15 +42,6 @@ function bucketTapsByDay(events: { created_at: string }[], days: number) {
     const date = new Date(event.created_at)
     if (date < cutoff) continue
     const key = date.toISOString().slice(0, 10)
-=======
-  const last30Start = new Date(now)
-  last30Start.setDate(now.getDate() - 30)
-  const byDate = new Map<string, number>()
-  for (const event of tapEvents) {
-    const d = new Date(event.createdAt)
-    if (d < last30Start) continue
-    const key = d.toISOString().slice(0, 10)
->>>>>>> b82680aac13f3627b3ea99a2417041dd3442cc04
     byDate.set(key, (byDate.get(key) ?? 0) + 1)
   }
 
@@ -83,15 +51,6 @@ function bucketTapsByDay(events: { created_at: string }[], days: number) {
       date: new Date(date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
       taps,
     }))
-<<<<<<< HEAD
-=======
-
-  // No location data is captured by the tap-tracking endpoint yet — the
-  // widget below already renders a graceful "no data" state for this.
-  const topLocations: { location: string; taps: number; pct: number }[] = []
-
-  return { totals, deltas, series, topLocations }
->>>>>>> b82680aac13f3627b3ea99a2417041dd3442cc04
 }
 
 export default function CustomerDashboard() {
@@ -124,26 +83,10 @@ export default function CustomerDashboard() {
   )
   const activeCard = useMemo(() => cards.find((c) => c.status === "Active") ?? cards[0] ?? null, [cards])
 
-<<<<<<< HEAD
   const series = useMemo(
     () => (tapsSeriesQuery.data ? bucketTapsByDay(tapsSeriesQuery.data.items, 30) : []),
     [tapsSeriesQuery.data],
   )
-=======
-  const { data: summary, isLoading: summaryLoading } = useQuery({
-    queryKey: ["customer-analytics-summary", customer?.id],
-    queryFn: customerAnalyticsApi.summary,
-    enabled: Boolean(customer?.id),
-  })
-  const { data: tapTimestamps, isLoading: tapsLoading } = useQuery({
-    queryKey: ["customer-analytics-taps", customer?.id],
-    queryFn: customerAnalyticsApi.taps,
-    enabled: Boolean(customer?.id),
-  })
-
-  const isLoading = summaryLoading || tapsLoading
-  const data = summary && tapTimestamps ? buildDashboardData(summary, tapTimestamps) : undefined
->>>>>>> b82680aac13f3627b3ea99a2417041dd3442cc04
 
   if (!customer) return null
 

@@ -1,21 +1,17 @@
 import { useState } from "react"
-import { Navigate, Outlet } from "react-router-dom"
-import { useCustomerAuthStore, useAdminAuthStore } from "@/store/auth-store"
+import { Outlet } from "react-router-dom"
 import { CustomerSidebar } from "@/components/layout/CustomerSidebar"
 import { CustomerTopbar } from "@/components/layout/CustomerTopbar"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 
+/**
+ * Pure chrome (sidebar + topbar) for the customer portal. Auth is enforced
+ * upstream by <ProtectedRoute role="CUSTOMER"/> in App.tsx — this component
+ * never mounts unless that guard already confirmed a real customer
+ * session, so it has no auth logic of its own.
+ */
 export default function CustomerLayout() {
-  const customer = useCustomerAuthStore((s) => s.customer)
-  const admin = useAdminAuthStore((s) => s.admin)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-
-  if (!customer) {
-    // Signed in as the other role — send them to their own dashboard
-    // instead of bouncing a valid session back to the login screen.
-    if (admin) return <Navigate to="/admin/dashboard" replace />
-    return <Navigate to="/login" replace />
-  }
 
   return (
     <div className="flex min-h-screen bg-muted/30">

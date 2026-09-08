@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react"
-import { Navigate, useNavigate } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { useMutation } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Info } from "lucide-react"
@@ -49,10 +49,11 @@ export default function Checkout() {
     },
   })
 
-  // Ordering an NFC card requires an account — the order must be tied to a
-  // real customer so it shows up on their dashboard immediately, and so an
-  // admin can later assign/ship a physical card against it. Anyone who
-  // isn't signed in gets sent to login and comes right back here after.
+  // Redirecting an unauthenticated visitor is <ProtectedRoute role="CUSTOMER">'s
+  // job (see App.tsx) — it wraps this route and never mounts this component
+  // at all unless a real, token-backed customer session exists. `customer`
+  // is only ever null here for a single render right after logout, before
+  // the route transition away completes.
   useEffect(() => {
     if (customer) {
       setForm((f) => ({ ...f, fullName: f.fullName || customer.name }))
@@ -67,7 +68,7 @@ export default function Checkout() {
   const total = Math.max(0, sub - discount)
 
   if (!customer) {
-    return <Navigate to="/login" state={{ from: "/checkout" }} replace />
+    return null
   }
 
   function update<K extends keyof BillingForm>(key: K, value: BillingForm[K]) {

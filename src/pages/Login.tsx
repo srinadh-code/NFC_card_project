@@ -1,41 +1,38 @@
 import { useState } from "react"
-import { Navigate, Link, useNavigate, useLocation } from "react-router-dom"
+import { Navigate, Link, useNavigate, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 import { Fingerprint, Sparkles, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { useAdminAuthStore, useCustomerAuthStore } from "@/store/auth-store"
+import { ForgotPasswordDialog } from "@/components/auth/ForgotPasswordDialog"
+import { useCustomerAuthStore } from "@/store/auth-store"
 import { ApiError, authApi } from "@/lib/api"
+import { sanitizeRedirect } from "@/lib/utils"
 
 /**
- * Single unified login for both roles. Tries the customer login first, then
- * the admin login — each is a real API call validated against that role
- * server-side, so this page only decides where to send the user once one
- * of them succeeds.
+ * Customer-only login for the public storefront and customer portal. Never
+ * looks at the admin session and never authenticates against the admin
+ * role — an existing admin session on this browser has no effect here, and
+ * a password that only belongs to an admin account is rejected below with
+ * the same "invalid credentials" message a wrong password would get. Admin
+ * sign-in lives entirely at /admin/login (see pages/admin/AdminLogin.tsx).
  */
 export default function Login() {
   const navigate = useNavigate()
-  const location = useLocation()
+  const [searchParams] = useSearchParams()
 
-  const admin = useAdminAuthStore((s) => s.admin)
-  const adminLogin = useAdminAuthStore((s) => s.login)
   const customer = useCustomerAuthStore((s) => s.customer)
   const customerLogin = useCustomerAuthStore((s) => s.login)
 
-  // If we got here via the "order a card while logged out" redirect (see
-  // Checkout.tsx), send the customer right back to finish checkout instead
-  // of dropping them on the dashboard.
-  const redirectTo = (location.state as { from?: string } | null)?.from || "/dashboard"
+  // Arriving via "?redirect=/checkout" (see Checkout.tsx / CustomerLayout.tsx)
+  // sends the visitor back to whatever they were trying to reach instead of
+  // dropping them on the generic dashboard.
+  const redirectTo = sanitizeRedirect(searchParams.get("redirect"), "/dashboard")
+  const redirectQuery = searchParams.get("redirect")
+    ? `?redirect=${encodeURIComponent(searchParams.get("redirect")!)}`
+    : ""
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -44,7 +41,6 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false)
   const [forgotOpen, setForgotOpen] = useState(false)
 
-  if (admin) return <Navigate to="/admin/dashboard" replace />
   if (customer) return <Navigate to={redirectTo} replace />
 
   async function handleSubmit(e: React.FormEvent) {
@@ -52,21 +48,13 @@ export default function Login() {
     setSubmitting(true)
     setError(null)
     try {
-      const customerResult = await customerLogin(email, password)
-      if (customerResult.success) {
+      const result = await customerLogin(email, password)
+      if (result.success) {
         toast.success("Logged in successfully. Welcome back!")
         navigate(redirectTo)
         return
       }
-
-      const adminResult = await adminLogin(email, password)
-      if (adminResult.success) {
-        toast.success("Welcome back, Admin!")
-        navigate("/admin/dashboard")
-        return
-      }
-
-      const message = customerResult.error ?? adminResult.error ?? "Invalid credentials."
+      const message = result.error ?? "Invalid credentials."
       setError(message)
       toast.error(message)
     } finally {
@@ -222,12 +210,14 @@ export default function Login() {
 
           <p className="text-center text-sm text-muted-foreground">
             Don&apos;t have an account?{" "}
-            <Link
-              to="/register"
-              state={location.state}
-              className="font-medium text-primary hover:underline"
-            >
+            <Link to={`/register${redirectQuery}`} className="font-medium text-primary hover:underline">
               Sign Up
+            </Link>
+          </p>
+
+          <p className="text-center text-xs text-muted-foreground">
+            <Link to="/admin/login" className="hover:underline">
+              Admin? Sign in here
             </Link>
           </p>
         </div>
@@ -235,121 +225,5 @@ export default function Login() {
 
       <ForgotPasswordDialog open={forgotOpen} onOpenChange={setForgotOpen} />
     </div>
-  )
-}
-
-function ForgotPasswordDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const [step, setStep] = useState<1 | 2>(1)
-  const [email, setEmail] = useState("")
-  const [otp, setOtp] = useState("")
-  const [newPassword, setNewPassword] = useState("")
-  const [submitting, setSubmitting] = useState(false)
-
-  function reset() {
-    setStep(1)
-    setEmail("")
-    setOtp("")
-    setNewPassword("")
-  }
-
-  async function handleRequestCode(e: React.FormEvent) {
-    e.preventDefault()
-    if (!email.trim()) return
-    setSubmitting(true)
-    try {
-      await authApi.forgotPassword({ email: email.trim() })
-      toast.success("If that account exists, a reset code has been sent to it.")
-      setStep(2)
-    } catch {
-      toast.error("Something went wrong. Please try again.")
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  async function handleReset(e: React.FormEvent) {
-    e.preventDefault()
-    if (otp.length !== 6 || !newPassword) return
-    setSubmitting(true)
-    try {
-      await authApi.resetPassword({ email: email.trim(), otp, new_password: newPassword })
-      toast.success("Password reset. You can now log in.")
-      onOpenChange(false)
-      reset()
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Invalid or expired code.")
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        onOpenChange(v)
-        if (!v) reset()
-      }}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Forgot Password</DialogTitle>
-          <DialogDescription>
-            {step === 1
-              ? "Enter your account email and we'll send you a reset code."
-              : `Enter the 6-digit code sent to ${email} and choose a new password.`}
-          </DialogDescription>
-        </DialogHeader>
-
-        {step === 1 ? (
-          <form onSubmit={handleRequestCode} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="forgot-email">Email</Label>
-              <Input
-                id="forgot-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <DialogFooter>
-              <Button type="submit" disabled={submitting}>
-                {submitting ? "Sending..." : "Send Reset Code"}
-              </Button>
-            </DialogFooter>
-          </form>
-        ) : (
-          <form onSubmit={handleReset} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="forgot-otp">6-digit code</Label>
-              <Input
-                id="forgot-otp"
-                inputMode="numeric"
-                maxLength={6}
-                value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="forgot-new-password">New password</Label>
-              <Input
-                id="forgot-new-password"
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                required
-              />
-            </div>
-            <DialogFooter>
-              <Button type="submit" disabled={submitting}>
-                {submitting ? "Resetting..." : "Reset Password"}
-              </Button>
-            </DialogFooter>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
   )
 }
