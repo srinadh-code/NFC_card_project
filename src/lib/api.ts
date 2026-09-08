@@ -1,7 +1,7 @@
-// Centralized API client for the Django backend. Replaces the old
-// mock-api.ts / Zustand-as-backend pattern for the Phase A slice
-// (auth, profile, social/custom links, NFC cards, public profile).
-import type { CustomField, CustomLink, NfcCard, Profile, SocialLink } from "@/types"
+// Centralized API client for the Django backend. Every customer-facing
+// page reads/writes through this file — no page should hold its own
+// fetch() call or mock data.
+import type { CustomField, CustomLink, NfcCard, Profile, Service, SocialLink } from "@/types"
 
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || "http://localhost:8000/api"
 
@@ -23,6 +23,16 @@ export function clearTokens() {
   localStorage.removeItem(REFRESH_KEY)
 }
 
+// Lets auth-store.ts react when a request discovers the session is
+// unrecoverable (refresh token also expired/invalid) without api.ts having
+// to import the store directly (which would create a circular import,
+// since auth-store.ts already imports from here).
+type UnauthorizedHandler = () => void
+let unauthorizedHandler: UnauthorizedHandler | null = null
+export function setUnauthorizedHandler(handler: UnauthorizedHandler) {
+  unauthorizedHandler = handler
+}
+
 export class ApiError extends Error {
   status: number
   errors: Record<string, unknown>
@@ -33,11 +43,21 @@ export class ApiError extends Error {
   }
 }
 
+export interface PaginationMeta {
+  count: number
+  page: number
+  num_pages: number
+  page_size: number
+  next: string | null
+  previous: string | null
+}
+
 interface Envelope<T> {
   success: boolean
   message: string
   data?: T
   errors?: Record<string, unknown>
+  pagination?: PaginationMeta
 }
 
 let refreshInFlight: Promise<boolean> | null = null
@@ -73,7 +93,15 @@ interface RequestOptions {
   isFormData?: boolean
 }
 
-async function request<T>(path: string, options: RequestOptions = {}, retried = false): Promise<T> {
+/** Network-level failure (server unreachable, DNS, offline, CORS) — distinct
+ *  from ApiError, which means "the server responded, but with an error". */
+export class NetworkError extends Error {
+  constructor() {
+    super("Couldn't reach the server. Check your connection and try again.")
+  }
+}
+
+async function rawRequest<T>(path: string, options: RequestOptions = {}, retried = false): Promise<Envelope<T>> {
   const { method = "GET", body, auth = true, isFormData = false } = options
 
   const headers: Record<string, string> = {}
@@ -83,16 +111,24 @@ async function request<T>(path: string, options: RequestOptions = {}, retried = 
     if (token) headers.Authorization = `Bearer ${token}`
   }
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : isFormData ? (body as FormData) : JSON.stringify(body),
-  })
+  let res: Response
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : isFormData ? (body as FormData) : JSON.stringify(body),
+    })
+  } catch {
+    throw new NetworkError()
+  }
 
-  if (res.status === 401 && auth && !retried && getRefreshToken()) {
-    const refreshed = await refreshAccessToken()
-    if (refreshed) return request<T>(path, options, true)
+  if (res.status === 401 && auth) {
+    if (!retried && getRefreshToken()) {
+      const refreshed = await refreshAccessToken()
+      if (refreshed) return rawRequest<T>(path, options, true)
+    }
     clearTokens()
+    unauthorizedHandler?.()
   }
 
   let json: Envelope<T> | null = null
@@ -107,7 +143,20 @@ async function request<T>(path: string, options: RequestOptions = {}, retried = 
     throw new ApiError(message, res.status, json?.errors ?? {})
   }
 
+  return json
+}
+
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const json = await rawRequest<T>(path, options)
   return json.data as T
+}
+
+async function requestPaginated<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<{ items: T[]; pagination: PaginationMeta | null }> {
+  const json = await rawRequest<T[]>(path, options)
+  return { items: (json.data as T[] | undefined) ?? [], pagination: json.pagination ?? null }
 }
 
 // ---------------------------------------------------------------------
@@ -160,12 +209,11 @@ export const authApi = {
 }
 
 // ---------------------------------------------------------------------
-// Profile — adapts the backend's shape to the frontend's existing
-// `Profile` / `SocialLink` / `CustomLink` / `CustomField` types so
-// components like DigitalCardPreview and CustomFieldsEditor need no
-// changes. Real backend ids are tracked in side caches (below) so the
-// write paths (which the frontend types don't carry ids for, in the
-// case of SocialLink) can still target the right row.
+// Profile — merges two real backend endpoints that both read/write the
+// same underlying Profile row: `/profiles/me/` (social/custom links +
+// custom fields, plus the enforced public-visibility flags) and
+// `/customer/profile/` (the extended personal/company/address field set +
+// image uploads). Adapts both into the frontend's existing `Profile` shape.
 // ---------------------------------------------------------------------
 
 interface ApiSocialLink {
@@ -211,6 +259,61 @@ interface ApiProfile {
   created_at: string
 }
 
+interface ApiCustomerProfile {
+  id: number
+  username: string
+  full_name: string
+  designation: string
+  company_name: string
+  phone: string
+  alternate_phone: string
+  email: string
+  bio: string
+  address: string
+  city: string
+  state: string
+  country: string
+  google_maps_url: string
+  profile_image: string | null
+  cover_image: string | null
+  profile_url: string
+  status: "ACTIVE" | "SUSPENDED"
+  created_at: string
+  updated_at: string
+}
+
+interface ApiPublicProfile {
+  username: string
+  full_name: string
+  designation: string
+  company: string
+  email: string | null
+  phone: string | null
+  website: string
+  address: string
+  city: string
+  state: string
+  country: string
+  google_maps_url: string
+  bio: string
+  avatar: string
+  cover_image: string | null
+  social_links: ApiSocialLink[]
+  custom_links: ApiCustomLink[]
+  custom_fields: ApiCustomField[]
+  services: ApiCustomerService[]
+}
+
+interface ApiCustomerService {
+  id: number
+  title: string
+  description: string
+  display_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
 // platform -> backend id, refreshed on every profile fetch.
 const socialLinkIdByPlatform = new Map<string, number>()
 const customLinkIdCache = new Map<string, number>()
@@ -239,10 +342,16 @@ function toFrontendProfile(p: ApiProfile): Profile {
     company: p.company,
     email: p.email,
     phone: p.phone,
+    alternatePhone: "",
     website: p.website,
     address: p.address,
+    city: "",
+    state: "",
+    country: "",
+    googleMapsUrl: "",
     bio: p.bio,
     avatar: p.avatar,
+    coverImage: null,
     status: p.status === "ACTIVE" ? "Active" : "Suspended",
     createdOn: p.created_at,
     socialLinks: p.social_links
@@ -257,32 +366,80 @@ function toFrontendProfile(p: ApiProfile): Profile {
       .slice()
       .sort((a, b) => a.display_order - b.display_order)
       .map((f) => ({ id: String(f.id), label: f.label, value: f.value, order: f.display_order })),
-    // Extra fields not on the shared Profile type, read via the
-    // `profileApi.getPrivacySettings` helper below instead.
+    services: [],
+  }
+}
+
+function toFrontendService(s: ApiCustomerService): Service {
+  return { id: String(s.id), title: s.title, description: s.description, order: s.display_order, isActive: s.is_active }
+}
+
+function mergeExtendedProfile(base: Profile, extended: ApiCustomerProfile): Profile {
+  return {
+    ...base,
+    designation: extended.designation,
+    company: extended.company_name,
+    phone: extended.phone,
+    alternatePhone: extended.alternate_phone,
+    bio: extended.bio,
+    address: extended.address,
+    city: extended.city,
+    state: extended.state,
+    country: extended.country,
+    googleMapsUrl: extended.google_maps_url,
+    avatar: extended.profile_image ?? base.avatar,
+    coverImage: extended.cover_image,
   }
 }
 
 export const profileApi = {
-  getMine: async (): Promise<Profile> => toFrontendProfile(await request<ApiProfile>("/profiles/me/")),
+  getMine: async (): Promise<Profile> => {
+    const [core, extended, myServices] = await Promise.all([
+      request<ApiProfile>("/profiles/me/"),
+      request<ApiCustomerProfile>("/customer/profile/"),
+      request<ApiCustomerService[]>("/customer/services/"),
+    ])
+    const merged = mergeExtendedProfile(toFrontendProfile(core), extended)
+    merged.services = myServices.slice().sort((a, b) => a.display_order - b.display_order).map(toFrontendService)
+    return merged
+  },
 
   updateMine: async (patch: {
     fullName?: string
     designation?: string
     company?: string
     phone?: string
+    alternatePhone?: string
     website?: string
     address?: string
+    city?: string
+    state?: string
+    country?: string
+    googleMapsUrl?: string
     bio?: string
   }): Promise<Profile> => {
     const body: Record<string, unknown> = {}
     if (patch.fullName !== undefined) body.full_name = patch.fullName
     if (patch.designation !== undefined) body.designation = patch.designation
-    if (patch.company !== undefined) body.company = patch.company
+    if (patch.company !== undefined) body.company_name = patch.company
     if (patch.phone !== undefined) body.phone = patch.phone
-    if (patch.website !== undefined) body.website = patch.website
+    if (patch.alternatePhone !== undefined) body.alternate_phone = patch.alternatePhone
     if (patch.address !== undefined) body.address = patch.address
+    if (patch.city !== undefined) body.city = patch.city
+    if (patch.state !== undefined) body.state = patch.state
+    if (patch.country !== undefined) body.country = patch.country
+    if (patch.googleMapsUrl !== undefined) body.google_maps_url = patch.googleMapsUrl
     if (patch.bio !== undefined) body.bio = patch.bio
-    return toFrontendProfile(await request<ApiProfile>("/profiles/me/", { method: "PATCH", body }))
+
+    await request<ApiCustomerProfile>("/customer/profile/", { method: "PUT", body })
+
+    // `website` isn't part of the customer_profiles field set — it still
+    // lives on the original profiles.Profile serializer.
+    if (patch.website !== undefined) {
+      await request<ApiProfile>("/profiles/me/", { method: "PATCH", body: { website: patch.website } })
+    }
+
+    return profileApi.getMine()
   },
 
   getPrivacySettings: async () => {
@@ -302,20 +459,31 @@ export const profileApi = {
     return request<ApiProfile>("/profiles/me/", { method: "PATCH", body })
   },
 
-  uploadAvatar: async (file: File): Promise<Profile> => {
+  uploadProfileImage: async (file: File): Promise<Profile> => {
     const formData = new FormData()
-    formData.append("avatar", file)
-    return toFrontendProfile(
-      await request<ApiProfile>("/profiles/me/avatar/", { method: "POST", body: formData, isFormData: true }),
-    )
+    formData.append("image", file)
+    await request<ApiCustomerProfile>("/customer/profile/upload-image/", {
+      method: "POST",
+      body: formData,
+      isFormData: true,
+    })
+    return profileApi.getMine()
+  },
+
+  uploadCoverImage: async (file: File): Promise<Profile> => {
+    const formData = new FormData()
+    formData.append("image", file)
+    await request<ApiCustomerProfile>("/customer/profile/upload-cover/", {
+      method: "POST",
+      body: formData,
+      isFormData: true,
+    })
+    return profileApi.getMine()
   },
 
   getPublic: async (username: string): Promise<Profile | null> => {
     try {
-      const p = await request<Omit<ApiProfile, "id" | "profile_url" | "status" | "profile_public" | "show_contact_info" | "show_in_search" | "created_at">>(
-        `/profiles/public/${encodeURIComponent(username)}/`,
-        { auth: false },
-      )
+      const p = await request<ApiPublicProfile>(`/profiles/public/${encodeURIComponent(username)}/`, { auth: false })
       return {
         id: p.username,
         customerId: p.username,
@@ -325,10 +493,16 @@ export const profileApi = {
         company: p.company,
         email: p.email ?? "",
         phone: p.phone ?? "",
+        alternatePhone: "",
         website: p.website,
         address: p.address,
+        city: p.city,
+        state: p.state,
+        country: p.country,
+        googleMapsUrl: p.google_maps_url,
         bio: p.bio,
         avatar: p.avatar,
+        coverImage: p.cover_image,
         status: "Active",
         createdOn: "",
         socialLinks: p.social_links
@@ -343,6 +517,10 @@ export const profileApi = {
           .slice()
           .sort((a, b) => a.display_order - b.display_order)
           .map((f) => ({ id: String(f.id), label: f.label, value: f.value, order: f.display_order })),
+        services: p.services
+          .slice()
+          .sort((a, b) => a.display_order - b.display_order)
+          .map(toFrontendService),
       }
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) return null
@@ -350,25 +528,20 @@ export const profileApi = {
     }
   },
 
-  // --- Social links: keyed by platform (matches the frontend SocialLink
-  // type, which has no id). Requires getMine()/getPublic() to have run at
-  // least once so the platform->id cache is populated. ---
-  saveSocialLinks: async (links: SocialLink[]) => {
-    await Promise.all(
-      links.map((link) => {
-        const id = socialLinkIdByPlatform.get(link.platform)
-        if (id === undefined) return Promise.resolve()
-        return request(`/profiles/social-links/${id}/`, {
-          method: "PATCH",
-          body: { url: link.url, enabled: link.enabled },
-        })
-      }),
-    )
-    const order = links.map((l) => socialLinkIdByPlatform.get(l.platform)).filter((v): v is number => v !== undefined)
-    if (order.length) {
-      await request("/profiles/social-links/reorder/", { method: "PATCH", body: { order } })
-    }
-  },
+  // --- Social links: bulk get/replace against the customer_management
+  // endpoint — no id tracking needed, the backend upserts by platform. ---
+  saveSocialLinks: (links: SocialLink[]) =>
+    request("/customer/social-links/", {
+      method: "PUT",
+      body: {
+        links: links.map((l) => ({
+          platform: l.platform,
+          url: l.url,
+          enabled: l.enabled,
+          display_order: l.order,
+        })),
+      },
+    }),
 
   // --- Custom links: full sync (create/update/delete/reorder) against the
   // desired list, diffing against the id cache built by the last fetch. ---
@@ -429,10 +602,48 @@ export const profileApi = {
 }
 
 // ---------------------------------------------------------------------
+// Services — showcased on the public profile page.
+// ---------------------------------------------------------------------
+
+export const servicesApi = {
+  list: async (): Promise<Service[]> =>
+    (await request<ApiCustomerService[]>("/customer/services/"))
+      .slice()
+      .sort((a, b) => a.display_order - b.display_order)
+      .map(toFrontendService),
+
+  create: async (data: { title: string; description: string }): Promise<Service> =>
+    toFrontendService(
+      await request<ApiCustomerService>("/customer/services/", {
+        method: "POST",
+        body: { title: data.title, description: data.description },
+      }),
+    ),
+
+  update: async (id: string, patch: { title?: string; description?: string; isActive?: boolean }): Promise<Service> => {
+    const body: Record<string, unknown> = {}
+    if (patch.title !== undefined) body.title = patch.title
+    if (patch.description !== undefined) body.description = patch.description
+    if (patch.isActive !== undefined) body.is_active = patch.isActive
+    return toFrontendService(
+      await request<ApiCustomerService>(`/customer/services/${id}/`, { method: "PATCH", body }),
+    )
+  },
+
+  remove: (id: string) => request(`/customer/services/${id}/`, { method: "DELETE" }),
+
+  reorder: (orderedIds: string[]) =>
+    request("/customer/services/reorder/", {
+      method: "PATCH",
+      body: { order: orderedIds.map((id) => Number(id)) },
+    }),
+}
+
+// ---------------------------------------------------------------------
 // NFC cards
 // ---------------------------------------------------------------------
 
-interface ApiNfcCard {
+export interface ApiNfcCard {
   id: number
   uid: string
   serial_number: string
@@ -461,7 +672,7 @@ const CARD_STATUS_MAP: Record<string, NfcCard["status"]> = {
   UNASSIGNED: "Unassigned",
 }
 
-function toFrontendCard(c: ApiNfcCard): NfcCard {
+export function toFrontendCard(c: ApiNfcCard): NfcCard {
   return {
     id: String(c.id),
     uid: c.uid,
@@ -479,14 +690,234 @@ function toFrontendCard(c: ApiNfcCard): NfcCard {
 }
 
 export const nfcApi = {
-  mine: async (): Promise<NfcCard[]> => (await request<ApiNfcCard[]>("/nfc/cards/mine/")).map(toFrontendCard),
+  mine: async (): Promise<NfcCard[]> => (await request<ApiNfcCard[]>("/nfc/my-card/")).map(toFrontendCard),
 
   activate: async (uid: string): Promise<NfcCard> =>
-    toFrontendCard(await request<ApiNfcCard>("/nfc/cards/activate/", { method: "POST", body: { uid } })),
+    toFrontendCard(await request<ApiNfcCard>("/nfc/activate/", { method: "POST", body: { uid } })),
+
+  deactivate: async (uid: string): Promise<NfcCard> =>
+    toFrontendCard(await request<ApiNfcCard>("/nfc/deactivate/", { method: "POST", body: { uid } })),
 
   activateAssigned: async (id: string): Promise<NfcCard> =>
     toFrontendCard(await request<ApiNfcCard>(`/nfc/cards/${id}/activate-assigned/`, { method: "POST" })),
 
   resolve: (identifier: string) =>
     request<{ redirect_url: string }>(`/nfc/cards/${encodeURIComponent(identifier)}/`, { auth: false }),
+}
+
+// ---------------------------------------------------------------------
+// QR code
+// ---------------------------------------------------------------------
+
+export interface ApiQrCode {
+  id: number
+  image: string
+  target_url: string
+  created_at: string
+  updated_at: string
+}
+
+export const qrApi = {
+  get: async (): Promise<ApiQrCode | null> => {
+    try {
+      return await request<ApiQrCode>("/customer/qr/")
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) return null
+      throw err
+    }
+  },
+  generate: () => request<ApiQrCode>("/customer/qr/generate/", { method: "POST" }),
+  regenerate: () => request<ApiQrCode>("/customer/qr/regenerate/", { method: "POST" }),
+  /** Fetches the existing QR, generating one on first use. */
+  getOrCreate: async (): Promise<ApiQrCode> => (await qrApi.get()) ?? qrApi.generate(),
+}
+
+// ---------------------------------------------------------------------
+// Analytics
+// ---------------------------------------------------------------------
+
+export interface ApiAnalyticsEvent {
+  id: number
+  event_type: "PROFILE_VIEW" | "NFC_TAP" | "QR_SCAN" | "SOCIAL_CLICK"
+  device: string
+  ip_address: string | null
+  source: string
+  metadata: string
+  created_at: string
+}
+
+interface PeriodBreakdown {
+  today: number
+  week: number
+  month: number
+  year: number
+}
+
+export interface ApiAnalyticsSummary {
+  profile_views: PeriodBreakdown
+  nfc_taps: PeriodBreakdown
+  qr_scans: PeriodBreakdown
+  social_clicks: PeriodBreakdown
+  totals: { profile_views: number; nfc_taps: number; qr_scans: number; social_clicks: number }
+}
+
+export interface ApiAnalyticsOverview {
+  totals: ApiAnalyticsSummary["totals"]
+  recent: ApiAnalyticsEvent[]
+}
+
+export const analyticsApi = {
+  getOverview: () => request<ApiAnalyticsOverview>("/customer/analytics/"),
+  getSummary: () => request<ApiAnalyticsSummary>("/customer/analytics/summary/"),
+  getViews: (page = 1, pageSize = 100) =>
+    requestPaginated<ApiAnalyticsEvent>(`/customer/analytics/views/?page=${page}&page_size=${pageSize}`),
+  getTaps: (page = 1, pageSize = 100) =>
+    requestPaginated<ApiAnalyticsEvent>(`/customer/analytics/taps/?page=${page}&page_size=${pageSize}`),
+  getScans: (page = 1, pageSize = 100) =>
+    requestPaginated<ApiAnalyticsEvent>(`/customer/analytics/scans/?page=${page}&page_size=${pageSize}`),
+}
+
+// ---------------------------------------------------------------------
+// Orders
+// ---------------------------------------------------------------------
+
+export interface ApiOrderItem {
+  id: number
+  card_type: string
+  color: string
+  quantity: number
+  unit_price: string
+  line_total: string
+}
+export interface ApiOrderStatusHistory {
+  status: string
+  note: string
+  created_at: string
+}
+export interface ApiOrder {
+  id: number
+  order_number: string
+  status: string
+  shipping_full_name: string
+  shipping_phone: string
+  shipping_address: string
+  shipping_city: string
+  shipping_state: string
+  shipping_country: string
+  shipping_postal_code: string
+  subtotal: string
+  discount: string
+  total: string
+  tracking_number: string
+  notes: string
+  items: ApiOrderItem[]
+  status_history: ApiOrderStatusHistory[]
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateOrderPayload {
+  shipping_full_name: string
+  shipping_phone: string
+  shipping_address: string
+  shipping_city: string
+  shipping_state: string
+  shipping_country: string
+  shipping_postal_code: string
+  notes?: string
+  discount?: number
+  items: { card_type: string; color: string; quantity: number; unit_price: number }[]
+}
+
+export const ordersApi = {
+  list: (page = 1) => requestPaginated<ApiOrder>(`/customer/orders/?page=${page}`),
+  create: (payload: CreateOrderPayload) => request<ApiOrder>("/customer/orders/", { method: "POST", body: payload }),
+  getById: (id: number | string) => request<ApiOrder>(`/customer/orders/${id}/`),
+}
+
+// ---------------------------------------------------------------------
+// Leads
+// ---------------------------------------------------------------------
+
+export interface ApiLead {
+  id: number
+  name: string
+  email: string
+  phone: string
+  company: string
+  message: string
+  created_at: string
+}
+
+export const leadsApi = {
+  list: (page = 1, search = "") =>
+    requestPaginated<ApiLead>(`/customer/leads/?page=${page}${search ? `&search=${encodeURIComponent(search)}` : ""}`),
+}
+
+// ---------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------
+
+export interface ApiNotification {
+  id: number
+  title: string
+  message: string
+  type: "ORDER_UPDATE" | "NFC_UPDATE" | "PROFILE_VIEW" | "SYSTEM_MESSAGE"
+  is_read: boolean
+  created_at: string
+}
+
+export const notificationsApi = {
+  list: (page = 1, unreadOnly = false) =>
+    requestPaginated<ApiNotification>(`/customer/notifications/?page=${page}${unreadOnly ? "&unread_only=true" : ""}`),
+  markRead: (payload: { ids?: number[]; all?: boolean }) =>
+    request<{ updated: number }>("/customer/notifications/read/", { method: "POST", body: payload }),
+}
+
+// ---------------------------------------------------------------------
+// Customer settings — notification/language/timezone preferences. (The
+// *enforced* public-profile privacy toggles are still `profileApi.get/
+// updatePrivacySettings` above — these are a separate preference set.)
+// ---------------------------------------------------------------------
+
+export interface ApiCustomerSettings {
+  id: number
+  show_email: boolean
+  show_phone: boolean
+  show_company: boolean
+  show_social_links: boolean
+  language: string
+  timezone: string
+  notify_order_updates: boolean
+  notify_nfc_updates: boolean
+  notify_profile_views: boolean
+  notify_system_messages: boolean
+  updated_at: string
+}
+
+export const customerSettingsApi = {
+  getMine: () => request<ApiCustomerSettings>("/customer/settings/"),
+  updateMine: (patch: Partial<Omit<ApiCustomerSettings, "id" | "updated_at">>) =>
+    request<ApiCustomerSettings>("/customer/settings/", { method: "PUT", body: patch }),
+}
+
+// ---------------------------------------------------------------------
+// Dashboard — one aggregated call for the overview page.
+// ---------------------------------------------------------------------
+
+export interface ApiDashboard {
+  totals: {
+    profile_views: number
+    nfc_taps: number
+    qr_scans: number
+    leads: number
+    orders: number
+  }
+  nfc_cards: ApiNfcCard[]
+  recent_notifications: ApiNotification[]
+  recent_activity: ApiAnalyticsEvent[]
+}
+
+export const dashboardApi = {
+  get: () => request<ApiDashboard>("/customer/dashboard/"),
 }

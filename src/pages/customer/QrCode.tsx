@@ -1,16 +1,17 @@
 ﻿import { useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Check, Copy, Download, FileText, ImageIcon, Printer, Share2 } from "lucide-react"
+import { Check, Copy, Download, FileText, ImageIcon, Printer, RefreshCw, Share2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { DigitalCardPreview } from "@/components/customer/DigitalCardPreview"
+import { ErrorState } from "@/components/customer/ErrorState"
 import { ProfileNotReady } from "@/components/customer/ProfileNotReady"
 import { useEnsuredProfile } from "@/hooks/use-ensured-profile"
-import { getQrPngDataUrl, downloadQrPng, downloadQrSvg, downloadQrPdf, shareOrCopyLink } from "@/components/customer/qr-utils"
-import { simulateLatency } from "@/lib/mock-api"
+import { downloadQrPng, downloadQrSvg, downloadQrPdf, shareOrCopyLink } from "@/components/customer/qr-utils"
+import { qrApi } from "@/lib/api"
 
 function printQr(dataUrl: string, title: string) {
   const iframe = document.createElement("iframe")
@@ -44,15 +45,23 @@ function printQr(dataUrl: string, title: string) {
 
 export default function CustomerQrCode() {
   const { customer, profile, stuck, retry } = useEnsuredProfile()
+  const queryClient = useQueryClient()
   const [copied, setCopied] = useState(false)
   const [busyAction, setBusyAction] = useState<string | null>(null)
 
-  const realUrl = profile ? `${window.location.origin}/u/${profile.username}` : ""
+  const qrQuery = useQuery({
+    queryKey: ["customer-qr"],
+    queryFn: qrApi.getOrCreate,
+    enabled: Boolean(customer && profile),
+  })
 
-  const { data: qrDataUrl, isLoading } = useQuery({
-    queryKey: ["customer-qr", realUrl],
-    queryFn: () => simulateLatency(getQrPngDataUrl(realUrl, 320), 300).then((p) => p),
-    enabled: Boolean(realUrl),
+  const regenerateMutation = useMutation({
+    mutationFn: qrApi.regenerate,
+    onSuccess: (qr) => {
+      queryClient.setQueryData(["customer-qr"], qr)
+      toast.success("QR code regenerated.")
+    },
+    onError: () => toast.error("Couldn't regenerate the QR code. Please try again."),
   })
 
   if (!customer) return null
@@ -74,8 +83,22 @@ export default function CustomerQrCode() {
     )
   }
 
+  if (qrQuery.isError) {
+    return (
+      <div className="mx-auto max-w-4xl">
+        <ErrorState error={qrQuery.error} onRetry={() => qrQuery.refetch()} />
+      </div>
+    )
+  }
+
   const { username, fullName } = profile
-  const prettyUrl = `vrsnexora.com/u/${username}`
+  const prettyUrl = `${window.location.host}/u/${username}`
+  // The backend's stored QR encodes this exact URL (with a `?src=qr`
+  // tracking marker) — every export format below is generated from it, so
+  // scanning any of them (PNG, SVG, PDF, print) records a real QR_SCAN.
+  const realUrl = qrQuery.data?.target_url ?? `${window.location.origin}/u/${username}`
+  const isLoading = qrQuery.isLoading
+  const qrDataUrl = qrQuery.data?.image ?? null
 
   async function handleCopy() {
     try {
@@ -165,6 +188,15 @@ export default function CustomerQrCode() {
             <Button variant="soft" className="w-full" onClick={handleShare}>
               <Share2 /> Share Link
             </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => regenerateMutation.mutate()}
+              disabled={regenerateMutation.isPending}
+            >
+              <RefreshCw className={regenerateMutation.isPending ? "animate-spin" : ""} />
+              {regenerateMutation.isPending ? "Regenerating…" : "Regenerate QR Code"}
+            </Button>
           </CardContent>
         </Card>
 
@@ -174,13 +206,7 @@ export default function CustomerQrCode() {
             <CardDescription>What people see after scanning your code.</CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center py-6">
-            <DigitalCardPreview
-              profile={profile}
-              qrDataUrl={qrDataUrl}
-              downloading={busyAction === "png"}
-              onDownloadQr={() => runExport("png")}
-              onShare={handleShare}
-            />
+            <DigitalCardPreview profile={profile} onShare={handleShare} />
           </CardContent>
         </Card>
       </div>

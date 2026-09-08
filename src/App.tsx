@@ -4,6 +4,7 @@ import { Route, Routes } from "react-router-dom"
 import { ScrollToTop } from "@/components/ScrollToTop"
 import { useAuthStore } from "@/store/auth-store"
 import PublicLayout from "@/components/layout/PublicLayout"
+import AuthLayout from "@/components/layout/AuthLayout"
 import AdminLayout from "@/components/layout/AdminLayout"
 import CustomerLayout from "@/components/layout/CustomerLayout"
 
@@ -38,6 +39,7 @@ import CustomerRegister from "@/pages/customer/Register"
 import CustomerDashboard from "@/pages/customer/Dashboard"
 import CustomerMyCard from "@/pages/customer/MyCard"
 import CustomerProfile from "@/pages/customer/Profile"
+import CustomerServices from "@/pages/customer/Services"
 import CustomerSocialLinks from "@/pages/customer/SocialLinks"
 import CustomerQrCode from "@/pages/customer/QrCode"
 import CustomerAnalytics from "@/pages/customer/Analytics"
@@ -78,9 +80,13 @@ function App() {
           <Route path="/contact" element={<Contact />} />
           <Route path="/privacy-policy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
+        </Route>
 
-          {/* Unified login (public, unauthenticated) — routes to the right
-              dashboard by role after authenticating */}
+        {/* Authentication — no public navbar/footer. Unified login routes to
+            the right dashboard by role after authenticating; any future
+            auth page (verify-email, OTP, standalone reset-password, etc.)
+            belongs in this route group so it automatically gets AuthLayout. */}
+        <Route element={<AuthLayout />}>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<CustomerRegister />} />
         </Route>
@@ -105,6 +111,7 @@ function App() {
           <Route path="/dashboard" element={<CustomerDashboard />} />
           <Route path="/my-card" element={<CustomerMyCard />} />
           <Route path="/profile" element={<CustomerProfile />} />
+          <Route path="/services" element={<CustomerServices />} />
           <Route path="/social-links" element={<CustomerSocialLinks />} />
           <Route path="/qr-code" element={<CustomerQrCode />} />
           <Route path="/analytics" element={<CustomerAnalytics />} />

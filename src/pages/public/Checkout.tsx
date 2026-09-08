@@ -1,54 +1,53 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { Navigate, useNavigate } from "react-router-dom"
+import { useMutation } from "@tanstack/react-query"
 import { toast } from "sonner"
+import { Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useCartStore } from "@/store/cart-store"
 import { useCustomerAuthStore } from "@/store/auth-store"
-import { useDataStore } from "@/store/data-store"
+import { ordersApi, ApiError, type CreateOrderPayload } from "@/lib/api"
 import { formatCurrency } from "@/lib/mock-api"
-import type { Address, PaymentMethod, TrackingStep } from "@/types"
 
 interface BillingForm {
   fullName: string
-  email: string
   phone: string
   address: string
   city: string
+  state: string
   pincode: string
 }
 
 const INITIAL_FORM: BillingForm = {
   fullName: "",
-  email: "",
   phone: "",
   address: "",
   city: "",
+  state: "",
   pincode: "",
-}
-
-function buildTracking(): TrackingStep[] {
-  const now = new Date().toISOString()
-  return [
-    { label: "Order Placed", date: now, done: true },
-    { label: "Processing", date: null, done: false },
-    { label: "Shipped", date: null, done: false },
-    { label: "Out for Delivery", date: null, done: false },
-    { label: "Delivered", date: null, done: false },
-  ]
 }
 
 export default function Checkout() {
   const navigate = useNavigate()
   const customer = useCustomerAuthStore((s) => s.customer)
   const { lines, subtotal, couponCode, discount, clearCart } = useCartStore()
-  const { addOrder, addTransaction } = useDataStore()
 
   const [form, setForm] = useState<BillingForm>(INITIAL_FORM)
   const [errors, setErrors] = useState<Partial<Record<keyof BillingForm, boolean>>>({})
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("UPI")
+
+  const placeOrderMutation = useMutation({
+    mutationFn: (payload: CreateOrderPayload) => ordersApi.create(payload),
+    onSuccess: (order) => {
+      clearCart()
+      navigate("/order-success", { state: { orderId: order.order_number } })
+    },
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : "Something went wrong placing your order."
+      toast.error(message)
+    },
+  })
 
   // Ordering an NFC card requires an account — the order must be tied to a
   // real customer so it shows up on their dashboard immediately, and so an
@@ -56,23 +55,20 @@ export default function Checkout() {
   // isn't signed in gets sent to login and comes right back here after.
   useEffect(() => {
     if (customer) {
-      setForm((f) => ({
-        ...f,
-        fullName: f.fullName || customer.name,
-        email: f.email || customer.email,
-      }))
+      setForm((f) => ({ ...f, fullName: f.fullName || customer.name }))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer?.id])
 
   const sub = subtotal()
-  const shipping = sub > 999 ? 0 : 49
-  const total = Math.max(0, sub + shipping - discount)
+  // The Order backend doesn't model a separate shipping charge yet — the
+  // total shown here must match exactly what gets recorded server-side
+  // (subtotal minus discount), so no shipping fee is added on top.
+  const total = Math.max(0, sub - discount)
 
   if (!customer) {
     return <Navigate to="/login" state={{ from: "/checkout" }} replace />
   }
-  const authedCustomer = customer
 
   function update<K extends keyof BillingForm>(key: K, value: BillingForm[K]) {
     setForm((f) => ({ ...f, [key]: value }))
@@ -99,52 +95,22 @@ export default function Checkout() {
     }
     if (!validate()) return
 
-    const address: Address = {
-      line1: form.address,
-      city: form.city,
-      state: "",
-      pincode: form.pincode,
-      country: "India",
-    }
-
-    const order = addOrder({
-      customerId: authedCustomer.id,
-      customerName: form.fullName,
-      customerEmail: form.email,
-      customerPhone: form.phone,
+    placeOrderMutation.mutate({
+      shipping_full_name: form.fullName,
+      shipping_phone: form.phone,
+      shipping_address: form.address,
+      shipping_city: form.city,
+      shipping_state: form.state,
+      shipping_country: "India",
+      shipping_postal_code: form.pincode,
+      discount,
       items: lines.map((l) => ({
-        productId: l.productId,
-        name: l.name,
-        cardType: l.cardType,
+        card_type: l.cardType.toUpperCase(),
         color: l.color.name,
-        qty: l.qty,
-        price: l.price,
-        customLogo: l.customLogo ?? undefined,
+        quantity: l.qty,
+        unit_price: l.price,
       })),
-      amount: sub,
-      shipping,
-      total,
-      paymentMethod,
-      paymentStatus: "Paid",
-      status: "Pending",
-      date: new Date().toISOString(),
-      address,
-      assignedCardId: null,
-      tracking: buildTracking(),
     })
-
-    addTransaction({
-      orderId: order.id,
-      customerId: authedCustomer.id,
-      customerName: form.fullName,
-      amount: total,
-      method: paymentMethod,
-      status: "Paid",
-      date: new Date().toISOString(),
-    })
-
-    clearCart()
-    navigate("/order-success", { state: { orderId: order.id } })
   }
 
   return (
@@ -163,16 +129,6 @@ export default function Checkout() {
                   value={form.fullName}
                   onChange={(e) => update("fullName", e.target.value)}
                   aria-invalid={errors.fullName}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => update("email", e.target.value)}
-                  aria-invalid={errors.email}
                 />
               </div>
               <div className="space-y-1.5">
@@ -211,35 +167,24 @@ export default function Checkout() {
                   aria-invalid={errors.city}
                 />
               </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="state">State</Label>
+                <Input
+                  id="state"
+                  value={form.state}
+                  onChange={(e) => update("state", e.target.value)}
+                  aria-invalid={errors.state}
+                />
+              </div>
             </div>
           </div>
 
-          <div className="rounded-2xl border bg-card p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-foreground">Payment Method</h2>
-            <RadioGroup
-              value={paymentMethod}
-              onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}
-              className="mt-4"
-            >
-              <div className="flex items-center gap-3 rounded-lg border p-3">
-                <RadioGroupItem value="UPI" id="pm-upi" />
-                <Label htmlFor="pm-upi" className="flex-1 cursor-pointer font-normal">
-                  UPI / QR Code
-                </Label>
-              </div>
-              <div className="flex items-center gap-3 rounded-lg border p-3">
-                <RadioGroupItem value="Card" id="pm-card" />
-                <Label htmlFor="pm-card" className="flex-1 cursor-pointer font-normal">
-                  Credit / Debit Card
-                </Label>
-              </div>
-              <div className="flex items-center gap-3 rounded-lg border p-3">
-                <RadioGroupItem value="Net Banking" id="pm-nb" />
-                <Label htmlFor="pm-nb" className="flex-1 cursor-pointer font-normal">
-                  Net Banking
-                </Label>
-              </div>
-            </RadioGroup>
+          <div className="flex items-start gap-2 rounded-2xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+            <Info className="mt-0.5 size-4 shrink-0" />
+            <p>
+              Online payment isn&apos;t available yet — placing an order reserves your card and our team will
+              contact you to confirm payment and shipping.
+            </p>
           </div>
         </div>
 
@@ -260,10 +205,6 @@ export default function Checkout() {
               <span>Subtotal</span>
               <span className="text-foreground">{formatCurrency(sub)}</span>
             </div>
-            <div className="flex justify-between text-muted-foreground">
-              <span>Shipping</span>
-              <span className="text-foreground">{shipping === 0 ? "Free" : formatCurrency(shipping)}</span>
-            </div>
             {couponCode && (
               <div className="flex justify-between text-success">
                 <span>Discount ({couponCode})</span>
@@ -275,8 +216,8 @@ export default function Checkout() {
               <span>{formatCurrency(total)}</span>
             </div>
           </div>
-          <Button type="submit" size="lg" className="mt-6 w-full">
-            Place Order
+          <Button type="submit" size="lg" className="mt-6 w-full" disabled={placeOrderMutation.isPending}>
+            {placeOrderMutation.isPending ? "Placing Order…" : "Place Order"}
           </Button>
         </div>
       </form>

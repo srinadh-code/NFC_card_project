@@ -27,16 +27,19 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import { StatusBadge } from "@/components/admin/StatusBadge"
 import { StatCard } from "@/components/customer/StatCard"
+import { ErrorState } from "@/components/customer/ErrorState"
 import { NfcCardFace } from "@/components/marketing/NfcCardShowcase"
 import { useCustomerAuthStore } from "@/store/auth-store"
-import { useDataStore, selectOrdersByCustomer } from "@/store/data-store"
 import { useEnsuredProfile } from "@/hooks/use-ensured-profile"
-import { analyticsRecords } from "@/data/seed"
 import { formatDate } from "@/lib/mock-api"
+import { orderStatusLabel } from "@/lib/order-status"
 import { downloadQrPng, shareOrCopyLink } from "@/components/customer/qr-utils"
-import { nfcApi } from "@/lib/api"
+import { analyticsApi, nfcApi, ordersApi } from "@/lib/api"
+
+const IN_PROGRESS_ORDER_STATUSES = ["PENDING", "CONFIRMED", "PROCESSING", "PRINTED", "SHIPPED"]
 
 // Known demo UIDs seeded by `python manage.py seed_demo_cards` on the
 // backend — used only to prefill the manual-entry/"simulate scan" demo
@@ -58,26 +61,36 @@ function InfoRow({ icon: Icon, label, value, mono }: { icon: typeof Mail; label:
   )
 }
 
-const IN_PROGRESS_ORDER_STATUSES = ["Pending", "Processing", "Shipped"]
-
 export default function CustomerMyCard() {
   const customer = useCustomerAuthStore((s) => s.customer)
-  const orders = useDataStore(selectOrdersByCustomer(customer?.id ?? ""))
   const { profile } = useEnsuredProfile()
   const queryClient = useQueryClient()
 
-  const { data: cards = [] } = useQuery({
+  const cardsQuery = useQuery({
     queryKey: ["nfc-cards-mine"],
     queryFn: nfcApi.mine,
+    enabled: Boolean(customer),
+  })
+  const cards = cardsQuery.data ?? []
+
+  const ordersQuery = useQuery({
+    queryKey: ["customer-orders", 1],
+    queryFn: () => ordersApi.list(1),
+    enabled: Boolean(customer),
+  })
+
+  const summaryQuery = useQuery({
+    queryKey: ["customer-analytics-summary"],
+    queryFn: analyticsApi.getSummary,
     enabled: Boolean(customer),
   })
 
   const activeCard = cards.find((c) => c.status === "Active") ?? null
   const assignedCard = cards.find((c) => c.status === "Assigned") ?? null
   const processingOrder =
-    [...orders]
+    (ordersQuery.data?.items ?? [])
       .filter((o) => IN_PROGRESS_ORDER_STATUSES.includes(o.status))
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] ?? null
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] ?? null
 
   const [uid, setUid] = useState("")
   const [showManualEntry, setShowManualEntry] = useState(false)
@@ -102,6 +115,15 @@ export default function CustomerMyCard() {
       queryClient.invalidateQueries({ queryKey: ["nfc-cards-mine"] })
     },
     onError: () => toast.error("Something went wrong activating your card. Please try again."),
+  })
+
+  const deactivateMutation = useMutation({
+    mutationFn: (cardUid: string) => nfcApi.deactivate(cardUid),
+    onSuccess: () => {
+      toast.success("Card deactivated.")
+      queryClient.invalidateQueries({ queryKey: ["nfc-cards-mine"] })
+    },
+    onError: () => toast.error("Something went wrong deactivating your card. Please try again."),
   })
 
   function handleUseDemoCard() {
@@ -151,6 +173,23 @@ export default function CustomerMyCard() {
   }
 
   if (!customer) return null
+
+  if (cardsQuery.isLoading) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-56 w-full" />
+      </div>
+    )
+  }
+
+  if (cardsQuery.isError) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <ErrorState error={cardsQuery.error} onRetry={() => cardsQuery.refetch()} />
+      </div>
+    )
+  }
 
   if (activeCard) {
     return (
@@ -236,6 +275,14 @@ export default function CustomerMyCard() {
           <Button variant="soft" onClick={handleDownloadQr} disabled={!profile || downloading}>
             <Download /> {downloading ? "Preparing…" : "Download QR"}
           </Button>
+          <Button
+            variant="outline"
+            className="border-destructive/40 text-destructive hover:bg-destructive/10"
+            onClick={() => deactivateMutation.mutate(activeCard.uid)}
+            disabled={deactivateMutation.isPending}
+          >
+            {deactivateMutation.isPending ? "Deactivating…" : "Deactivate Card"}
+          </Button>
         </div>
       </div>
     )
@@ -244,13 +291,7 @@ export default function CustomerMyCard() {
   // A card has already been assigned by admin but the customer hasn't
   // tapped "Activate" yet — no need to type/guess a UID, it's right here.
   if (assignedCard) {
-    const records = analyticsRecords.filter((r) => r.customerId === customer.id)
-    const totals = {
-      taps: records.reduce((s, r) => s + r.taps, 0),
-      profileViews: records.reduce((s, r) => s + r.profileViews, 0),
-      qrScans: records.reduce((s, r) => s + r.qrScans, 0),
-      shares: records.reduce((s, r) => s + r.shares, 0),
-    }
+    const totals = summaryQuery.data?.totals
     const displayName = profile?.fullName ?? customer.name
     const displayAvatar = profile?.avatar ?? customer.avatar
     const displayEmail = profile?.email ?? customer.email
@@ -323,10 +364,30 @@ export default function CustomerMyCard() {
 
         {/* Quick stats */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <StatCard label="Total Taps" value={totals.taps.toLocaleString("en-IN")} icon={MousePointerClick} />
-          <StatCard label="Profile Views" value={totals.profileViews.toLocaleString("en-IN")} icon={Eye} />
-          <StatCard label="QR Scans" value={totals.qrScans.toLocaleString("en-IN")} icon={QrCode} />
-          <StatCard label="Contacts Saved" value={totals.shares.toLocaleString("en-IN")} icon={BookmarkCheck} />
+          <StatCard
+            label="Total Taps"
+            value={totals ? totals.nfc_taps.toLocaleString("en-IN") : 0}
+            icon={MousePointerClick}
+            loading={summaryQuery.isLoading}
+          />
+          <StatCard
+            label="Profile Views"
+            value={totals ? totals.profile_views.toLocaleString("en-IN") : 0}
+            icon={Eye}
+            loading={summaryQuery.isLoading}
+          />
+          <StatCard
+            label="QR Scans"
+            value={totals ? totals.qr_scans.toLocaleString("en-IN") : 0}
+            icon={QrCode}
+            loading={summaryQuery.isLoading}
+          />
+          <StatCard
+            label="Social Clicks"
+            value={totals ? totals.social_clicks.toLocaleString("en-IN") : 0}
+            icon={BookmarkCheck}
+            loading={summaryQuery.isLoading}
+          />
         </div>
       </div>
     )
@@ -348,10 +409,10 @@ export default function CustomerMyCard() {
                 <Clock className="size-6" />
               </div>
               <div className="flex-1">
-                <p className="font-semibold">Order {processingOrder.id} is being processed</p>
+                <p className="font-semibold">Order {processingOrder.order_number} is being processed</p>
                 <p className="text-sm text-muted-foreground">
-                  Placed on {formatDate(processingOrder.date)} · Status:{" "}
-                  <StatusBadge status={processingOrder.status} className="ml-1" />
+                  Placed on {formatDate(processingOrder.created_at)} · Status:{" "}
+                  <StatusBadge status={orderStatusLabel(processingOrder.status)} className="ml-1" />
                 </p>
               </div>
               <Button asChild variant="outline" size="sm">

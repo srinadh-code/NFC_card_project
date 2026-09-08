@@ -1,11 +1,13 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Bell, LogOut, Menu, Search, Settings, UserCircle } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,24 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useCustomerAuthStore } from "@/store/auth-store"
-
-const NOTIFICATIONS = [
-  {
-    id: 1,
-    title: "Your card was tapped 5 times today",
-    detail: "Keep sharing your profile to reach more people.",
-  },
-  {
-    id: 2,
-    title: "New feature: QR download is live",
-    detail: "You can now download your profile QR code as an image.",
-  },
-  {
-    id: 3,
-    title: "Weekly summary is ready",
-    detail: "Check your Analytics page for this week's performance.",
-  },
-]
+import { notificationsApi } from "@/lib/api"
 
 interface CustomerTopbarProps {
   onMenuClick?: () => void
@@ -44,6 +29,20 @@ export function CustomerTopbar({ onMenuClick }: CustomerTopbarProps) {
   const customer = useCustomerAuthStore((s) => s.customer)
   const logout = useCustomerAuthStore((s) => s.logout)
   const [search, setSearch] = useState("")
+  const queryClient = useQueryClient()
+
+  const notificationsQuery = useQuery({
+    queryKey: ["customer-notifications", "unread"],
+    queryFn: () => notificationsApi.list(1, true),
+    enabled: Boolean(customer),
+  })
+  const notifications = notificationsQuery.data?.items ?? []
+  const unreadCount = notificationsQuery.data?.pagination?.count ?? 0
+
+  const markAllReadMutation = useMutation({
+    mutationFn: () => notificationsApi.markRead({ all: true }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["customer-notifications"] }),
+  })
 
   const initials = customer?.name
     ? customer.name
@@ -75,25 +74,46 @@ export function CustomerTopbar({ onMenuClick }: CustomerTopbarProps) {
           <PopoverTrigger asChild>
             <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
               <Bell className="size-5" />
-              <Badge className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full p-0 text-[10px]">
-                {NOTIFICATIONS.length}
-              </Badge>
+              {unreadCount > 0 && (
+                <Badge className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full p-0 text-[10px]">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </Badge>
+              )}
             </Button>
           </PopoverTrigger>
           <PopoverContent align="end" className="w-80 p-0">
-            <div className="border-b px-4 py-3">
+            <div className="flex items-center justify-between border-b px-4 py-3">
               <p className="text-sm font-semibold">Notifications</p>
+              {notifications.length > 0 && (
+                <button
+                  type="button"
+                  className="text-xs font-medium text-primary hover:underline disabled:opacity-50"
+                  onClick={() => markAllReadMutation.mutate()}
+                  disabled={markAllReadMutation.isPending}
+                >
+                  Mark all read
+                </button>
+              )}
             </div>
             <div className="max-h-80 overflow-y-auto">
-              {NOTIFICATIONS.map((n, i) => (
-                <div key={n.id}>
-                  <div className="px-4 py-3">
-                    <p className="text-sm font-medium leading-snug">{n.title}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{n.detail}</p>
-                  </div>
-                  {i < NOTIFICATIONS.length - 1 && <Separator />}
+              {notificationsQuery.isLoading ? (
+                <div className="space-y-2 p-4">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
                 </div>
-              ))}
+              ) : notifications.length === 0 ? (
+                <p className="px-4 py-6 text-center text-sm text-muted-foreground">No notifications.</p>
+              ) : (
+                notifications.map((n, i) => (
+                  <div key={n.id}>
+                    <div className="px-4 py-3">
+                      <p className="text-sm font-medium leading-snug">{n.title}</p>
+                      {n.message && <p className="mt-0.5 text-xs text-muted-foreground">{n.message}</p>}
+                    </div>
+                    {i < notifications.length - 1 && <Separator />}
+                  </div>
+                ))
+              )}
             </div>
           </PopoverContent>
         </Popover>

@@ -2,7 +2,16 @@ import { useMemo } from "react"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import type { AdminUser, CustomerUser } from "@/types"
-import { ApiError, type ApiUser, authApi, clearTokens, getAccessToken, getRefreshToken, setTokens } from "@/lib/api"
+import {
+  ApiError,
+  type ApiUser,
+  authApi,
+  clearTokens,
+  getAccessToken,
+  getRefreshToken,
+  setTokens,
+  setUnauthorizedHandler,
+} from "@/lib/api"
 
 interface AuthState {
   user: ApiUser | null
@@ -40,6 +49,13 @@ export const useAuthStore = create<AuthState>()(
     { name: "nexora-auth", partialize: (s) => ({ user: s.user }) },
   ),
 )
+
+// Any request anywhere in the app that discovers the session is truly
+// unrecoverable (401 with an already-expired/invalid refresh token) clears
+// the in-memory user too — otherwise a page that made a background API call
+// would keep rendering as "logged in" (stale store) until a manual logout
+// or full page reload, even though every subsequent request would 401.
+setUnauthorizedHandler(() => useAuthStore.getState().setUser(null))
 
 function toCustomerUser(u: ApiUser): CustomerUser {
   return { id: String(u.id), name: u.full_name, email: u.email, avatar: u.avatar }

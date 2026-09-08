@@ -9,100 +9,104 @@ import {
   YAxis,
   Tooltip as RechartsTooltip,
 } from "recharts"
-import { BarChart3, CreditCard, Eye, MapPin, MousePointerClick, QrCode, Users, Zap } from "lucide-react"
+import {
+  BarChart3,
+  Bell,
+  BookmarkCheck,
+  CreditCard,
+  Eye,
+  MousePointerClick,
+  PackageSearch,
+  QrCode,
+  Users,
+  Zap,
+} from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ChartContainer } from "@/components/ui/chart-container"
+import { ErrorState } from "@/components/customer/ErrorState"
 import { StatCard } from "@/components/customer/StatCard"
 import { useCustomerAuthStore } from "@/store/auth-store"
-import { analyticsRecords } from "@/data/seed"
-import { simulateLatency } from "@/lib/mock-api"
-import { nfcApi } from "@/lib/api"
+import { analyticsApi, dashboardApi, notificationsApi, toFrontendCard } from "@/lib/api"
 
-function sumBy<T>(items: T[], fn: (item: T) => number) {
-  return items.reduce((s, item) => s + fn(item), 0)
-}
-
-function deltaPct(current: number, previous: number): number | null {
-  if (previous === 0) return current > 0 ? 100 : null
-  return ((current - previous) / previous) * 100
-}
-
-function computeDashboardStats(customerId: string) {
-  const records = analyticsRecords.filter((r) => r.customerId === customerId)
-
+function bucketTapsByDay(events: { created_at: string }[], days: number) {
   const now = new Date()
-  const last7Start = new Date(now)
-  last7Start.setDate(now.getDate() - 7)
-  const prev7Start = new Date(now)
-  prev7Start.setDate(now.getDate() - 14)
+  const cutoff = new Date(now)
+  cutoff.setDate(now.getDate() - days)
+  cutoff.setHours(0, 0, 0, 0)
 
-  const last7 = records.filter((r) => new Date(r.date) >= last7Start)
-  const prev7 = records.filter((r) => new Date(r.date) >= prev7Start && new Date(r.date) < last7Start)
-
-  const totals = {
-    taps: sumBy(records, (r) => r.taps),
-    uniqueVisitors: sumBy(records, (r) => r.uniqueVisitors),
-    qrScans: sumBy(records, (r) => r.qrScans),
-    profileViews: sumBy(records, (r) => r.profileViews),
-  }
-
-  const deltas = {
-    taps: deltaPct(sumBy(last7, (r) => r.taps), sumBy(prev7, (r) => r.taps)),
-    uniqueVisitors: deltaPct(sumBy(last7, (r) => r.uniqueVisitors), sumBy(prev7, (r) => r.uniqueVisitors)),
-    qrScans: deltaPct(sumBy(last7, (r) => r.qrScans), sumBy(prev7, (r) => r.qrScans)),
-    profileViews: deltaPct(sumBy(last7, (r) => r.profileViews), sumBy(prev7, (r) => r.profileViews)),
-  }
-
-  // Taps over time, last 30 days
-  const last30Start = new Date(now)
-  last30Start.setDate(now.getDate() - 30)
   const byDate = new Map<string, number>()
-  for (const r of records) {
-    if (new Date(r.date) < last30Start) continue
-    byDate.set(r.date, (byDate.get(r.date) ?? 0) + r.taps)
+  for (const event of events) {
+    const date = new Date(event.created_at)
+    if (date < cutoff) continue
+    const key = date.toISOString().slice(0, 10)
+    byDate.set(key, (byDate.get(key) ?? 0) + 1)
   }
-  const series = Array.from(byDate.entries())
+
+  return Array.from(byDate.entries())
     .sort((a, b) => (a[0] < b[0] ? -1 : 1))
     .map(([date, taps]) => ({
       date: new Date(date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
       taps,
     }))
-
-  // Top locations
-  const byLocation = new Map<string, number>()
-  for (const r of records) {
-    byLocation.set(r.location, (byLocation.get(r.location) ?? 0) + r.taps)
-  }
-  const totalLocationTaps = Array.from(byLocation.values()).reduce((s, v) => s + v, 0) || 1
-  const topLocations = Array.from(byLocation.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([location, taps]) => ({ location, taps, pct: (taps / totalLocationTaps) * 100 }))
-
-  return { totals, deltas, series, topLocations }
 }
 
 export default function CustomerDashboard() {
   const customer = useCustomerAuthStore((s) => s.customer)
-  const { data: cards = [] } = useQuery({
-    queryKey: ["nfc-cards-mine"],
-    queryFn: nfcApi.mine,
+
+  const dashboardQuery = useQuery({
+    queryKey: ["customer-dashboard"],
+    queryFn: dashboardApi.get,
     enabled: Boolean(customer),
   })
+  const summaryQuery = useQuery({
+    queryKey: ["customer-analytics-summary"],
+    queryFn: analyticsApi.getSummary,
+    enabled: Boolean(customer),
+  })
+  const unreadQuery = useQuery({
+    queryKey: ["customer-notifications-unread-count"],
+    queryFn: () => notificationsApi.list(1, true),
+    enabled: Boolean(customer),
+  })
+  const tapsSeriesQuery = useQuery({
+    queryKey: ["customer-taps-series"],
+    queryFn: () => analyticsApi.getTaps(1, 100),
+    enabled: Boolean(customer),
+  })
+
+  const cards = useMemo(
+    () => (dashboardQuery.data ? dashboardQuery.data.nfc_cards.map(toFrontendCard) : []),
+    [dashboardQuery.data],
+  )
   const activeCard = useMemo(() => cards.find((c) => c.status === "Active") ?? cards[0] ?? null, [cards])
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["dashboard-stats", customer?.id],
-    queryFn: () => simulateLatency(computeDashboardStats(customer?.id ?? ""), 300),
-    enabled: Boolean(customer?.id),
-  })
+  const series = useMemo(
+    () => (tapsSeriesQuery.data ? bucketTapsByDay(tapsSeriesQuery.data.items, 30) : []),
+    [tapsSeriesQuery.data],
+  )
 
   if (!customer) return null
 
+  const isLoading = dashboardQuery.isLoading || summaryQuery.isLoading || unreadQuery.isLoading
+  const isError = dashboardQuery.isError || summaryQuery.isError
+
+  if (isError) {
+    return (
+      <ErrorState
+        onRetry={() => {
+          dashboardQuery.refetch()
+          summaryQuery.refetch()
+        }}
+      />
+    )
+  }
+
   const firstName = customer.name.split(" ")[0]
+  const totals = dashboardQuery.data?.totals
+  const socialClicks = summaryQuery.data?.totals.social_clicks
 
   return (
     <div className="space-y-6">
@@ -148,105 +152,124 @@ export default function CustomerDashboard() {
       {/* Stat cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="Total Taps"
-          value={data ? data.totals.taps.toLocaleString("en-IN") : 0}
-          icon={MousePointerClick}
-          deltaPct={data?.deltas.taps ?? null}
+          label="Profile Views"
+          value={totals ? totals.profile_views.toLocaleString("en-IN") : 0}
+          icon={Eye}
           loading={isLoading}
         />
         <StatCard
-          label="Unique Visitors"
-          value={data ? data.totals.uniqueVisitors.toLocaleString("en-IN") : 0}
-          icon={Users}
-          deltaPct={data?.deltas.uniqueVisitors ?? null}
+          label="NFC Taps"
+          value={totals ? totals.nfc_taps.toLocaleString("en-IN") : 0}
+          icon={MousePointerClick}
           loading={isLoading}
         />
         <StatCard
           label="QR Scans"
-          value={data ? data.totals.qrScans.toLocaleString("en-IN") : 0}
+          value={totals ? totals.qr_scans.toLocaleString("en-IN") : 0}
           icon={QrCode}
-          deltaPct={data?.deltas.qrScans ?? null}
           loading={isLoading}
         />
         <StatCard
-          label="Profile Views"
-          value={data ? data.totals.profileViews.toLocaleString("en-IN") : 0}
-          icon={Eye}
-          deltaPct={data?.deltas.profileViews ?? null}
+          label="Social Clicks"
+          value={socialClicks !== undefined ? socialClicks.toLocaleString("en-IN") : 0}
+          icon={BookmarkCheck}
+          loading={isLoading}
+        />
+        <StatCard
+          label="Leads"
+          value={totals ? totals.leads.toLocaleString("en-IN") : 0}
+          icon={Users}
+          loading={isLoading}
+        />
+        <StatCard
+          label="Orders"
+          value={totals ? totals.orders.toLocaleString("en-IN") : 0}
+          icon={PackageSearch}
+          loading={isLoading}
+        />
+        <StatCard
+          label="Active NFC Cards"
+          value={cards.filter((c) => c.status === "Active").length}
+          icon={CreditCard}
+          loading={isLoading}
+        />
+        <StatCard
+          label="Unread Notifications"
+          value={unreadQuery.data?.pagination?.count ?? 0}
+          icon={Bell}
           loading={isLoading}
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="rounded-2xl lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <BarChart3 className="size-4 text-primary" />
-              Taps Over Time
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading || !data ? (
-              <Skeleton className="h-[280px] w-full" />
-            ) : (
-              <ChartContainer height={280}>
-                <LineChart data={data.series} margin={{ left: -20, right: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
-                  <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" allowDecimals={false} />
-                  <RechartsTooltip
-                    contentStyle={{
-                      borderRadius: 10,
-                      border: "1px solid var(--border)",
-                      fontSize: 12,
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="taps"
-                    stroke="var(--primary)"
-                    strokeWidth={2.5}
-                    dot={false}
-                    activeDot={{ r: 4 }}
-                  />
-                </LineChart>
-              </ChartContainer>
-            )}
-          </CardContent>
-        </Card>
+      <Card className="rounded-2xl">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <BarChart3 className="size-4 text-primary" />
+            NFC Taps — Last 30 Days
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {tapsSeriesQuery.isLoading ? (
+            <Skeleton className="h-[280px] w-full" />
+          ) : series.length === 0 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              No taps recorded yet. Once someone taps your card, activity will show up here.
+            </p>
+          ) : (
+            <ChartContainer height={280}>
+              <LineChart data={series} margin={{ left: -20, right: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
+                <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" allowDecimals={false} />
+                <RechartsTooltip
+                  contentStyle={{
+                    borderRadius: 10,
+                    border: "1px solid var(--border)",
+                    fontSize: 12,
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="taps"
+                  stroke="var(--primary)"
+                  strokeWidth={2.5}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              </LineChart>
+            </ChartContainer>
+          )}
+        </CardContent>
+      </Card>
 
-        <Card className="rounded-2xl">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <MapPin className="size-4 text-primary" />
-              Top Locations
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {isLoading || !data ? (
-              <div className="space-y-3">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <Skeleton key={i} className="h-8 w-full" />
-                ))}
-              </div>
-            ) : data.topLocations.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No location data yet.</p>
-            ) : (
-              data.topLocations.map((loc) => (
-                <div key={loc.location} className="space-y-1.5">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium">{loc.location}</span>
-                    <span className="text-muted-foreground">{loc.pct.toFixed(0)}%</span>
+      <Card className="rounded-2xl">
+        <CardHeader>
+          <CardTitle className="text-base">Recent Notifications</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-10 w-full" />
+              ))}
+            </div>
+          ) : !dashboardQuery.data || dashboardQuery.data.recent_notifications.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">No notifications yet.</p>
+          ) : (
+            <div className="space-y-1">
+              {dashboardQuery.data.recent_notifications.map((n) => (
+                <div key={n.id} className="flex items-start justify-between gap-3 border-b py-2.5 last:border-0">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{n.title}</p>
+                    {n.message && <p className="truncate text-xs text-muted-foreground">{n.message}</p>}
                   </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                    <div className="h-full rounded-full bg-primary" style={{ width: `${loc.pct}%` }} />
-                  </div>
+                  {!n.is_read && <span className="mt-1 size-2 shrink-0 rounded-full bg-primary" />}
                 </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

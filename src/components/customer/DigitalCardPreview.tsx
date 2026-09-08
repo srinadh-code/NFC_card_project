@@ -7,7 +7,10 @@ import {
   Globe,
   ChevronRight,
   MapPin,
-  Download,
+  Building2,
+  Map as MapIcon,
+  Flag,
+  Navigation,
   Briefcase,
   FileText,
   Newspaper,
@@ -15,16 +18,12 @@ import {
   Link2,
   type LucideIcon,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { SOCIAL_BRAND } from "@/components/customer/brand-icons"
 import { cn } from "@/lib/utils"
 import type { Profile } from "@/types"
 
 interface DigitalCardPreviewProps {
   profile: Profile
-  qrDataUrl?: string
-  downloading?: boolean
-  onDownloadQr: () => void
   onShare: () => void
   /** Gates phone/email visibility (action buttons, vCard, Contact rows) —
    * the owning customer always sees their own info in full; a visitor on the
@@ -125,9 +124,6 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 export function DigitalCardPreview({
   profile,
-  qrDataUrl,
-  downloading,
-  onDownloadQr,
   onShare,
   showContactInfo = true,
 }: DigitalCardPreviewProps) {
@@ -138,10 +134,14 @@ export function DigitalCardPreview({
     .filter((l) => l.enabled && l.url.trim())
     .sort((a, b) => a.order - b.order)
   const customFields = [...profile.customFields].sort((a, b) => a.order - b.order)
+  const activeServices = [...profile.services].filter((s) => s.isActive).sort((a, b) => a.order - b.order)
 
   const showPhone = showContactInfo && Boolean(profile.phone)
   const showEmail = showContactInfo && Boolean(profile.email)
-  const hasContactInfo = Boolean(profile.address || profile.website || showEmail || showPhone)
+  // Address/city/state/country are not gated behind `show_contact_info` on
+  // the backend (same as the pre-existing "address" field) — only email and
+  // phone are, so this checks the fields directly rather than the flag.
+  const hasAddressInfo = Boolean(profile.address || profile.city || profile.state || profile.country)
 
   return (
     <div className="relative mx-auto w-[300px] overflow-hidden rounded-[36px] border-[8px] border-neutral-900 bg-white shadow-xl">
@@ -151,17 +151,43 @@ export function DigitalCardPreview({
         type="button"
         onClick={onShare}
         aria-label="Share profile"
-        className="absolute right-4 top-4 z-10 flex size-9 items-center justify-center rounded-full border border-border bg-white text-primary shadow-sm transition-transform hover:scale-105"
+        className="absolute right-4 top-4 z-10 flex size-9 items-center justify-center rounded-full border border-white/40 bg-white/90 text-primary shadow-sm backdrop-blur transition-transform hover:scale-105"
       >
         <Share2 className="size-4" />
       </button>
 
       <div className="max-h-[660px] overflow-y-auto">
-        <div className="flex flex-col items-center px-6 pb-7 pt-9 text-center">
+        {/* Cover banner — falls back to the brand gradient when none is set */}
+        <div className="relative h-28 w-full shrink-0">
+          {profile.coverImage ? (
+            <img src={profile.coverImage} alt="" className="size-full object-cover" />
+          ) : (
+            <div className="size-full bg-gradient-brand-br" />
+          )}
+
+          {/* Company name — top-left of the banner, only when set. Capped to
+              2 lines and narrower than the gap left of the centered avatar,
+              so even a long name wraps in place instead of colliding with
+              the avatar (which starts overlapping the banner ~54px down —
+              see the -mt-[58px] on the avatar below) or the share button. */}
+          {profile.company && (
+            <p
+              className="absolute left-4 top-3 z-0 line-clamp-2 max-w-[58%] break-words text-xs font-bold leading-snug text-white"
+              style={{ textShadow: "0 1px 3px rgba(0,0,0,0.45)" }}
+              title={profile.company}
+            >
+              {profile.company}
+            </p>
+          )}
+        </div>
+
+        {/* Profile image overlaps the banner: ~60% of its height sits inside
+            the banner, ~40% below it, per the desired card-style layout. */}
+        <div className="flex flex-col items-center px-6 pb-7 pt-0 text-center">
           <img
             src={profile.avatar}
             alt={profile.fullName}
-            className="size-24 rounded-full border-4 border-white object-cover shadow-[0_8px_24px_rgba(15,23,42,0.15)]"
+            className="relative z-[1] -mt-14 size-24 shrink-0 rounded-full border-4 border-white object-cover shadow-[0_8px_24px_rgba(15,23,42,0.2)]"
           />
           <p className="mt-4 text-lg font-bold text-foreground">{profile.fullName}</p>
           {profile.designation && <p className="text-sm font-semibold text-primary">{profile.designation}</p>}
@@ -229,45 +255,7 @@ export function DigitalCardPreview({
             </a>
           )}
 
-          {/* Contact information */}
-          {hasContactInfo && (
-            <div className="mt-7 w-full">
-              <SectionLabel>Contact</SectionLabel>
-              <div className="space-y-2.5">
-                {profile.address && <ContactRow icon={MapPin} color="#8B5CF6" title="Address" value={profile.address} />}
-                {showEmail && (
-                  <ContactRow icon={Mail} color="#EA4335" title="Email" value={profile.email} href={`mailto:${profile.email}`} />
-                )}
-                {showPhone && (
-                  <ContactRow icon={Phone} color="#22C55E" title="Phone" value={profile.phone} href={`tel:${profile.phone}`} />
-                )}
-                {profile.website && (
-                  <ContactRow icon={Globe} color="#2563EB" title="Website" value={profile.website} href={profile.website} />
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Custom fields */}
-          {customFields.length > 0 && (
-            <div className="mt-7 w-full">
-              <SectionLabel>Details</SectionLabel>
-              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                {customFields.map((field) => (
-                  <div key={field.id} className="rounded-2xl border border-border/70 bg-muted/30 px-3.5 py-2.5 text-left">
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                      {field.label || "Untitled"}
-                    </p>
-                    <p className="truncate text-sm font-semibold text-foreground" title={field.value}>
-                      {field.value || "—"}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Social links */}
+          {/* Social links — moved directly below Visit Website */}
           {enabledSocial.length > 0 && (
             <div className="mt-7 w-full">
               <SectionLabel>Social Links</SectionLabel>
@@ -298,7 +286,75 @@ export function DigitalCardPreview({
             </div>
           )}
 
-          {/* Custom links */}
+          {/* Services — what this person offers. Deliberately plain rows, no
+              cards/shadows, per the "simple, clean, modern" design goal. */}
+          {activeServices.length > 0 && (
+            <div className="mt-7 w-full">
+              <SectionLabel>Services</SectionLabel>
+              <div className="space-y-3.5 text-left">
+                {activeServices.map((service) => (
+                  <div key={service.id} className="flex items-start gap-3">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <Briefcase className="size-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground">{service.title}</p>
+                      {service.description && (
+                        <p className="text-xs text-muted-foreground">{service.description}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Contact — address fields plus an "Open in Maps" action when the
+              owner has set a Google Maps link. Phone/email/website already
+              have their own action buttons above, so they're not repeated here. */}
+          {(hasAddressInfo || profile.googleMapsUrl) && (
+            <div className="mt-7 w-full">
+              <SectionLabel>Contact</SectionLabel>
+              <div className="space-y-2.5">
+                {profile.address && <ContactRow icon={MapPin} color="#8B5CF6" title="Address" value={profile.address} />}
+                {profile.city && <ContactRow icon={Building2} color="#2563EB" title="City" value={profile.city} />}
+                {profile.state && <ContactRow icon={MapIcon} color="#0EA5E9" title="State" value={profile.state} />}
+                {profile.country && <ContactRow icon={Flag} color="#14B8A6" title="Country" value={profile.country} />}
+                {profile.googleMapsUrl && (
+                  <a
+                    href={profile.googleMapsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-brand px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm transition-transform hover:-translate-y-0.5"
+                  >
+                    <Navigation className="size-4" />
+                    Open in Maps
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Custom Details */}
+          {customFields.length > 0 && (
+            <div className="mt-7 w-full">
+              <SectionLabel>Custom Details</SectionLabel>
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                {customFields.map((field) => (
+                  <div key={field.id} className="rounded-2xl border border-border/70 bg-muted/30 px-3.5 py-2.5 text-left">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      {field.label || "Untitled"}
+                    </p>
+                    <p className="truncate text-sm font-semibold text-foreground" title={field.value}>
+                      {field.value || "—"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Remaining sections — custom links */}
           {enabledCustom.length > 0 && (
             <div className="mt-7 w-full">
               <SectionLabel>Custom Links</SectionLabel>
@@ -329,26 +385,6 @@ export function DigitalCardPreview({
               </div>
             </div>
           )}
-
-          {/* QR code */}
-          <div className="mt-7 w-full rounded-2xl border border-border/70 bg-muted/30 p-4">
-            <SectionLabel>QR Code</SectionLabel>
-            <div className="flex items-center gap-3">
-              {qrDataUrl ? (
-                <img src={qrDataUrl} alt="Profile QR code" className="size-16 rounded-lg border border-border bg-white p-1" />
-              ) : (
-                <div className="size-16 shrink-0 animate-pulse rounded-lg bg-muted" />
-              )}
-              <div className="min-w-0 flex-1 text-left">
-                <p className="text-sm font-semibold text-foreground">Scan to save my contact</p>
-                <p className="text-xs text-muted-foreground">Share my profile instantly</p>
-                <Button size="sm" variant="soft" className="mt-2" onClick={onDownloadQr} disabled={downloading}>
-                  <Download className="size-3.5" />
-                  {downloading ? "Preparing…" : "Download QR"}
-                </Button>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>

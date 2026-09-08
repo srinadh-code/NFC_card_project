@@ -143,6 +143,14 @@ export interface CustomField {
   order: number
 }
 
+export interface Service {
+  id: string
+  title: string
+  description: string
+  order: number
+  isActive: boolean
+}
+
 export interface Profile {
   id: string // PRO001
   customerId: string
@@ -152,15 +160,22 @@ export interface Profile {
   company: string
   email: string
   phone: string
+  alternatePhone: string
   website: string
   address: string
+  city: string
+  state: string
+  country: string
+  googleMapsUrl: string
   bio: string
   avatar: string
+  coverImage: string | null
   status: ProfileStatus
   createdOn: string
   socialLinks: SocialLink[]
   customLinks: CustomLink[]
   customFields: CustomField[]
+  services: Service[]
 }
 
 export interface ActivityRecord {
