@@ -110,7 +110,28 @@ async function performLogin(email: string, password: string, expectedRole: "ADMI
   try {
     const payload = await authApi.login({ email, password })
     if (payload.user.role !== expectedRole) {
-      return { success: false, error: `No ${expectedRole.toLowerCase()} account found with those credentials.` }
+      if (import.meta.env.DEV) {
+        // Temporary, dev-only — pairs with ProtectedRoute.tsx's and
+        // auth-store.ts's bootstrap() logs for tracing auth decisions.
+        // eslint-disable-next-line no-console
+        console.debug("[auth-store] performLogin role mismatch", {
+          expectedRole,
+          actualRole: payload.user.role,
+          userId: payload.user.id,
+        })
+      }
+      // The credentials are valid — this account just belongs to the
+      // other portal. Naming that explicitly (rather than a generic
+      // "invalid credentials") is what turns "why won't my admin account
+      // log in" into a one-glance answer instead of a support ticket.
+      const hint =
+        expectedRole === "CUSTOMER"
+          ? "This looks like an admin account — use the Admin Portal login instead."
+          : "This looks like a customer account — use the Customer login instead."
+      return {
+        success: false,
+        error: `No ${expectedRole.toLowerCase()} account found with those credentials. ${hint}`,
+      }
     }
     setTokens(payload.access, payload.refresh)
     useAuthStore.getState().setUser(payload.user)

@@ -192,6 +192,11 @@ export interface ApiUser {
 
 interface AuthPayload {
   user: ApiUser
+  // Server-computed convenience field ("/admin/dashboard" or "/dashboard")
+  // — the frontend still derives its own redirect from `user.role` via
+  // hasValidSession()/performLogin() in auth-store.ts, so this is
+  // informational only, not currently consumed for routing decisions.
+  dashboard_url: string
   access: string
   refresh: string
 }
@@ -1691,52 +1696,61 @@ export const analyticsApi = {
 // Orders
 // ---------------------------------------------------------------------
 
+// Shape matches backend/orders/serializers.py's OrderSerializer — the
+// `orders` app (not customer_management.customer_orders) is what
+// /api/customer/orders/ actually routes to (see config/urls.py), because
+// admin_api reads Order rows from this same table. There is no
+// order_number field on this model — `id` is the only identifier.
 export interface ApiOrderItem {
-  id: number
+  product_id: string
+  name: string
   card_type: string
   color: string
-  quantity: number
-  unit_price: string
-  line_total: string
+  qty: number
+  price: string
 }
-export interface ApiOrderStatusHistory {
-  status: string
-  note: string
-  created_at: string
+export interface ApiOrderTrackingStep {
+  label: string
+  date: string | null
+  done: boolean
+}
+export interface ApiOrderAddress {
+  line1: string
+  city: string
+  state: string
+  pincode: string
+  country: string
 }
 export interface ApiOrder {
   id: number
-  order_number: string
-  status: string
-  shipping_full_name: string
-  shipping_phone: string
-  shipping_address: string
-  shipping_city: string
-  shipping_state: string
-  shipping_country: string
-  shipping_postal_code: string
-  subtotal: string
-  discount: string
-  total: string
-  tracking_number: string
-  notes: string
+  customer_id: number
+  customer_name: string
+  customer_email: string
+  customer_phone: string
   items: ApiOrderItem[]
-  status_history: ApiOrderStatusHistory[]
-  created_at: string
-  updated_at: string
+  amount: string
+  shipping: string
+  total: string
+  payment_method: string
+  payment_status: string
+  status: string
+  address: ApiOrderAddress
+  tracking: ApiOrderTrackingStep[]
+  assigned_card_id: number | null
+  placed_at: string
 }
 
+// Matches backend/orders/serializers.py's CustomerOrderCreateSerializer.
 export interface CreateOrderPayload {
-  shipping_full_name: string
-  shipping_phone: string
-  shipping_address: string
+  idempotency_key?: string
+  items: { product_id: string; name: string; card_type: string; color: string; qty: number; price: number }[]
+  shipping?: number
+  payment_method: "UPI" | "CARD" | "NET_BANKING" | "RAZORPAY" | "COD"
+  shipping_line1: string
   shipping_city: string
-  shipping_state: string
-  shipping_country: string
-  shipping_postal_code: string
-  notes?: string
-  discount?: number
-  items: { card_type: string; color: string; quantity: number; unit_price: number }[]
+  shipping_state?: string
+  shipping_pincode: string
+  shipping_country?: string
 }
 
 export const ordersApi = {

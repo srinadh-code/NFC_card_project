@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import { useMutation } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -37,11 +37,18 @@ export default function Checkout() {
   const [form, setForm] = useState<BillingForm>(INITIAL_FORM)
   const [errors, setErrors] = useState<Partial<Record<keyof BillingForm, boolean>>>({})
 
+  // One key per checkout attempt — resent unchanged if the mutation retries
+  // (network blip) or the user double-clicks Place Order, so the backend's
+  // idempotency check (see orders/views.py) returns the already-created
+  // order instead of billing the cart twice. A fresh key is only ever
+  // generated for a genuinely new attempt (component remount).
+  const idempotencyKeyRef = useRef<string>(crypto.randomUUID())
+
   const placeOrderMutation = useMutation({
     mutationFn: (payload: CreateOrderPayload) => ordersApi.create(payload),
     onSuccess: (order) => {
       clearCart()
-      navigate("/order-success", { state: { orderId: order.order_number } })
+      navigate("/order-success", { state: { orderId: String(order.id) } })
     },
     onError: (err) => {
       const message = err instanceof ApiError ? err.message : "Something went wrong placing your order."
@@ -97,19 +104,20 @@ export default function Checkout() {
     if (!validate()) return
 
     placeOrderMutation.mutate({
-      shipping_full_name: form.fullName,
-      shipping_phone: form.phone,
-      shipping_address: form.address,
+      idempotency_key: idempotencyKeyRef.current,
+      payment_method: "COD",
+      shipping_line1: form.address,
       shipping_city: form.city,
       shipping_state: form.state,
       shipping_country: "India",
-      shipping_postal_code: form.pincode,
-      discount,
+      shipping_pincode: form.pincode,
       items: lines.map((l) => ({
+        product_id: l.productId,
+        name: l.name,
         card_type: l.cardType.toUpperCase(),
         color: l.color.name,
-        quantity: l.qty,
-        unit_price: l.price,
+        qty: l.qty,
+        price: l.price,
       })),
     })
   }
