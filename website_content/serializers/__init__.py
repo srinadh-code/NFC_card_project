@@ -19,7 +19,12 @@ from .faqs import FaqSerializer
 from .testimonials import TestimonialSerializer
 from .companies import CompanySerializer
 from .statistics import StatisticSerializer
-from .contact import ContactMessageCreateSerializer, ContactMessageSerializer
+from .contact import (
+    ContactMessageCreateSerializer,
+    ContactMessageReplyCreateSerializer,
+    ContactMessageReplySerializer,
+    ContactMessageSerializer,
+)
 
 __all__ = [
     "HomeHeroSerializer",
@@ -41,4 +46,6 @@ __all__ = [
     "StatisticSerializer",
     "ContactMessageSerializer",
     "ContactMessageCreateSerializer",
+    "ContactMessageReplySerializer",
+    "ContactMessageReplyCreateSerializer",
 ]

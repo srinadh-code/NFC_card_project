@@ -19,7 +19,7 @@ from .faqs import Faq
 from .testimonials import Testimonial
 from .companies import Company
 from .statistics import Statistic
-from .contact import ContactMessage
+from .contact import ContactMessage, ContactMessageReply
 
 __all__ = [
     "HomeHero",
@@ -40,4 +40,5 @@ __all__ = [
     "Company",
     "Statistic",
     "ContactMessage",
+    "ContactMessageReply",
 ]

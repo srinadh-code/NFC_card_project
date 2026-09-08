@@ -17,6 +17,7 @@ from website_content.views.admin import (
     CompanyImageAdminView,
     ContactMessageAdminDetailView,
     ContactMessageAdminListView,
+    ContactMessageReplyAdminView,
     FaqAdminDetailView,
     FaqAdminListView,
     FaqAdminReorderView,
@@ -185,5 +186,10 @@ urlpatterns = [
         "contact-messages/<int:pk>/",
         ContactMessageAdminDetailView.as_view(),
         name="admin-contact-message-detail",
+    ),
+    path(
+        "contact-messages/<int:pk>/reply/",
+        ContactMessageReplyAdminView.as_view(),
+        name="admin-contact-message-reply",
     ),
 ]

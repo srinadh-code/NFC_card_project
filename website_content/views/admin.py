@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 
 from common.pagination import StandardPagination
 from common.permissions import IsAdminRole
+from common.response import error, success
 
 from website_content.models import (
     AboutBuiltFromExperience,
@@ -18,6 +19,7 @@ from website_content.models import (
     AboutWhyChoose,
     Company,
     ContactMessage,
+    ContactMessageReply,
     Faq,
     Feature,
     HomeCTA,
@@ -37,6 +39,7 @@ from website_content.serializers import (
     AboutPageSerializer,
     AboutWhyChooseSerializer,
     CompanySerializer,
+    ContactMessageReplyCreateSerializer,
     ContactMessageSerializer,
     FaqSerializer,
     FeatureSerializer,
@@ -307,7 +310,7 @@ class ContactMessageAdminListView(APIView):
     permission_classes = [IsAdminRole]
 
     def get(self, request):
-        queryset = ContactMessage.objects.all()
+        queryset = ContactMessage.objects.prefetch_related("replies").all()
 
         is_read = request.query_params.get("is_read")
         if is_read in ("true", "false"):
@@ -326,3 +329,37 @@ class ContactMessageAdminListView(APIView):
 class ContactMessageAdminDetailView(AdminDetailAPIView):
     model = ContactMessage
     serializer_class = ContactMessageSerializer
+
+
+class ContactMessageReplyAdminView(APIView):
+    """POST a reply to a contact message. Marks the message read and
+    returns the full updated message (with reply history) so the admin
+    UI never has to guess the result — same never-fake-success pattern
+    as every other write in this app."""
+
+    permission_classes = [IsAdminRole]
+
+    def post(self, request, pk):
+        try:
+            message = ContactMessage.objects.get(pk=pk)
+        except ContactMessage.DoesNotExist:
+            return error("Not found.", status=404)
+
+        serializer = ContactMessageReplyCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        ContactMessageReply.objects.create(
+            message=message,
+            admin=request.user,
+            content=serializer.validated_data["content"],
+        )
+
+        if not message.is_read:
+            message.is_read = True
+            message.save(update_fields=["is_read"])
+
+        return success(
+            ContactMessageSerializer(message).data,
+            message="Reply sent.",
+            status=201,
+        )
