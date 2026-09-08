@@ -1693,14 +1693,16 @@ export const analyticsApi = {
 }
 
 // ---------------------------------------------------------------------
-// Orders
+// Orders — reads/writes the same `orders.Order` model admin_api.orders/
+// .dashboard/.transactions/.reports already use (backend orders/views.py
+// CustomerOrderListCreateView), so an order placed here is immediately
+// visible to admin. Shape matches backend/orders/serializers.py's
+// OrderSerializer directly (no adapter layer) — there is no order_number
+// field on this model, `id` is the only identifier, and no discount field
+// either (a cart coupon still reduces what Checkout.tsx *displays*, but
+// isn't sent to or recorded by the backend — see Checkout.tsx).
 // ---------------------------------------------------------------------
 
-// Shape matches backend/orders/serializers.py's OrderSerializer — the
-// `orders` app (not customer_management.customer_orders) is what
-// /api/customer/orders/ actually routes to (see config/urls.py), because
-// admin_api reads Order rows from this same table. There is no
-// order_number field on this model — `id` is the only identifier.
 export interface ApiOrderItem {
   product_id: string
   name: string
@@ -1754,7 +1756,7 @@ export interface CreateOrderPayload {
 }
 
 export const ordersApi = {
-  list: (page = 1) => requestPaginated<ApiOrder>(`/customer/orders/?page=${page}`),
+  list: (page = 1) => requestPaginated<ApiOrder>(`/customer/orders/?page=${page}&page_size=100`),
   create: (payload: CreateOrderPayload) => request<ApiOrder>("/customer/orders/", { method: "POST", body: payload }),
   getById: (id: number | string) => request<ApiOrder>(`/customer/orders/${id}/`),
 }
