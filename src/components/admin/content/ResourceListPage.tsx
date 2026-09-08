@@ -46,6 +46,7 @@ export interface ResourceListPageProps<T extends WithId & { is_active: boolean }
   queryKey: QueryKey
   listParams?: Record<string, string | number | boolean | undefined>
   resourceLabel: string
+  description?: string
   columns: ResourceColumn<T>[]
   getRowLabel: (item: T) => string
   createDefaults: (existing: T[]) => Partial<T>
@@ -72,6 +73,7 @@ export function ResourceListPage<T extends WithId & { is_active: boolean }>({
   queryKey,
   listParams,
   resourceLabel,
+  description,
   columns,
   getRowLabel,
   createDefaults,
@@ -185,7 +187,8 @@ export function ResourceListPage<T extends WithId & { is_active: boolean }>({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold tracking-tight">{resourceLabel}s</h2>
-            <p className="text-sm text-muted-foreground">{items.length} total</p>
+            {description && <p className="text-sm text-muted-foreground">{description}</p>}
+            <p className="text-xs text-muted-foreground">{items.length} total</p>
           </div>
           <div className="flex items-center gap-2">
             {headerExtra}
