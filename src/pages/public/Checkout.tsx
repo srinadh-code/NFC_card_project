@@ -65,28 +65,6 @@ export default function Checkout() {
   const shipping = sub > 999 ? 0 : 49
   const total = Math.max(0, sub + shipping - discount)
 
-  if (!customer) {
-    return <Navigate to="/login" state={{ from: "/checkout" }} replace />
-  }
-  const authedCustomer = customer
-
-  function update<K extends keyof BillingForm>(key: K, value: BillingForm[K]) {
-    setForm((f) => ({ ...f, [key]: value }))
-  }
-
-  function validate(): boolean {
-    const next: Partial<Record<keyof BillingForm, boolean>> = {}
-    ;(Object.keys(form) as (keyof BillingForm)[]).forEach((key) => {
-      if (!form[key].trim()) next[key] = true
-    })
-    setErrors(next)
-    if (Object.keys(next).length > 0) {
-      toast.error("Please fill in all required fields.")
-      return false
-    }
-    return true
-  }
-
   const placeOrderMutation = useMutation({
     mutationFn: (address: Address) =>
       customerOrderApi.create({
@@ -111,6 +89,27 @@ export default function Checkout() {
       toast.error("Something went wrong placing your order. Please try again.")
     },
   })
+
+  if (!customer) {
+    return <Navigate to="/login" state={{ from: "/checkout" }} replace />
+  }
+
+  function update<K extends keyof BillingForm>(key: K, value: BillingForm[K]) {
+    setForm((f) => ({ ...f, [key]: value }))
+  }
+
+  function validate(): boolean {
+    const next: Partial<Record<keyof BillingForm, boolean>> = {}
+    ;(Object.keys(form) as (keyof BillingForm)[]).forEach((key) => {
+      if (!form[key].trim()) next[key] = true
+    })
+    setErrors(next)
+    if (Object.keys(next).length > 0) {
+      toast.error("Please fill in all required fields.")
+      return false
+    }
+    return true
+  }
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
