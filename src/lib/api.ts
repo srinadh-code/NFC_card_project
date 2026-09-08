@@ -1420,95 +1420,59 @@ export const adminProfileApi = {
 }
 
 // ---------------------------------------------------------------------
-// Customer orders (customer_management.customer_orders)
+// Customer orders — backed by the same `orders.Order` model/shape as
+// adminOrderApi above (see orders/views.py CustomerOrderListCreateView),
+// so an order placed here is immediately visible to admin.
 // ---------------------------------------------------------------------
 
-interface ApiCustomerOrderItem {
-  id: number
-  card_type: string
-  color: string
-  quantity: number
-  unit_price: string
-  line_total: string
-}
-interface ApiCustomerOrder {
-  id: number
-  order_number: string
-  status: string
-  shipping_full_name: string
-  shipping_phone: string
-  shipping_address: string
-  shipping_city: string
-  shipping_state: string
-  shipping_country: string
-  shipping_postal_code: string
-  subtotal: string
-  discount: string
-  total: string
-  tracking_number: string | null
-  notes: string
-  items: ApiCustomerOrderItem[]
-  status_history: { status: string; note: string; created_at: string }[]
-  created_at: string
-  updated_at: string
+export interface CustomerOrderWrite {
+  items: { productId: string; name: string; cardType: NfcCard["cardType"]; color: string; qty: number; price: number }[]
+  shipping: number
+  paymentMethod: PaymentMethod
+  address: Address
+  // One value per checkout *attempt*, resent unchanged on every retry of
+  // that same attempt (double-click, network retry) — the backend uses it
+  // to recognize and no-op a duplicate instead of creating a second order.
+  // See orders/views.py CustomerOrderListCreateView.post.
+  idempotencyKey: string
 }
 
-// customer_orders has no per-item product line/name or shipping-cost
-// field, and its Status enum ("PENDING","PROCESSING",...) doesn't carry a
-// tracking timeline — synthesize the 5-step timeline the same way
-// AdminOrderSerializer does, so the existing Order-shaped UI (which
-// expects `tracking`) still renders sensibly.
-const CUSTOMER_ORDER_STEP_ORDER = ["PENDING", "PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED"]
-const CUSTOMER_ORDER_TRACKING_LABELS = ["Order Placed", "Order Confirmed", "Shipped", "Out for Delivery", "Delivered"]
-
-function toFrontendCustomerOrder(o: ApiCustomerOrder): Order {
-  const reached = CUSTOMER_ORDER_STEP_ORDER.indexOf(o.status)
-  const cancelled = o.status === "CANCELLED"
-  const tracking: TrackingStep[] = CUSTOMER_ORDER_TRACKING_LABELS.map((label, i) => {
-    const done = cancelled ? i === 0 : reached >= 0 && i <= reached
-    return { label, done, date: done ? o.updated_at : null }
-  })
+function toApiCustomerOrderPayload(values: CustomerOrderWrite): Record<string, unknown> {
   return {
-    id: String(o.id),
-    customerId: "",
-    customerName: o.shipping_full_name,
-    customerEmail: "",
-    customerPhone: o.shipping_phone,
-    items: o.items.map((it) => ({
-      productId: String(it.id),
-      name: `${CARD_TYPE_MAP[it.card_type] ?? "Standard"} Card`,
-      cardType: CARD_TYPE_MAP[it.card_type] ?? "Standard",
+    idempotency_key: values.idempotencyKey,
+    items: values.items.map((it) => ({
+      product_id: it.productId,
+      name: it.name,
+      card_type: CARD_TYPE_REVERSE_MAP[it.cardType],
       color: it.color,
-      qty: it.quantity,
-      price: Number(it.unit_price),
+      qty: it.qty,
+      price: it.price,
     })),
-    amount: Number(o.subtotal),
-    shipping: 0,
-    total: Number(o.total),
-    paymentMethod: "COD",
-    paymentStatus: "Pending",
-    status: ORDER_STATUS_MAP[o.status] ?? "Pending",
-    date: o.created_at,
-    address: {
-      line1: o.shipping_address,
-      city: o.shipping_city,
-      state: o.shipping_state,
-      pincode: o.shipping_postal_code,
-      country: o.shipping_country,
-    },
-    tracking,
-    assignedCardId: null,
+    shipping: values.shipping,
+    payment_method: PAYMENT_METHOD_REVERSE_MAP[values.paymentMethod],
+    shipping_line1: values.address.line1,
+    shipping_city: values.address.city,
+    shipping_state: values.address.state,
+    shipping_pincode: values.address.pincode,
+    shipping_country: values.address.country,
   }
 }
 
 export const customerOrderApi = {
   mine: async (): Promise<Order[]> => {
-    const envelope = await requestEnvelope<ApiCustomerOrder[]>("/customer/orders/?page_size=100")
-    return (envelope.data ?? []).map(toFrontendCustomerOrder)
+    const envelope = await requestEnvelope<ApiAdminOrder[]>("/customer/orders/?page_size=100")
+    return (envelope.data ?? []).map(toFrontendOrder)
   },
 
-  get: async (id: string): Promise<Order> =>
-    toFrontendCustomerOrder(await request<ApiCustomerOrder>(`/customer/orders/${id}/`)),
+  get: async (id: string): Promise<Order> => toFrontendOrder(await request<ApiAdminOrder>(`/customer/orders/${id}/`)),
+
+  create: async (values: CustomerOrderWrite): Promise<Order> =>
+    toFrontendOrder(
+      await request<ApiAdminOrder>("/customer/orders/", {
+        method: "POST",
+        body: toApiCustomerOrderPayload(values),
+      }),
+    ),
 }
 
 // ---------------------------------------------------------------------
