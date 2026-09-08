@@ -1,6 +1,6 @@
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from common.permissions import IsCustomerRole
 from common.response import error, success
 from common.views import PaginatedAPIView
 
@@ -9,7 +9,7 @@ from .serializers import CreateOrderSerializer, OrderSerializer
 
 
 class CustomerOrderListCreateView(PaginatedAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def get(self, request):
         orders = services.list_orders(request.user)
@@ -23,7 +23,7 @@ class CustomerOrderListCreateView(PaginatedAPIView):
 
 
 class CustomerOrderDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def get(self, request, pk):
         order = services.get_order(request.user, pk)

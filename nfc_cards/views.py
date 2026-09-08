@@ -1,11 +1,19 @@
 from django.utils import timezone
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
+from analytics.models import TapEvent
+from analytics.tracking import log_event
+from common.permissions import IsCustomerRole
 from common.response import error, success
 
 from .models import NfcCard
-from .serializers import ActivateCardSerializer, DeactivateCardSerializer, NfcCardSerializer
+from .serializers import (
+    ActivateCardSerializer,
+    DeactivateCardSerializer,
+    NfcCardSerializer,
+    TrackEventSerializer,
+)
 
 
 def _notify_card_activated(user, card):
@@ -21,7 +29,7 @@ def _notify_card_activated(user, card):
 
 
 class MyCardsView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def get(self, request):
         cards = NfcCard.objects.filter(user=request.user)
@@ -31,7 +39,7 @@ class MyCardsView(APIView):
 class ActivateCardView(APIView):
     """Customer claims a physical card by entering/scanning its UID."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def post(self, request):
         serializer = ActivateCardSerializer(data=request.data)
@@ -65,7 +73,7 @@ class ActivateCardView(APIView):
 class ActivateAssignedCardView(APIView):
     """One-click activation for a card the admin already assigned to this customer."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def post(self, request, pk):
         card = NfcCard.objects.filter(pk=pk).first()
@@ -87,7 +95,7 @@ class ActivateAssignedCardView(APIView):
 class DeactivateCardView(APIView):
     """Customer takes their own card out of service (lets them re-activate later)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def post(self, request):
         serializer = DeactivateCardSerializer(data=request.data)
@@ -115,6 +123,10 @@ class CardResolveView(APIView):
     Public endpoint an NFC tap / QR scan hits first. Resolves a card to its
     owner's public profile URL only — never exposes any other card or
     customer data.
+
+    Optional `?source=qr` distinguishes a QR-code scan from a plain NFC tap
+    for analytics — a caller that omits it is assumed to be a direct NFC
+    tap, since that's this endpoint's primary trigger.
     """
 
     permission_classes = [AllowAny]
@@ -131,9 +143,36 @@ class CardResolveView(APIView):
         if profile is None or not profile.profile_public:
             return error("This card's profile is not available.", status=404)
 
+        action = TapEvent.Action.QR_SCAN if request.query_params.get("source") == "qr" else TapEvent.Action.TAP
+        log_event(request, action=action, card=card, customer=card.user)
+
         from customer_management.customer_analytics.models import AnalyticsEvent
         from customer_management.customer_analytics.services import record_event
 
         record_event(card.user, AnalyticsEvent.EventType.NFC_TAP, request=request, source="nfc")
 
         return success({"redirect_url": profile.public_url_path})
+
+
+class TrackEventView(APIView):
+    """Public engagement tracking for actions that happen entirely
+    client-side after a card has already resolved (saving the contact,
+    sharing the profile) — see analytics.tracking.log_event."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = TrackEventSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        card = NfcCard.objects.filter(uid__iexact=data["uid"]).first()
+        if card is None:
+            return error("No card found with that ID.", status=404)
+
+        action_map = {
+            "contact_saved": TapEvent.Action.CONTACT_SAVED,
+            "shared": TapEvent.Action.SHARED,
+        }
+        log_event(request, action=action_map[data["action"]], card=card, customer=card.user)
+        return success(message="Recorded.")

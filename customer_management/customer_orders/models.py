@@ -14,7 +14,9 @@ class Order(models.Model):
         DELIVERED = "DELIVERED", "Delivered"
         CANCELLED = "CANCELLED", "Cancelled"
 
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="orders")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="customer_orders"
+    )
     order_number = models.CharField(max_length=20, unique=True, db_index=True)
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
 

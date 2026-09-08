@@ -1,7 +1,7 @@
 from rest_framework.parsers import FormParser, MultiPartParser
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from common.permissions import IsCustomerRole
 from common.response import success
 from common.uploads import image_upload_error
 
@@ -12,7 +12,7 @@ from .serializers import CustomerProfileSerializer
 class CustomerProfileView(APIView):
     """GET/PUT the authenticated customer's own profile."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def get(self, request):
         profile = services.get_or_create_profile(request.user)
@@ -32,7 +32,7 @@ class CustomerProfileView(APIView):
 class CustomerProfileImageUploadView(APIView):
     """POST a new profile (avatar) image."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):
@@ -50,7 +50,7 @@ class CustomerProfileImageUploadView(APIView):
 class CustomerCoverImageUploadView(APIView):
     """POST a new cover image."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):

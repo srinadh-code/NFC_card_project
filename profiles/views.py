@@ -1,10 +1,12 @@
-from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
+from analytics.models import TapEvent
+from analytics.tracking import log_event
+from common.permissions import IsCustomerRole
 from common.response import error, success
 
 from .models import CustomField, CustomLink, Profile, SocialLink
@@ -18,7 +20,7 @@ from .serializers import (
 
 
 class MyProfileView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def get(self, request):
         profile = Profile.ensure_for_user(request.user)
@@ -35,7 +37,7 @@ class MyProfileView(APIView):
 
 
 class MyAvatarView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):
@@ -75,7 +77,7 @@ class OwnedByProfileMixin:
 class SocialLinkViewSet(OwnedByProfileMixin, viewsets.ModelViewSet):
     model = SocialLink
     serializer_class = SocialLinkSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     @action(detail=False, methods=["patch"])
     def reorder(self, request):
@@ -85,7 +87,7 @@ class SocialLinkViewSet(OwnedByProfileMixin, viewsets.ModelViewSet):
 class CustomLinkViewSet(OwnedByProfileMixin, viewsets.ModelViewSet):
     model = CustomLink
     serializer_class = CustomLinkSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     @action(detail=False, methods=["patch"])
     def reorder(self, request):
@@ -95,7 +97,7 @@ class CustomLinkViewSet(OwnedByProfileMixin, viewsets.ModelViewSet):
 class CustomFieldViewSet(OwnedByProfileMixin, viewsets.ModelViewSet):
     model = CustomField
     serializer_class = CustomFieldSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     @action(detail=False, methods=["patch"])
     def reorder(self, request):
@@ -113,6 +115,8 @@ class PublicProfileView(APIView):
             # so a probing request can't distinguish "doesn't exist" from
             # "exists but is private".
             return error("This profile is not available.", status=404)
+
+        log_event(request, action=TapEvent.Action.PROFILE_VIEW, customer=profile.user)
 
         from customer_management.customer_analytics.models import AnalyticsEvent
         from customer_management.customer_analytics.services import record_event
