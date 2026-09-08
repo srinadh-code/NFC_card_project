@@ -191,6 +191,8 @@ export const contactMessagesApi = {
   update: (id: number, patch: { is_read?: boolean; is_resolved?: boolean }) =>
     request<ContactMessage>(`${ADMIN}/contact-messages/${id}/`, { method: "PATCH", body: patch }),
   remove: (id: number) => request<void>(`${ADMIN}/contact-messages/${id}/`, { method: "DELETE" }),
+  reply: (id: number, content: string) =>
+    request<ContactMessage>(`${ADMIN}/contact-messages/${id}/reply/`, { method: "POST", body: { content } }),
 }
 
 // ---------------------------------------------------------------------

@@ -1,11 +1,12 @@
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { CheckCircle2, Circle, Mail, MailOpen, MoreHorizontal, Trash2 } from "lucide-react"
+import { CheckCircle2, Circle, Loader2, Mail, MailOpen, MoreHorizontal, Send, Trash2 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { Badge, type badgeVariants } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
@@ -29,6 +30,7 @@ import { ApiError } from "@/lib/api"
 import { contactMessagesApi } from "@/lib/contentApi"
 import { cn } from "@/lib/utils"
 import type { ContactMessage } from "@/types/content"
+import type { VariantProps } from "class-variance-authority"
 
 const PAGE_SIZE = 10
 
@@ -43,6 +45,16 @@ function formatDate(iso: string) {
   }
 }
 
+// Primary status shown per the CMS spec (Unread / Read / Replied) — layered
+// on top of, not replacing, the existing independent is_resolved Open/Resolved
+// badge below it. "Replied" takes precedence once any reply exists, since
+// that's effectively a terminal state regardless of the is_read toggle.
+function readStatus(message: ContactMessage): { label: string; variant: VariantProps<typeof badgeVariants>["variant"] } {
+  if (message.reply_count > 0) return { label: "Replied", variant: "default" }
+  if (message.is_read) return { label: "Read", variant: "secondary" }
+  return { label: "Unread", variant: "soft" }
+}
+
 // Contact messages use *server*-side pagination (the backend paginates this
 // endpoint) — unlike the client-side slicing every other admin list screen
 // in this codebase (e.g. Cards.tsx) uses over an already-fetched full array.
@@ -53,6 +65,7 @@ export default function ContactMessagesTab() {
   const [resolvedFilter, setResolvedFilter] = useState<ResolvedFilter>("all")
   const [viewing, setViewing] = useState<ContactMessage | null>(null)
   const [deleting, setDeleting] = useState<ContactMessage | null>(null)
+  const [replyText, setReplyText] = useState("")
 
   const params = {
     page,
@@ -78,8 +91,11 @@ export default function ContactMessagesTab() {
   const updateMutation = useMutation({
     mutationFn: ({ id, patch }: { id: number; patch: { is_read?: boolean; is_resolved?: boolean } }) =>
       contactMessagesApi.update(id, patch),
-    onSuccess: (_data, variables) => {
+    onSuccess: (updated, variables) => {
       invalidate()
+      // Keep an already-open details dialog in sync with the real backend
+      // response instead of going stale until it's closed and reopened.
+      setViewing((v) => (v && v.id === variables.id ? updated : v))
       if (variables.patch.is_read !== undefined) {
         toast.success(variables.patch.is_read ? "Marked as read." : "Marked as unread.")
       }
@@ -100,11 +116,37 @@ export default function ContactMessagesTab() {
     onError: (err) => reportError(err, "Failed to delete message."),
   })
 
+  const replyMutation = useMutation({
+    mutationFn: ({ id, content }: { id: number; content: string }) => contactMessagesApi.reply(id, content),
+    onSuccess: (updated) => {
+      invalidate()
+      setViewing(updated)
+      setReplyText("")
+      toast.success("Reply sent.")
+    },
+    onError: (err) => reportError(err, "Failed to send reply."),
+    // Belt-and-suspenders against double submission (Enter-key spam, a
+    // second click before the button disables) on top of the disabled
+    // state driven by isPending below.
+    retry: false,
+  })
+
   function openView(message: ContactMessage) {
     setViewing(message)
+    setReplyText("")
     if (!message.is_read) {
       updateMutation.mutate({ id: message.id, patch: { is_read: true } })
     }
+  }
+
+  function submitReply() {
+    if (!viewing || replyMutation.isPending) return
+    const content = replyText.trim()
+    if (!content) {
+      toast.error("Reply cannot be empty.")
+      return
+    }
+    replyMutation.mutate({ id: viewing.id, content })
   }
 
   return (
@@ -190,9 +232,7 @@ export default function ContactMessagesTab() {
                     <TableCell className="text-muted-foreground">{formatDate(message.created_at)}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
-                        <Badge variant={message.is_read ? "secondary" : "soft"}>
-                          {message.is_read ? "Read" : "Unread"}
-                        </Badge>
+                        <Badge variant={readStatus(message).variant}>{readStatus(message).label}</Badge>
                         <Badge variant={message.is_resolved ? "success" : "warning"}>
                           {message.is_resolved ? "Resolved" : "Open"}
                         </Badge>
@@ -256,14 +296,56 @@ export default function ContactMessagesTab() {
       </CardContent>
 
       <Dialog open={!!viewing} onOpenChange={(open) => !open && setViewing(null)}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{viewing?.subject}</DialogTitle>
             <DialogDescription>
               {viewing?.name} · {viewing?.email} · {viewing ? formatDate(viewing.created_at) : ""}
             </DialogDescription>
           </DialogHeader>
-          <p className="max-h-[50vh] overflow-y-auto whitespace-pre-wrap text-sm">{viewing?.message}</p>
+
+          <div className="flex flex-col gap-3 overflow-y-auto pr-1">
+            {/* Customer's original message — never truncated. */}
+            <div className="rounded-lg border border-border bg-muted/40 p-3">
+              <div className="flex items-center justify-between gap-2 text-xs font-semibold text-foreground">
+                <span>Customer</span>
+                <span className="font-normal text-muted-foreground">
+                  {viewing ? formatDate(viewing.created_at) : ""}
+                </span>
+              </div>
+              <p className="mt-1.5 whitespace-pre-wrap text-sm">{viewing?.message}</p>
+            </div>
+
+            {/* Reply history — visually distinct from the customer's message. */}
+            {viewing?.replies.map((reply) => (
+              <div key={reply.id} className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+                <div className="flex items-center justify-between gap-2 text-xs font-semibold text-primary">
+                  <span>Admin{reply.admin_name ? ` · ${reply.admin_name}` : ""}</span>
+                  <span className="font-normal text-muted-foreground">{formatDate(reply.created_at)}</span>
+                </div>
+                <p className="mt-1.5 whitespace-pre-wrap text-sm">{reply.content}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-2 border-t border-border pt-3">
+            <Textarea
+              placeholder="Type your reply here..."
+              rows={3}
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              disabled={replyMutation.isPending}
+            />
+            <Button
+              className="self-end"
+              disabled={replyMutation.isPending || !replyText.trim()}
+              onClick={submitReply}
+            >
+              {replyMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              Send Reply
+            </Button>
+          </div>
+
           <DialogFooter>
             <Button
               variant="outline"
@@ -274,7 +356,9 @@ export default function ContactMessagesTab() {
             >
               {viewing?.is_resolved ? "Mark Unresolved" : "Mark Resolved"}
             </Button>
-            <Button onClick={() => setViewing(null)}>Close</Button>
+            <Button variant="outline" onClick={() => setViewing(null)}>
+              Close
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

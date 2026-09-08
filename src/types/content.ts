@@ -166,6 +166,12 @@ export interface Statistic extends WithId {
 // Contact messages
 // ---------------------------------------------------------------------
 
+export interface ContactMessageReply extends WithId {
+  content: string
+  admin_name: string | null
+  created_at: string
+}
+
 export interface ContactMessage extends WithId {
   name: string
   email: string
@@ -174,6 +180,8 @@ export interface ContactMessage extends WithId {
   is_read: boolean
   is_resolved: boolean
   created_at: string
+  replies: ContactMessageReply[]
+  reply_count: number
 }
 
 // ---------------------------------------------------------------------
