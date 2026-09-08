@@ -41,6 +41,16 @@ class Order(models.Model):
     )
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
 
+    # One-per-submission-attempt token the client generates and resends on
+    # every retry/double-click of the *same* checkout attempt (see
+    # CustomerOrderCreateSerializer/CustomerOrderListCreateView). Unique
+    # per-customer (see Meta.constraints below) — not globally unique, since
+    # two different customers' independently-generated keys coinciding is a
+    # coincidence, not a duplicate. Nullable (not blank=True + default="")
+    # so admin-created orders, which never send one, all store NULL rather
+    # than colliding with each other on "".
+    idempotency_key = models.CharField(max_length=64, null=True, blank=True, db_index=True)
+
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     shipping = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     payment_method = models.CharField(max_length=12, choices=PaymentMethod.choices)
@@ -74,6 +84,12 @@ class Order(models.Model):
 
     class Meta:
         ordering = ["-placed_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["customer", "idempotency_key"],
+                name="unique_customer_idempotency_key",
+            ),
+        ]
 
     def __str__(self):
         return f"Order #{self.id} ({self.customer.email})"
