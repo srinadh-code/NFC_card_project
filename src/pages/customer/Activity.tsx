@@ -1,10 +1,10 @@
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { BookmarkCheck, Eye, MousePointerClick, QrCode } from "lucide-react"
+import { Eye, MousePointerClick, QrCode } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   Pagination,
@@ -14,122 +14,126 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination"
+import { ErrorState } from "@/components/customer/ErrorState"
 import { useCustomerAuthStore } from "@/store/auth-store"
-import { activityRecords } from "@/data/seed"
-import { simulateLatency, formatDateTime } from "@/lib/mock-api"
-import type { ActivityRecord } from "@/types"
+import { analyticsApi, type ApiAnalyticsEvent } from "@/lib/api"
+import { formatDateTime } from "@/lib/mock-api"
 
-const PAGE_SIZE = 10
+type Feed = "views" | "taps" | "scans"
 
-type ActionFilter = "All" | ActivityRecord["action"]
-type TimeRange = "today" | "week" | "month" | "all"
-
-const ACTION_META: Record<
-  ActivityRecord["action"],
-  { icon: typeof MousePointerClick; variant: "default" | "soft" | "success" | "warning" }
-> = {
-  "Card Tapped": { icon: MousePointerClick, variant: "default" },
-  "QR Code Scanned": { icon: QrCode, variant: "soft" },
-  "Profile Viewed": { icon: Eye, variant: "success" },
-  "Contact Saved": { icon: BookmarkCheck, variant: "warning" },
+const FEED_META: Record<Feed, { label: string; icon: typeof Eye; fetcher: (page: number) => ReturnType<typeof analyticsApi.getViews>; empty: string }> = {
+  views: { label: "Profile Views", icon: Eye, fetcher: (p) => analyticsApi.getViews(p, 10), empty: "No profile views recorded yet." },
+  taps: { label: "NFC Taps", icon: MousePointerClick, fetcher: (p) => analyticsApi.getTaps(p, 10), empty: "No NFC taps recorded yet." },
+  scans: { label: "QR Scans", icon: QrCode, fetcher: (p) => analyticsApi.getScans(p, 10), empty: "No QR scans recorded yet." },
 }
 
-const TIME_RANGE_LABEL: Record<TimeRange, string> = {
-  today: "Today",
-  week: "This Week",
-  month: "This Month",
-  all: "All Time",
-}
+function EventTable({ feed }: { feed: Feed }) {
+  const [page, setPage] = useState(1)
+  const meta = FEED_META[feed]
 
-function fetchActivity(customerId: string) {
-  return activityRecords
-    .filter((r) => r.customerId === customerId)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-}
+  const query = useQuery({
+    queryKey: ["customer-activity", feed, page],
+    queryFn: () => meta.fetcher(page),
+  })
 
-function isSameCalendarDay(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-}
+  if (query.isLoading) {
+    return (
+      <div className="space-y-2">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-10 w-full" />
+        ))}
+      </div>
+    )
+  }
 
-function withinTimeRange(dateIso: string, range: TimeRange) {
-  if (range === "all") return true
-  const now = new Date()
-  const date = new Date(dateIso)
-  if (range === "today") return isSameCalendarDay(date, now)
-  const cutoff = new Date(now)
-  if (range === "week") cutoff.setDate(now.getDate() - 7)
-  else cutoff.setDate(now.getDate() - 30)
-  return date >= cutoff
+  if (query.isError) {
+    return <ErrorState error={query.error} onRetry={() => query.refetch()} />
+  }
+
+  const events = query.data?.items ?? []
+  const pagination = query.data?.pagination
+
+  if (events.length === 0) {
+    return <p className="py-12 text-center text-sm text-muted-foreground">{meta.empty}</p>
+  }
+
+  return (
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Date &amp; Time</TableHead>
+            <TableHead>Device</TableHead>
+            <TableHead>Source</TableHead>
+            <TableHead>Detail</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {events.map((event: ApiAnalyticsEvent) => (
+            <TableRow key={event.id}>
+              <TableCell className="whitespace-nowrap">{formatDateTime(event.created_at)}</TableCell>
+              <TableCell>{event.device || "Unknown"}</TableCell>
+              <TableCell>
+                <Badge variant="soft">{event.source || "Direct"}</Badge>
+              </TableCell>
+              <TableCell className="text-muted-foreground">{event.metadata || "—"}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+
+      {pagination && pagination.num_pages > 1 && (
+        <Pagination className="mt-4 justify-end">
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault()
+                  setPage((p) => Math.max(1, p - 1))
+                }}
+              />
+            </PaginationItem>
+            {Array.from({ length: pagination.num_pages }).map((_, i) => (
+              <PaginationItem key={i}>
+                <PaginationLink
+                  href="#"
+                  isActive={pagination.page === i + 1}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setPage(i + 1)
+                  }}
+                >
+                  {i + 1}
+                </PaginationLink>
+              </PaginationItem>
+            ))}
+            <PaginationItem>
+              <PaginationNext
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault()
+                  setPage((p) => Math.min(pagination.num_pages, p + 1))
+                }}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      )}
+    </>
+  )
 }
 
 export default function CustomerActivity() {
   const customer = useCustomerAuthStore((s) => s.customer)
-  const [actionFilter, setActionFilter] = useState<ActionFilter>("All")
-  const [timeRange, setTimeRange] = useState<TimeRange>("all")
-  const [page, setPage] = useState(1)
-
-  const { data, isLoading } = useQuery({
-    queryKey: ["customer-activity", customer?.id],
-    queryFn: () => simulateLatency(fetchActivity(customer?.id ?? ""), 300),
-    enabled: Boolean(customer?.id),
-  })
-
-  const filtered = useMemo(() => {
-    if (!data) return []
-    return data
-      .filter((r) => actionFilter === "All" || r.action === actionFilter)
-      .filter((r) => withinTimeRange(r.date, timeRange))
-  }, [data, actionFilter, timeRange])
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const currentPage = Math.min(page, totalPages)
-  const pageRecords = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
-
-  function handleActionFilterChange(value: ActionFilter) {
-    setActionFilter(value)
-    setPage(1)
-  }
-
-  function handleTimeRangeChange(value: TimeRange) {
-    setTimeRange(value)
-    setPage(1)
-  }
 
   if (!customer) return null
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight">Activity</h1>
-          <p className="text-sm text-muted-foreground">All recent activities on your card.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Select value={timeRange} onValueChange={(v) => handleTimeRangeChange(v as TimeRange)}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="Time range" />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(TIME_RANGE_LABEL) as TimeRange[]).map((r) => (
-                <SelectItem key={r} value={r}>
-                  {TIME_RANGE_LABEL[r]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={actionFilter} onValueChange={(v) => handleActionFilterChange(v as ActionFilter)}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Filter by action" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="All">All Actions</SelectItem>
-              <SelectItem value="Card Tapped">Card Tapped</SelectItem>
-              <SelectItem value="QR Code Scanned">QR Code Scanned</SelectItem>
-              <SelectItem value="Profile Viewed">Profile Viewed</SelectItem>
-              <SelectItem value="Contact Saved">Contact Saved</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold tracking-tight">Activity</h1>
+        <p className="text-sm text-muted-foreground">Real, timestamped events recorded on your card and profile.</p>
       </div>
 
       <Card className="rounded-2xl">
@@ -137,86 +141,24 @@ export default function CustomerActivity() {
           <CardTitle className="text-base">Recent Activity</CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoading || !data ? (
-            <div className="space-y-2">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-10 w-full" />
-              ))}
-            </div>
-          ) : filtered.length === 0 ? (
-            <p className="py-12 text-center text-sm text-muted-foreground">No activity found for this filter.</p>
-          ) : (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date &amp; Time</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Device</TableHead>
-                    <TableHead>Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pageRecords.map((record) => {
-                    const meta = ACTION_META[record.action]
-                    const Icon = meta.icon
-                    return (
-                      <TableRow key={record.id}>
-                        <TableCell className="whitespace-nowrap">{formatDateTime(record.date)}</TableCell>
-                        <TableCell>{record.location}</TableCell>
-                        <TableCell>{record.device}</TableCell>
-                        <TableCell>
-                          <Badge variant={meta.variant} className="gap-1">
-                            <Icon className="size-3" />
-                            {record.action}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-
-              {totalPages > 1 && (
-                <Pagination className="mt-4 justify-end">
-                  <PaginationContent>
-                    <PaginationItem>
-                      <PaginationPrevious
-                        href="#"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          setPage((p) => Math.max(1, p - 1))
-                        }}
-                      />
-                    </PaginationItem>
-                    {Array.from({ length: totalPages }).map((_, i) => (
-                      <PaginationItem key={i}>
-                        <PaginationLink
-                          href="#"
-                          isActive={currentPage === i + 1}
-                          onClick={(e) => {
-                            e.preventDefault()
-                            setPage(i + 1)
-                          }}
-                        >
-                          {i + 1}
-                        </PaginationLink>
-                      </PaginationItem>
-                    ))}
-                    <PaginationItem>
-                      <PaginationNext
-                        href="#"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          setPage((p) => Math.min(totalPages, p + 1))
-                        }}
-                      />
-                    </PaginationItem>
-                  </PaginationContent>
-                </Pagination>
-              )}
-            </>
-          )}
+          <Tabs defaultValue="taps">
+            <TabsList>
+              {(Object.keys(FEED_META) as Feed[]).map((feed) => {
+                const Icon = FEED_META[feed].icon
+                return (
+                  <TabsTrigger key={feed} value={feed} className="gap-1.5">
+                    <Icon className="size-3.5" />
+                    {FEED_META[feed].label}
+                  </TabsTrigger>
+                )
+              })}
+            </TabsList>
+            {(Object.keys(FEED_META) as Feed[]).map((feed) => (
+              <TabsContent key={feed} value={feed} className="pt-4">
+                <EventTable feed={feed} />
+              </TabsContent>
+            ))}
+          </Tabs>
         </CardContent>
       </Card>
     </div>

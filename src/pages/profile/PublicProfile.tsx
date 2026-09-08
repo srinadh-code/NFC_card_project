@@ -1,14 +1,11 @@
-import { useEffect, useState } from "react"
 import { useParams, Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
-import QRCode from "qrcode"
 import { Lock, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { DigitalCardPreview } from "@/components/customer/DigitalCardPreview"
 import { profileApi } from "@/lib/api"
-import { downloadQrPng } from "@/components/customer/qr-utils"
 
 function EmptyShell({ title, description }: { title: string; description: string }) {
   return (
@@ -47,21 +44,6 @@ export default function PublicProfile() {
   })
 
   const currentUrl = typeof window !== "undefined" ? window.location.href : ""
-  const [qrDataUrl, setQrDataUrl] = useState("")
-  const [downloading, setDownloading] = useState(false)
-
-  useEffect(() => {
-    if (!currentUrl) return
-    let cancelled = false
-    QRCode.toDataURL(currentUrl, { width: 320, margin: 1 })
-      .then((url) => {
-        if (!cancelled) setQrDataUrl(url)
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [currentUrl])
 
   if (isLoading) {
     return (
@@ -97,18 +79,6 @@ export default function PublicProfile() {
     }
   }
 
-  async function handleDownloadQr() {
-    setDownloading(true)
-    try {
-      await downloadQrPng(currentUrl, `${profile!.username}-qr-code.png`)
-      toast.success("QR code downloaded.")
-    } catch {
-      toast.error("Couldn't generate the QR code right now.")
-    } finally {
-      setDownloading(false)
-    }
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#EEF2FF] via-white to-[#FDF2F8] px-4 py-10">
       <div className="mx-auto max-w-md">
@@ -123,9 +93,6 @@ export default function PublicProfile() {
 
         <DigitalCardPreview
           profile={profile}
-          qrDataUrl={qrDataUrl}
-          downloading={downloading}
-          onDownloadQr={handleDownloadQr}
           onShare={handleShare}
           showContactInfo={Boolean(profile.email || profile.phone)}
         />

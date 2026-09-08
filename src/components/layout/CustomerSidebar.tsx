@@ -2,6 +2,7 @@
 import {
   Activity,
   BarChart3,
+  Briefcase,
   CreditCard,
   LayoutDashboard,
   Link2,
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/my-card", label: "My Card", icon: CreditCard },
   { to: "/profile", label: "My Profile", icon: UserCircle },
+  { to: "/services", label: "Services", icon: Briefcase },
   { to: "/social-links", label: "Social Links", icon: Link2 },
   { to: "/qr-code", label: "QR Code", icon: QrCode },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
