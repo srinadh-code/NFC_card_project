@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Search, Download, Eye, CheckCircle2, Circle, PackageCheck, Nfc } from "lucide-react"
@@ -28,7 +28,8 @@ import { StatusBadge } from "@/components/admin/StatusBadge"
 import { TablePagination } from "@/components/admin/TablePagination"
 import { downloadCsv } from "@/components/admin/export-csv"
 import { useDataStore } from "@/store/data-store"
-import { simulateLatency, formatCurrency, formatDate, formatDateTime } from "@/lib/mock-api"
+import { adminOrderApi } from "@/lib/api"
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/mock-api"
 import type { Order, OrderStatus } from "@/types"
 import { cn } from "@/lib/utils"
 
@@ -52,8 +53,6 @@ function productSummary(order: Order) {
 
 export default function AdminOrders() {
   const queryClient = useQueryClient()
-  const updateOrderStatus = useDataStore((s) => s.updateOrderStatus)
-  const assignCardToOrder = useDataStore((s) => s.assignCardToOrder)
   const cards = useDataStore((s) => s.cards)
 
   const [search, setSearch] = useState("")
@@ -67,10 +66,11 @@ export default function AdminOrders() {
   const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null)
   const [cardChoice, setCardChoice] = useState<string>("")
 
-  const { data: orders = [], isLoading } = useQuery({
-    queryKey: ["admin-orders"],
-    queryFn: () => simulateLatency(useDataStore.getState().orders, 300),
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin-orders", search, statusFilter],
+    queryFn: () => adminOrderApi.list({ search: search || undefined, status: statusFilter }),
   })
+  const orders = data?.data ?? []
 
   const viewing = orders.find((o) => o.id === viewingId) ?? null
   const assigningOrder = orders.find((o) => o.id === assigningOrderId) ?? null
@@ -78,24 +78,25 @@ export default function AdminOrders() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin-orders"] })
 
   const statusMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: OrderStatus }) => updateOrderStatus(id, status),
+    mutationFn: ({ id, status }: { id: string; status: OrderStatus }) => adminOrderApi.updateStatus(id, status),
     onSuccess: (_data, vars) => {
       invalidate()
       toast.success(`Order ${vars.id} marked as ${vars.status}.`)
     },
+    onError: () => toast.error("Couldn't update the order status. Please try again."),
   })
 
   const deliveredMutation = useMutation({
-    mutationFn: async (id: string) => updateOrderStatus(id, "Delivered"),
+    mutationFn: (id: string) => adminOrderApi.updateStatus(id, "Delivered"),
     onSuccess: (_data, id) => {
       invalidate()
       toast.success(`Order ${id} marked as Delivered.`)
     },
+    onError: () => toast.error("Couldn't update the order status. Please try again."),
   })
 
   const assignCardMutation = useMutation({
-    mutationFn: async ({ orderId, cardId }: { orderId: string; cardId: string }) =>
-      assignCardToOrder(orderId, cardId),
+    mutationFn: ({ orderId, cardId }: { orderId: string; cardId: string }) => adminOrderApi.assignCard(orderId, cardId),
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ["admin-orders"] })
       queryClient.invalidateQueries({ queryKey: ["admin-cards"] })
@@ -103,6 +104,7 @@ export default function AdminOrders() {
       setAssigningOrderId(null)
       setCardChoice("")
     },
+    onError: () => toast.error("Couldn't assign the card. Please try again."),
   })
 
   // Cards eligible to fulfill an order: unassigned stock, or a card already
@@ -113,15 +115,10 @@ export default function AdminOrders() {
       ? cards.filter((c) => c.status === "Unassigned" || c.id === order.assignedCardId)
       : []
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return orders.filter((o) => {
-      const matchesQuery =
-        !q || o.id.toLowerCase().includes(q) || o.customerName.toLowerCase().includes(q)
-      const matchesStatus = statusFilter === "All" || o.status === statusFilter
-      return matchesQuery && matchesStatus
-    })
-  }, [orders, search, statusFilter])
+  // Status is now filtered server-side; only free-text search across the
+  // already-fetched page needs a client-side pass (search is also sent to
+  // the server, this just keeps typing responsive within the fetched page).
+  const filtered = orders
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)

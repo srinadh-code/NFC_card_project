@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Search, Plus, Eye, CheckCircle2, XCircle } from "lucide-react"
@@ -28,8 +28,8 @@ import {
 } from "@/components/ui/dialog"
 import { StatusBadge } from "@/components/admin/StatusBadge"
 import { TablePagination } from "@/components/admin/TablePagination"
-import { useDataStore } from "@/store/data-store"
-import { simulateLatency, formatDateTime } from "@/lib/mock-api"
+import { adminSupportApi, adminCustomerApi } from "@/lib/api"
+import { formatDateTime } from "@/lib/mock-api"
 import type { SupportTicket, TicketPriority, TicketStatus } from "@/types"
 import { cn } from "@/lib/utils"
 
@@ -39,10 +39,6 @@ const PRIORITY_OPTIONS: (TicketPriority | "All")[] = ["All", "Low", "Medium", "H
 
 export default function AdminSupport() {
   const queryClient = useQueryClient()
-  const customers = useDataStore((s) => s.customers)
-  const addTicket = useDataStore((s) => s.addTicket)
-  const updateTicketStatus = useDataStore((s) => s.updateTicketStatus)
-  const addTicketMessage = useDataStore((s) => s.addTicketMessage)
 
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<TicketStatus | "All">("All")
@@ -58,10 +54,20 @@ export default function AdminSupport() {
     priority: "Medium" as TicketPriority,
   })
 
-  const { data: tickets = [], isLoading } = useQuery({
-    queryKey: ["admin-tickets"],
-    queryFn: () => simulateLatency(useDataStore.getState().tickets, 300),
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin-tickets", search, statusFilter, priorityFilter],
+    queryFn: () => adminSupportApi.list({ search: search || undefined, status: statusFilter, priority: priorityFilter }),
   })
+  const tickets = data?.data ?? []
+
+  // "New Ticket" dialog needs a customer to log the ticket on behalf of —
+  // a single large page is enough for a picker, same pattern as the
+  // Assign Card dialog on Admin Orders.
+  const { data: customerPage } = useQuery({
+    queryKey: ["admin-customers-for-ticket"],
+    queryFn: () => adminCustomerApi.list({}),
+  })
+  const customers = customerPage?.data ?? []
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin-tickets"] })
 
@@ -74,20 +80,14 @@ export default function AdminSupport() {
   }, [tickets])
 
   const createMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: () => {
       const customer = customers.find((c) => c.id === newTicket.customerId)
       if (!customer) throw new Error("Select a customer")
-      const now = new Date().toISOString()
-      return addTicket({
-        customerId: customer.id,
-        customerName: customer.name,
+      return adminSupportApi.create({
+        customerEmail: customer.email,
         subject: newTicket.subject,
         description: newTicket.description,
         priority: newTicket.priority,
-        status: "Open",
-        createdOn: now,
-        updatedOn: now,
-        messages: [{ from: "customer", text: newTicket.description, date: now }],
       })
     },
     onSuccess: () => {
@@ -96,39 +96,29 @@ export default function AdminSupport() {
       setNewOpen(false)
       setNewTicket({ customerId: "", subject: "", description: "", priority: "Medium" })
     },
+    onError: () => toast.error("Couldn't create the ticket. Please try again."),
   })
 
   const statusMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: TicketStatus }) => updateTicketStatus(id, status),
+    mutationFn: ({ id, status }: { id: string; status: TicketStatus }) => adminSupportApi.updateStatus(id, status),
     onSuccess: (_d, vars) => {
       invalidate()
       toast.success(`Ticket ${vars.id} marked as ${vars.status}.`)
     },
+    onError: () => toast.error("Couldn't update the ticket status. Please try again."),
   })
 
   const replyMutation = useMutation({
-    mutationFn: async ({ id, text }: { id: string; text: string }) =>
-      addTicketMessage(id, { from: "support", text }),
+    mutationFn: ({ id, text }: { id: string; text: string }) => adminSupportApi.addMessage(id, text),
     onSuccess: () => {
       invalidate()
       toast.success("Reply sent.")
       setReply("")
     },
+    onError: () => toast.error("Couldn't send the reply. Please try again."),
   })
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return tickets.filter((t) => {
-      const matchesQuery =
-        !q ||
-        t.id.toLowerCase().includes(q) ||
-        t.customerName.toLowerCase().includes(q) ||
-        t.subject.toLowerCase().includes(q)
-      const matchesStatus = statusFilter === "All" || t.status === statusFilter
-      const matchesPriority = priorityFilter === "All" || t.priority === priorityFilter
-      return matchesQuery && matchesStatus && matchesPriority
-    })
-  }, [tickets, search, statusFilter, priorityFilter])
+  const filtered = tickets
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)

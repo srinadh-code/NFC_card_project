@@ -9,8 +9,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { StatusBadge } from "@/components/admin/StatusBadge"
 import { StatCard } from "@/components/admin/StatCard"
 import { TablePagination } from "@/components/admin/TablePagination"
-import { useDataStore } from "@/store/data-store"
-import { simulateLatency, formatCurrency, formatDate } from "@/lib/mock-api"
+import { adminTransactionApi } from "@/lib/api"
+import { formatCurrency, formatDate } from "@/lib/mock-api"
 import type { PaymentMethod, PaymentStatus } from "@/types"
 
 const PAGE_SIZE = 10
@@ -23,10 +23,11 @@ export default function AdminTransactions() {
   const [statusFilter, setStatusFilter] = useState<PaymentStatus | "All">("All")
   const [page, setPage] = useState(1)
 
-  const { data: transactions = [], isLoading } = useQuery({
-    queryKey: ["admin-transactions"],
-    queryFn: () => simulateLatency(useDataStore.getState().transactions, 300),
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin-transactions", search, methodFilter, statusFilter],
+    queryFn: () => adminTransactionApi.list({ search: search || undefined, method: methodFilter, status: statusFilter }),
   })
+  const transactions = data?.data ?? []
 
   const stats = useMemo(() => {
     const totalRevenue = transactions.filter((t) => t.status === "Paid").reduce((s, t) => s + t.amount, 0)
@@ -36,19 +37,7 @@ export default function AdminTransactions() {
     return { totalRevenue, totalRefunded, successCount, failedCount }
   }, [transactions])
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return transactions.filter((t) => {
-      const matchesQuery =
-        !q ||
-        t.id.toLowerCase().includes(q) ||
-        t.orderId.toLowerCase().includes(q) ||
-        t.customerName.toLowerCase().includes(q)
-      const matchesMethod = methodFilter === "All" || t.method === methodFilter
-      const matchesStatus = statusFilter === "All" || t.status === statusFilter
-      return matchesQuery && matchesMethod && matchesStatus
-    })
-  }, [transactions, search, methodFilter, statusFilter])
+  const filtered = transactions
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)

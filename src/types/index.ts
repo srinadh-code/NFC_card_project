@@ -56,6 +56,9 @@ export interface NfcCard {
   color: string
   customerId: string | null
   customerName: string | null
+  // Only populated by the admin card endpoints (@/lib/api adminNfcApi) —
+  // used to prefill the assign dialog with the currently-assigned customer.
+  customerEmail?: string | null
   status: CardStatus
   assignedOn: string | null
   activatedOn: string | null

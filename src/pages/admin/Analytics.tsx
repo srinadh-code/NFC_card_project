@@ -10,8 +10,7 @@ import { ChartContainer } from "@/components/ui/chart-container"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatCard } from "@/components/admin/StatCard"
 import { downloadCsv } from "@/components/admin/export-csv"
-import { simulateLatency } from "@/lib/mock-api"
-import { analyticsRecords } from "@/data/seed"
+import { adminAnalyticsApi } from "@/lib/api"
 
 const RANGE_OPTIONS = [
   { value: "7", label: "Last 7 days" },
@@ -19,71 +18,43 @@ const RANGE_OPTIONS = [
   { value: "60", label: "Last 60 days" },
 ]
 
-function daysAgo(n: number) {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  d.setHours(0, 0, 0, 0)
-  return d
-}
-
 export default function AdminAnalytics() {
   const [range, setRange] = useState("30")
 
-  const { data: records = [], isLoading } = useQuery({
-    queryKey: ["admin-analytics"],
-    queryFn: () => simulateLatency(analyticsRecords, 300),
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin-analytics", range],
+    queryFn: () => adminAnalyticsApi.summary({ range: Number(range) }),
   })
 
-  const filtered = useMemo(() => {
-    const cutoff = daysAgo(Number(range))
-    return records.filter((r) => new Date(r.date) >= cutoff)
-  }, [records, range])
-
   const stats = useMemo(() => {
-    const totalTaps = filtered.reduce((s, r) => s + r.taps, 0)
-    const totalUniqueVisitors = filtered.reduce((s, r) => s + r.uniqueVisitors, 0)
-    const totalQrScans = filtered.reduce((s, r) => s + r.qrScans, 0)
+    const totalTaps = data?.totalTaps ?? 0
+    const totalUniqueVisitors = data?.uniqueVisitors ?? 0
+    const totalQrScans = data?.qrScans ?? 0
     const days = Number(range)
     const avgTapsPerDay = days > 0 ? totalTaps / days : 0
     return { totalTaps, totalUniqueVisitors, totalQrScans, avgTapsPerDay }
-  }, [filtered, range])
+  }, [data, range])
 
   const chartData = useMemo(() => {
-    const byDay = new Map<string, number>()
-    for (const r of filtered) {
-      byDay.set(r.date, (byDay.get(r.date) ?? 0) + r.taps)
-    }
-    return Array.from(byDay.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, taps]) => ({
-        date: new Date(date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
-        taps,
-      }))
-  }, [filtered])
+    if (!data) return []
+    return data.byDay.map((d) => ({
+      date: new Date(d.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+      taps: d.count,
+    }))
+  }, [data])
 
   const topLocations = useMemo(() => {
-    const byLocation = new Map<string, number>()
-    for (const r of filtered) {
-      byLocation.set(r.location, (byLocation.get(r.location) ?? 0) + r.taps)
-    }
-    const sorted = Array.from(byLocation.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8)
-    const max = sorted[0]?.[1] ?? 1
-    return sorted.map(([location, count]) => ({ location, count, pct: (count / max) * 100 }))
-  }, [filtered])
+    if (!data) return []
+    const sorted = [...data.topLocations].sort((a, b) => b.count - a.count).slice(0, 8)
+    const max = sorted[0]?.count ?? 1
+    return sorted.map((l) => ({ location: l.location, count: l.count, pct: (l.count / max) * 100 }))
+  }, [data])
 
   function handleExport() {
+    if (!data) return
     downloadCsv(
       `analytics-last-${range}-days.csv`,
-      filtered.map((r) => ({
-        Date: r.date,
-        CustomerID: r.customerId,
-        Taps: r.taps,
-        QrScans: r.qrScans,
-        ProfileViews: r.profileViews,
-        UniqueVisitors: r.uniqueVisitors,
-        Device: r.device,
-        Location: r.location,
-      })),
+      data.byDay.map((d) => ({ Date: d.date, Taps: d.count })),
     )
     toast.success("Analytics exported to CSV.")
   }

@@ -1,51 +1,87 @@
-﻿import { useMemo } from "react"
 import { Link, useParams } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import { ChevronRight, ShoppingBag, IndianRupee, Radio, CreditCard, MapPin, Smartphone } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/admin/StatusBadge"
 import { StatCard } from "@/components/admin/StatCard"
-import {
-  useDataStore,
-  selectCustomerById,
-  selectCardsByCustomer,
-  selectOrdersByCustomer,
-  selectProfileByCustomer,
-  selectTransactionsByCustomer,
-} from "@/store/data-store"
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/mock-api"
-import { analyticsRecords, activityRecords } from "@/data/seed"
+import { adminCustomerApi, adminOrderApi, adminTransactionApi, adminAnalyticsApi, ApiError } from "@/lib/api"
 
 export default function AdminCustomerDetails() {
   const { id } = useParams<{ id: string }>()
-  const customer = useDataStore(selectCustomerById(id ?? ""))
-  const cards = useDataStore(selectCardsByCustomer(id ?? ""))
-  const orders = useDataStore(selectOrdersByCustomer(id ?? ""))
-  const profile = useDataStore(selectProfileByCustomer(id ?? ""))
-  const transactions = useDataStore(selectTransactionsByCustomer(id ?? ""))
 
-  const custAnalytics = useMemo(
-    () => analyticsRecords.filter((a) => a.customerId === id),
-    [id],
-  )
-  const custActivity = useMemo(
-    () =>
-      activityRecords
-        .filter((a) => a.customerId === id)
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-    [id],
-  )
+  const {
+    data: customer,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["admin-customer", id],
+    queryFn: () => adminCustomerApi.get(id ?? ""),
+    enabled: !!id,
+    retry: false,
+  })
 
-  if (!customer) {
+  // Neither the orders nor transactions admin endpoints filter by customer
+  // id directly — email is unique per customer, so it doubles as the filter.
+  const { data: orderPage } = useQuery({
+    queryKey: ["admin-customer-orders", customer?.email],
+    queryFn: () => adminOrderApi.list({ search: customer?.email }),
+    enabled: !!customer?.email,
+  })
+  const orders = orderPage?.data ?? []
+
+  const { data: transactionPage } = useQuery({
+    queryKey: ["admin-customer-transactions", customer?.email],
+    queryFn: () => adminTransactionApi.list({ search: customer?.email }),
+    enabled: !!customer?.email,
+  })
+  const transactions = transactionPage?.data ?? []
+
+  const { data: analytics } = useQuery({
+    queryKey: ["admin-customer-analytics", id],
+    queryFn: () => adminAnalyticsApi.summary({ range: 365, customerId: id }),
+    enabled: !!id,
+  })
+
+  const totalTaps = analytics?.totalTaps ?? 0
+  const totalQrScans = analytics?.qrScans ?? 0
+  const totalUniqueVisitors = analytics?.uniqueVisitors ?? 0
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-6">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-28 w-full" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    )
+  }
+
+  if (isError || !customer) {
+    const notFound = error instanceof ApiError && error.status === 404
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
-        <p className="text-lg font-semibold">Customer not found</p>
+        <p className="text-lg font-semibold">{notFound ? "Customer not found" : "Could not load customer"}</p>
         <p className="text-sm text-muted-foreground">
-          We couldn't find a customer with ID "{id}".
+          {notFound
+            ? `We couldn't find a customer with ID "${id}".`
+            : error instanceof ApiError
+              ? error.message
+              : "Something went wrong."}
         </p>
+        {!notFound && (
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
+            Retry
+          </Button>
+        )}
         <Link to="/admin/customers" className="text-sm font-medium text-primary hover:underline">
           &larr; Back to Customers
         </Link>
@@ -53,10 +89,12 @@ export default function AdminCustomerDetails() {
     )
   }
 
-  const totalTaps = custAnalytics.reduce((s, a) => s + a.taps, 0)
-  const totalQrScans = custAnalytics.reduce((s, a) => s + a.qrScans, 0)
-  const totalUniqueVisitors = custAnalytics.reduce((s, a) => s + a.uniqueVisitors, 0)
-  const lastActivity = custActivity[0]
+  // The admin analytics summary aggregates counts only — it doesn't expose
+  // a single "last event" timestamp/location, so this stays unset rather
+  // than fabricating one (the JSX below already renders a graceful fallback).
+  const lastActivity = null as { date: string; location: string } | null
+  const totalOrders = orders.filter((o) => o.status !== "Cancelled").length
+  const totalSpent = orders.filter((o) => o.status !== "Cancelled").reduce((s, o) => s + o.total, 0)
 
   return (
     <div className="flex flex-col gap-6">
@@ -80,7 +118,8 @@ export default function AdminCustomerDetails() {
               <StatusBadge status={customer.status} />
             </div>
             <p className="text-sm text-muted-foreground">
-              {customer.designation} at {customer.company}
+              {customer.designation || "—"}
+              {customer.company ? ` at ${customer.company}` : ""}
             </p>
             <p className="text-sm text-muted-foreground">
               {customer.email} • {customer.phone}
@@ -104,10 +143,10 @@ export default function AdminCustomerDetails() {
 
         <TabsContent value="overview" className="flex flex-col gap-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Total Orders" value={customer.totalOrders} icon={ShoppingBag} />
-            <StatCard label="Total Spent" value={formatCurrency(customer.totalSpent)} icon={IndianRupee} />
-            <StatCard label="Total Taps" value={customer.totalTaps} icon={Radio} />
-            <StatCard label="NFC Cards" value={cards.length} icon={CreditCard} />
+            <StatCard label="Total Orders" value={totalOrders} icon={ShoppingBag} />
+            <StatCard label="Total Spent" value={formatCurrency(totalSpent)} icon={IndianRupee} />
+            <StatCard label="Total Taps" value={totalTaps} icon={Radio} />
+            <StatCard label="NFC Cards" value={customer.cardCount} icon={CreditCard} />
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -190,43 +229,39 @@ export default function AdminCustomerDetails() {
               <CardTitle>Digital Profile</CardTitle>
             </CardHeader>
             <CardContent>
-              {profile ? (
-                <div className="flex flex-col gap-4">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Avatar className="size-12">
-                      <AvatarImage src={profile.avatar} alt={profile.fullName} />
-                      <AvatarFallback>{profile.fullName.slice(0, 2).toUpperCase()}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium">{profile.fullName}</p>
-                      <a
-                        href={`/u/${profile.username}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-sm text-primary hover:underline"
-                      >
-                        vrsnexora.com/u/{profile.username}
-                      </a>
-                    </div>
-                    <StatusBadge status={profile.status} className="ml-auto" />
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Avatar className="size-12">
+                    <AvatarImage src={customer.avatar} alt={customer.name} />
+                    <AvatarFallback>{customer.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-medium">{customer.name}</p>
+                    <a
+                      href={`/u/${customer.username}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm text-primary hover:underline"
+                    >
+                      vrsnexora.com/u/{customer.username}
+                    </a>
                   </div>
-                  <p className="text-sm text-muted-foreground">{profile.bio}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {profile.socialLinks
-                      .filter((l) => l.enabled)
-                      .map((l) => (
-                        <Badge key={l.platform} variant="soft">
-                          {l.platform}
-                        </Badge>
-                      ))}
-                    {profile.socialLinks.every((l) => !l.enabled) && (
-                      <span className="text-sm text-muted-foreground">No social links enabled.</span>
-                    )}
-                  </div>
+                  <StatusBadge status={customer.profileStatus} className="ml-auto" />
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No profile created for this customer yet.</p>
-              )}
+                <p className="text-sm text-muted-foreground">{customer.bio || "No bio added yet."}</p>
+                <div className="flex flex-wrap gap-2">
+                  {customer.socialLinks
+                    .filter((l) => l.enabled)
+                    .map((l) => (
+                      <Badge key={l.platform} variant="soft">
+                        {l.platform}
+                      </Badge>
+                    ))}
+                  {customer.socialLinks.every((l) => !l.enabled) && (
+                    <span className="text-sm text-muted-foreground">No social links enabled.</span>
+                  )}
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -245,7 +280,7 @@ export default function AdminCustomerDetails() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {cards.map((c) => (
+                  {customer.cards.map((c) => (
                     <TableRow key={c.id}>
                       <TableCell className="font-medium">{c.id}</TableCell>
                       <TableCell className="text-muted-foreground">{c.uid}</TableCell>
@@ -258,7 +293,7 @@ export default function AdminCustomerDetails() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {cards.length === 0 && (
+                  {customer.cards.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                         No cards assigned.
