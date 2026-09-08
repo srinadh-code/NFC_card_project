@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     "customer_management.customer_settings",
     "customer_management.customer_dashboard",
     "customer_management.customer_services",
+    "website_content",
 ]
 
 MIDDLEWARE = [
@@ -170,6 +171,24 @@ CORS_ALLOW_CREDENTIALS = True
 # Google OAuth integration point (Phase A stub — see accounts/views.py GoogleLoginView).
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
 GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
+
+
+# Cloudinary — image storage for the Website Content module only. Credentials
+# are read from the environment and never exposed to the frontend; uploads
+# are always brokered through a Django APIView (see website_content/services).
+CLOUDINARY_CLOUD_NAME = os.environ.get("CLOUDINARY_CLOUD_NAME", "")
+CLOUDINARY_API_KEY = os.environ.get("CLOUDINARY_API_KEY", "")
+CLOUDINARY_API_SECRET = os.environ.get("CLOUDINARY_API_SECRET", "")
+
+if CLOUDINARY_CLOUD_NAME:
+    import cloudinary
+
+    cloudinary.config(
+        cloud_name=CLOUDINARY_CLOUD_NAME,
+        api_key=CLOUDINARY_API_KEY,
+        api_secret=CLOUDINARY_API_SECRET,
+        secure=True,
+    )
 
 
 # Django REST Framework
