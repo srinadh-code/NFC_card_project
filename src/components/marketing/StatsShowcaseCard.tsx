@@ -1,13 +1,13 @@
-import { Users, User, ShieldCheck, Globe } from "lucide-react"
+import { resolveIcon } from "@/lib/icon-map"
+import type { Statistic } from "@/types/content"
 
-const STATS = [
-  { icon: Users, value: "100,000+", label: "Connections Shared", tone: "purple" as const },
-  { icon: User, value: "50,000+", label: "Active Users", tone: "purple" as const },
-  { icon: ShieldCheck, value: "99.9%", label: "Uptime", tone: "pink" as const },
-  { icon: Globe, value: "120+", label: "Countries Reached", tone: "pink" as const },
-]
+interface StatsShowcaseCardProps {
+  statistics: Statistic[]
+}
 
-export default function StatsShowcaseCard() {
+export default function StatsShowcaseCard({ statistics }: StatsShowcaseCardProps) {
+  if (statistics.length === 0) return null
+
   return (
     <section className="bg-white px-4 py-4 sm:py-8">
       <div className="mx-auto max-w-6xl rounded-[32px] bg-gradient-to-r from-[#6C4DFF] to-[#FF5DA8] p-[1.5px] shadow-[0_25px_70px_rgba(124,58,237,0.18)]">
@@ -16,30 +16,34 @@ export default function StatsShowcaseCard() {
           <div className="pointer-events-none absolute -right-10 -bottom-10 size-56 rounded-full bg-[#EC4899]/10 blur-3xl" />
 
           <div className="relative grid grid-cols-2 sm:grid-cols-4">
-            {STATS.map((s, i) => (
-              <div
-                key={s.label}
-                className={`group flex flex-col items-center px-4 py-4 text-center transition-transform duration-300 hover:-translate-y-1 ${
-                  i > 0 ? "sm:border-l sm:border-[#E2E8F0]" : ""
-                }`}
-              >
-                <span
-                  className={`flex size-14 items-center justify-center rounded-2xl text-white shadow-md transition-shadow duration-300 group-hover:shadow-glow-primary ${
-                    s.tone === "purple" ? "bg-gradient-to-br from-[#4F46E5] to-[#8B5CF6]" : "bg-gradient-to-br from-[#8B5CF6] to-[#EC4899]"
+            {statistics.map((s, i) => {
+              const Icon = resolveIcon(s.icon)
+              const tone: "purple" | "pink" = i % 2 === 0 ? "purple" : "pink"
+              return (
+                <div
+                  key={s.id}
+                  className={`group flex flex-col items-center px-4 py-4 text-center transition-transform duration-300 hover:-translate-y-1 ${
+                    i > 0 ? "sm:border-l sm:border-[#E2E8F0]" : ""
                   }`}
                 >
-                  <s.icon className="size-6" />
-                </span>
-                <p
-                  className={`mt-4 text-3xl font-bold sm:text-4xl ${
-                    s.tone === "purple" ? "text-[#6D28D9]" : "text-[#DB2777]"
-                  }`}
-                >
-                  {s.value}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">{s.label}</p>
-              </div>
-            ))}
+                  <span
+                    className={`flex size-14 items-center justify-center rounded-2xl text-white shadow-md transition-shadow duration-300 group-hover:shadow-glow-primary ${
+                      tone === "purple" ? "bg-gradient-to-br from-[#4F46E5] to-[#8B5CF6]" : "bg-gradient-to-br from-[#8B5CF6] to-[#EC4899]"
+                    }`}
+                  >
+                    <Icon className="size-6" />
+                  </span>
+                  <p
+                    className={`mt-4 text-3xl font-bold sm:text-4xl ${
+                      tone === "purple" ? "text-[#6D28D9]" : "text-[#DB2777]"
+                    }`}
+                  >
+                    {s.value}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">{s.label}</p>
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>

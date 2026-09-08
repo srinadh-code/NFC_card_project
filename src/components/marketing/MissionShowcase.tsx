@@ -27,7 +27,13 @@ function TargetIllustration() {
   )
 }
 
-export default function MissionShowcase() {
+interface MissionShowcaseProps {
+  badge: string
+  heading: string
+  description: string
+}
+
+export default function MissionShowcase({ badge, heading, description }: MissionShowcaseProps) {
   return (
     <section className="relative overflow-hidden bg-[#FAFAFF] px-4 py-16 sm:py-20">
       <div
@@ -48,18 +54,10 @@ export default function MissionShowcase() {
 
             <div className="text-center lg:text-left">
               <span className="inline-flex items-center rounded-full border border-[#7C3AED]/20 bg-[#7C3AED]/10 px-3 py-1 text-xs font-semibold tracking-wide text-[#7C3AED]">
-                OUR MISSION
+                {badge}
               </span>
-              <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-                Empowering Connections.
-                <br />
-                <span className="text-gradient-brand">Every Time.</span>
-              </h2>
-              <p className="mx-auto mt-4 max-w-xl text-muted-foreground lg:mx-0">
-                To empower every professional with a networking tool that&apos;s instant,
-                sustainable, and endlessly customizable — turning every handshake into a lasting
-                digital connection.
-              </p>
+              <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">{heading}</h2>
+              <p className="mx-auto mt-4 max-w-xl text-muted-foreground lg:mx-0">{description}</p>
             </div>
           </div>
         </div>

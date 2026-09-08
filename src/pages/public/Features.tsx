@@ -1,12 +1,7 @@
-﻿import { useState } from "react"
+import { useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import {
-  Zap,
-  UserCog,
-  Nfc,
-  BarChart3,
-  Share2,
-  RefreshCcw,
   ArrowRight,
   ArrowUpRight,
   PlayCircle,
@@ -18,6 +13,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Skeleton } from "@/components/ui/skeleton"
 import CtaBanner from "@/components/marketing/CtaBanner"
 import StatsBar from "@/components/marketing/StatsBar"
 import { StatWidget } from "@/components/marketing/StatWidget"
@@ -25,21 +21,41 @@ import { NfcCardFace } from "@/components/marketing/NfcCardShowcase"
 import DashboardMockup from "@/components/marketing/DashboardMockup"
 import ProfilePhonePreview from "@/components/marketing/ProfilePhonePreview"
 import { Reveal } from "@/components/marketing/Reveal"
+import { resolveIcon } from "@/lib/icon-map"
+import { publicWebsiteApi } from "@/lib/contentApi"
 
 const AVATAR_SEEDS = ["ananya-reddy", "rahul-menon", "priya-nair", "karthik-iyer"]
 
-const FEATURES = [
-  { icon: Zap, title: "Instant Sharing", description: "Share your complete profile instantly with a single tap.", bg: "linear-gradient(135deg,#4F46E5,#7C3AED)" },
-  { icon: UserCog, title: "Custom Profiles", description: "Personalize your bio, photo, branding, and layout.", bg: "linear-gradient(135deg,#EC4899,#F472B6)" },
-  { icon: Nfc, title: "NFC & QR Code", description: "Works via NFC tap and QR code, compatible with every device.", bg: "linear-gradient(135deg,#2563EB,#06B6D4)" },
-  { icon: BarChart3, title: "Real-time Analytics", description: "See exactly who's viewing your profile, when, and from where.", bg: "linear-gradient(135deg,#22C55E,#10B981)" },
-  { icon: Share2, title: "Social Integrations", description: "Link LinkedIn, Instagram, WhatsApp and more to connect instantly.", bg: "linear-gradient(135deg,#F97316,#F59E0B)" },
-  { icon: RefreshCcw, title: "Easy Updates", description: "Change your details anytime — no need to reprint a card.", bg: "linear-gradient(135deg,#7C3AED,#4F46E5)" },
+// The backend `Feature` model has no gradient field (unlike AboutWhyChoose).
+// Reuse the same fixed palette the page used to hardcode, cycling by index,
+// so the visual design is unchanged.
+const GRADIENT_PALETTE = [
+  "linear-gradient(135deg,#4F46E5,#7C3AED)",
+  "linear-gradient(135deg,#EC4899,#F472B6)",
+  "linear-gradient(135deg,#2563EB,#06B6D4)",
+  "linear-gradient(135deg,#22C55E,#10B981)",
+  "linear-gradient(135deg,#F97316,#F59E0B)",
+  "linear-gradient(135deg,#7C3AED,#4F46E5)",
 ]
 
 export default function Features() {
   const navigate = useNavigate()
   const [demoOpen, setDemoOpen] = useState(false)
+
+  const { data: features, isLoading, isError } = useQuery({
+    queryKey: ["content", "public-features"],
+    queryFn: publicWebsiteApi.getFeatures,
+  })
+
+  if (isError) {
+    return (
+      <div>
+        <p className="py-24 text-center text-muted-foreground">
+          Couldn&apos;t load this page&apos;s content. Please try again shortly.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="overflow-x-hidden">
@@ -196,27 +212,41 @@ export default function Features() {
             </div>
           </Reveal>
 
-          <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {FEATURES.map((f, i) => (
-              <Reveal key={f.title} delayMs={i * 80}>
-                <div className="card-hover group flex items-start gap-4 rounded-[24px] border border-border/70 bg-white p-6 shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
-                  <span
-                    className="flex size-12 shrink-0 items-center justify-center rounded-xl text-white shadow-md"
-                    style={{ background: f.bg }}
-                  >
-                    <f.icon className="size-6" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold text-foreground">{f.title}</h3>
-                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{f.description}</p>
-                  </div>
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-all duration-300 group-hover:border-primary group-hover:bg-primary group-hover:text-white">
-                    <ArrowUpRight className="size-4" />
-                  </span>
-                </div>
-              </Reveal>
-            ))}
-          </div>
+          {isLoading ? (
+            <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-32 w-full" />
+              ))}
+            </div>
+          ) : (
+            features &&
+            features.length > 0 && (
+              <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {features.map((f, i) => {
+                  const Icon = resolveIcon(f.icon)
+                  return (
+                    <Reveal key={f.id} delayMs={i * 80}>
+                      <div className="card-hover group flex items-start gap-4 rounded-[24px] border border-border/70 bg-white p-6 shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
+                        <span
+                          className="flex size-12 shrink-0 items-center justify-center rounded-xl text-white shadow-md"
+                          style={{ background: GRADIENT_PALETTE[i % GRADIENT_PALETTE.length] }}
+                        >
+                          <Icon className="size-6" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-semibold text-foreground">{f.title}</h3>
+                          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{f.description}</p>
+                        </div>
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-all duration-300 group-hover:border-primary group-hover:bg-primary group-hover:text-white">
+                          <ArrowUpRight className="size-4" />
+                        </span>
+                      </div>
+                    </Reveal>
+                  )
+                })}
+              </div>
+            )
+          )}
         </div>
       </section>
 

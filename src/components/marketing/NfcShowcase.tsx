@@ -1,12 +1,19 @@
-﻿import { Globe, Nfc, Smartphone, Zap } from "lucide-react"
+import { Nfc } from "lucide-react"
+import { resolveIcon } from "@/lib/icon-map"
 
-const POINTS = [
-  { icon: Zap, text: "Instant sharing — your profile opens in under a second." },
-  { icon: Smartphone, text: "No app required — works straight from any browser." },
-  { icon: Globe, text: "Compatible with every smartphone, NFC tap or QR fallback." },
-]
+interface NfcShowcasePoint {
+  icon: string
+  text: string
+}
 
-export default function NfcShowcase() {
+interface NfcShowcaseProps {
+  badge: string
+  heading: string
+  description: string
+  points: NfcShowcasePoint[]
+}
+
+export default function NfcShowcase({ badge, heading, description, points }: NfcShowcaseProps) {
   return (
     <section className="overflow-hidden bg-white py-20 sm:py-24">
       <div className="container-page grid items-center gap-16 lg:grid-cols-2">
@@ -38,25 +45,22 @@ export default function NfcShowcase() {
         {/* Copy */}
         <div className="order-1 lg:order-2">
           <span className="inline-flex items-center rounded-full bg-[#4F46E5]/10 px-3 py-1 text-xs font-semibold tracking-wide text-[#4F46E5]">
-            HOW IT FEELS
+            {badge}
           </span>
-          <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            Just Tap. <span className="text-[#4F46E5]">That&apos;s It.</span>
-          </h2>
-          <p className="mt-4 max-w-lg text-muted-foreground">
-            No fumbling for a paper card, no typing a number into a new contact. Hold your
-            VR's NEXORA card near any smartphone and your entire digital identity appears
-            instantly on their screen.
-          </p>
+          <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">{heading}</h2>
+          <p className="mt-4 max-w-lg text-muted-foreground">{description}</p>
           <ul className="mt-8 space-y-4">
-            {POINTS.map((p) => (
-              <li key={p.text} className="flex items-start gap-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-md">
-                  <p.icon className="size-4.5" />
-                </span>
-                <span className="pt-1.5 text-sm font-medium text-foreground">{p.text}</span>
-              </li>
-            ))}
+            {points.map((p) => {
+              const Icon = resolveIcon(p.icon)
+              return (
+                <li key={p.text} className="flex items-start gap-3">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-md">
+                    <Icon className="size-4.5" />
+                  </span>
+                  <span className="pt-1.5 text-sm font-medium text-foreground">{p.text}</span>
+                </li>
+              )
+            })}
           </ul>
         </div>
       </div>

@@ -1,4 +1,5 @@
-﻿import { useState, type FormEvent } from "react"
+import { useState, type FormEvent } from "react"
+import { useMutation } from "@tanstack/react-query"
 import { Mail, Phone, MapPin, Clock } from "lucide-react"
 import { toast } from "sonner"
 import PageHeader from "@/components/marketing/PageHeader"
@@ -8,6 +9,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { cardClass } from "@/components/marketing/PremiumCard"
 import { cn } from "@/lib/utils"
+import { publicWebsiteApi } from "@/lib/contentApi"
+import { ApiError } from "@/lib/api"
 
 const INFO = [
   { icon: Mail, label: "Email", value: "support@vrsnexora.com" },
@@ -21,6 +24,18 @@ const INITIAL_FORM = { fullName: "", email: "", subject: "", message: "" }
 export default function Contact() {
   const [form, setForm] = useState(INITIAL_FORM)
 
+  const mutation = useMutation({
+    mutationFn: (body: { name: string; email: string; subject: string; message: string }) =>
+      publicWebsiteApi.submitContactMessage(body),
+    onSuccess: () => {
+      toast.success("Message sent! We'll get back to you within 24 hours.")
+      setForm(INITIAL_FORM)
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Something went wrong. Please try again.")
+    },
+  })
+
   function update<K extends keyof typeof INITIAL_FORM>(key: K, value: string) {
     setForm((f) => ({ ...f, [key]: value }))
   }
@@ -31,8 +46,12 @@ export default function Contact() {
       toast.error("Please fill in all fields.")
       return
     }
-    toast.success("Message sent! We'll get back to you within 24 hours.")
-    setForm(INITIAL_FORM)
+    mutation.mutate({
+      name: form.fullName,
+      email: form.email,
+      subject: form.subject,
+      message: form.message,
+    })
   }
 
   return (
@@ -88,9 +107,10 @@ export default function Contact() {
             <Button
               type="submit"
               size="lg"
+              disabled={mutation.isPending}
               className="w-full rounded-xl bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-[0_4px_14px_rgba(79,70,229,0.4)] transition-all duration-200 hover:shadow-[0_6px_20px_rgba(79,70,229,0.55)] hover:brightness-110"
             >
-              Send Message
+              {mutation.isPending ? "Sending..." : "Send Message"}
             </Button>
           </form>
         </div>

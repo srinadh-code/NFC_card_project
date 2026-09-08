@@ -1,46 +1,37 @@
-﻿import { ShoppingBag, PackageCheck, Nfc, UserCircle2, Share2 } from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
 import PageHeader from "@/components/marketing/PageHeader"
 import CtaBanner from "@/components/marketing/CtaBanner"
+import { Skeleton } from "@/components/ui/skeleton"
+import { resolveIcon } from "@/lib/icon-map"
+import { publicWebsiteApi } from "@/lib/contentApi"
 
-const STEPS = [
-  {
-    icon: ShoppingBag,
-    title: "Order Your Card",
-    description: "Pick your card type, color, and quantity, then place your order in minutes.",
-    from: "#4F46E5",
-    to: "#6366F1",
-  },
-  {
-    icon: PackageCheck,
-    title: "Receive Your NFC Card",
-    description: "Your card ships within 1-2 days and arrives at your doorstep in 5-7 business days.",
-    from: "#2563EB",
-    to: "#06B6D4",
-  },
-  {
-    icon: Nfc,
-    title: "Activate Your Card",
-    description: "Scan the card once and link it to your VR's NEXORA account to activate it instantly.",
-    from: "#7C3AED",
-    to: "#EC4899",
-  },
-  {
-    icon: UserCircle2,
-    title: "Create Your Profile",
-    description: "Add your name, photo, bio, and social links to build your digital business card.",
-    from: "#F59E0B",
-    to: "#F97316",
-  },
-  {
-    icon: Share2,
-    title: "Start Sharing",
-    description: "Tap your card on any smartphone to instantly share your profile — no app needed.",
-    from: "#22C55E",
-    to: "#06B6D4",
-  },
+// The backend `HowItWorksStep` model has no from/to gradient-stop fields.
+// Keep the same fixed 5-color palette the page used to hardcode, cycling by
+// position, so the visual design is unchanged for the seeded 5 steps.
+const GRADIENT_PALETTE = [
+  { from: "#4F46E5", to: "#6366F1" },
+  { from: "#2563EB", to: "#06B6D4" },
+  { from: "#7C3AED", to: "#EC4899" },
+  { from: "#F59E0B", to: "#F97316" },
+  { from: "#22C55E", to: "#06B6D4" },
 ]
 
 export default function HowItWorks() {
+  const { data: steps, isLoading, isError } = useQuery({
+    queryKey: ["content", "public-how-it-works"],
+    queryFn: publicWebsiteApi.getHowItWorks,
+  })
+
+  if (isError) {
+    return (
+      <div>
+        <p className="py-24 text-center text-muted-foreground">
+          Couldn&apos;t load this page&apos;s content. Please try again shortly.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div>
       <PageHeader
@@ -50,25 +41,40 @@ export default function HowItWorks() {
 
       <section className="bg-white py-20">
         <div className="container-page">
-          <div className="relative grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-5">
-            <div className="pointer-events-none absolute inset-x-0 top-14 hidden h-0.5 bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#22C55E] opacity-20 lg:block" />
-            {STEPS.map((step, i) => (
-              <div
-                key={step.title}
-                className="card-hover relative flex flex-col items-center rounded-[24px] p-6 text-center text-white shadow-[0_10px_30px_rgba(15,23,42,0.12)]"
-                style={{ background: `linear-gradient(160deg, ${step.from}, ${step.to})` }}
-              >
-                <span className="absolute -top-3 flex size-7 items-center justify-center rounded-full bg-white text-xs font-bold text-foreground shadow">
-                  {i + 1}
-                </span>
-                <div className="mt-2 flex size-14 items-center justify-center rounded-2xl bg-white/20">
-                  <step.icon className="size-7" />
-                </div>
-                <h3 className="mt-4 font-semibold">{step.title}</h3>
-                <p className="mt-2 text-sm text-white/85">{step.description}</p>
+          {isLoading ? (
+            <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-5">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-52 w-full rounded-[24px]" />
+              ))}
+            </div>
+          ) : (
+            steps &&
+            steps.length > 0 && (
+              <div className="relative grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="pointer-events-none absolute inset-x-0 top-14 hidden h-0.5 bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#22C55E] opacity-20 lg:block" />
+                {steps.map((step, i) => {
+                  const Icon = resolveIcon(step.icon)
+                  const { from, to } = GRADIENT_PALETTE[i % GRADIENT_PALETTE.length]
+                  return (
+                    <div
+                      key={step.id}
+                      className="card-hover relative flex flex-col items-center rounded-[24px] p-6 text-center text-white shadow-[0_10px_30px_rgba(15,23,42,0.12)]"
+                      style={{ background: `linear-gradient(160deg, ${from}, ${to})` }}
+                    >
+                      <span className="absolute -top-3 flex size-7 items-center justify-center rounded-full bg-white text-xs font-bold text-foreground shadow">
+                        {step.step_number}
+                      </span>
+                      <div className="mt-2 flex size-14 items-center justify-center rounded-2xl bg-white/20">
+                        <Icon className="size-7" />
+                      </div>
+                      <h3 className="mt-4 font-semibold">{step.title}</h3>
+                      <p className="mt-2 text-sm text-white/85">{step.description}</p>
+                    </div>
+                  )
+                })}
               </div>
-            ))}
-          </div>
+            )
+          )}
         </div>
       </section>
 

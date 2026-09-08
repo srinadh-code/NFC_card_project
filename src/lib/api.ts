@@ -49,19 +49,21 @@ export class ApiError extends Error {
   }
 }
 
-interface Envelope<T> {
+export interface Pagination {
+  count: number
+  page: number
+  num_pages: number
+  page_size: number
+  next: string | null
+  previous: string | null
+}
+
+export interface Envelope<T> {
   success: boolean
   message: string
   data?: T
   errors?: Record<string, unknown>
-  pagination?: {
-    count: number
-    page: number
-    num_pages: number
-    page_size: number
-    next: string | null
-    previous: string | null
-  }
+  pagination?: Pagination
 }
 
 let refreshInFlight: Promise<boolean> | null = null
@@ -134,8 +136,20 @@ async function requestEnvelope<T>(path: string, options: RequestOptions = {}, re
   return json
 }
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  return (await requestEnvelope<T>(path, options)).data as T
+// Standard call path used by every existing call-site: unwraps and returns
+// only the envelope's `data` payload. Exported (not just used internally)
+// because src/lib/contentApi.ts imports it directly for the Website Content
+// module's generic CRUD/singleton API helpers.
+export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const json = await requestEnvelope<T>(path, options)
+  return json.data as T
+}
+
+// Same request/auth/refresh handling as `request`, but resolves with the
+// full envelope (including the `pagination` sibling key some paginated
+// admin list endpoints return alongside `data`) instead of unwrapping it.
+export async function requestRaw<T>(path: string, options: RequestOptions = {}): Promise<Envelope<T>> {
+  return requestEnvelope<T>(path, options)
 }
 
 // ---------------------------------------------------------------------

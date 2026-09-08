@@ -32,6 +32,7 @@ import AdminAnalytics from "@/pages/admin/Analytics"
 import AdminReports from "@/pages/admin/Reports"
 import AdminSettings from "@/pages/admin/Settings"
 import AdminSupport from "@/pages/admin/Support"
+import AdminWebsiteContent from "@/pages/admin/content"
 
 import Login from "@/pages/Login"
 import CustomerRegister from "@/pages/customer/Register"
@@ -98,6 +99,7 @@ function App() {
           <Route path="reports" element={<AdminReports />} />
           <Route path="settings" element={<AdminSettings />} />
           <Route path="support" element={<AdminSupport />} />
+          <Route path="content" element={<AdminWebsiteContent />} />
         </Route>
 
         {/* Customer portal */}
