@@ -1,6 +1,6 @@
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from common.permissions import IsCustomerRole
 from common.response import error, success
 
 from . import services
@@ -8,7 +8,7 @@ from .serializers import CustomerServiceSerializer
 
 
 class CustomerServiceListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def get(self, request):
         items = services.list_services(request.user)
@@ -22,7 +22,7 @@ class CustomerServiceListCreateView(APIView):
 
 
 class CustomerServiceDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def _get_or_404(self, request, pk):
         return services.get_owned_service(request.user, pk)
@@ -57,7 +57,7 @@ class CustomerServiceDetailView(APIView):
 
 
 class ReorderCustomerServicesView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def patch(self, request):
         order = request.data.get("order", [])

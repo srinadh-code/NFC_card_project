@@ -1,6 +1,6 @@
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from common.permissions import IsCustomerRole
 from common.response import error, success
 
 from . import services
@@ -8,7 +8,7 @@ from .serializers import CustomerQrCodeSerializer
 
 
 class CustomerQrCodeView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def get(self, request):
         qr = services.get_qr_code(request.user)
@@ -18,7 +18,7 @@ class CustomerQrCodeView(APIView):
 
 
 class GenerateQrCodeView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def post(self, request):
         qr, created = services.generate_qr_code(request.user, request)
@@ -31,7 +31,7 @@ class GenerateQrCodeView(APIView):
 
 
 class RegenerateQrCodeView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def post(self, request):
         qr = services.regenerate_qr_code(request.user, request)

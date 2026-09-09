@@ -1,6 +1,6 @@
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from common.permissions import IsCustomerRole
 from common.response import success
 from common.views import PaginatedAPIView
 
@@ -9,7 +9,7 @@ from .serializers import MarkNotificationsReadSerializer, NotificationSerializer
 
 
 class CustomerNotificationsView(PaginatedAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def get(self, request):
         unread_only = request.query_params.get("unread_only") == "true"
@@ -18,7 +18,7 @@ class CustomerNotificationsView(PaginatedAPIView):
 
 
 class MarkNotificationsReadView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def post(self, request):
         serializer = MarkNotificationsReadSerializer(data=request.data)

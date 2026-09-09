@@ -35,6 +35,13 @@ DEBUG = env_bool("DEBUG", True)
 
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "localhost,127.0.0.1")
 
+# Render injects this automatically for every web service (just the
+# hostname, no scheme) — trusting it means ALLOWED_HOSTS doesn't need to be
+# hand-maintained with the service's *.onrender.com domain.
+RENDER_EXTERNAL_HOSTNAME = os.environ.get("RENDER_EXTERNAL_HOSTNAME", "").strip()
+if RENDER_EXTERNAL_HOSTNAME and RENDER_EXTERNAL_HOSTNAME not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
+
 
 # Application definition
 
@@ -71,6 +78,10 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Must sit directly after SecurityMiddleware, before everything else —
+    # serves STATIC_ROOT straight out of the app process, so Render's Web
+    # Service (no separate static file host) can serve /static/ itself.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -106,7 +117,11 @@ WSGI_APPLICATION = "config.wsgi.application"
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
 if DATABASE_URL:
-    DATABASES = {"default": dj_database_url.parse(DATABASE_URL, conn_max_age=600)}
+    DATABASES = {
+        "default": dj_database_url.parse(
+            DATABASE_URL, conn_max_age=600, conn_health_checks=True
+        )
+    }
 else:
     DATABASES = {
         "default": {
@@ -142,6 +157,34 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# Render's web service disk is ephemeral — anything written to MEDIA_ROOT
+# (profile avatars, cover images, generated QR codes) is wiped on every
+# deploy/restart. Setting CLOUDINARY_URL switches customer-uploaded media
+# to Cloudinary (persistent, CDN-backed) with no other code changes: every
+# ImageField already reads its .url through request.build_absolute_uri()
+# (see profiles/serializers.py, customer_profiles/serializers.py,
+# customer_qr_codes/*), which transparently returns whatever the active
+# storage backend produces. Leave CLOUDINARY_URL unset for local dev, or
+# for a Render deployment that accepts losing uploads on every deploy.
+CLOUDINARY_URL = os.environ.get("CLOUDINARY_URL", "").strip()
+MEDIA_USES_CLOUD_STORAGE = bool(CLOUDINARY_URL)
+
+if MEDIA_USES_CLOUD_STORAGE:
+    INSTALLED_APPS += ["cloudinary_storage", "cloudinary"]
+
+STORAGES = {
+    "default": {
+        "BACKEND": (
+            "cloudinary_storage.storage.MediaCloudinaryStorage"
+            if MEDIA_USES_CLOUD_STORAGE
+            else "django.core.files.storage.FileSystemStorage"
+        ),
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
@@ -163,9 +206,29 @@ DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@vrsnexora.co
 
 
 # Frontend / CORS
+# Frontend and backend are separate deployments (React on Vercel/Netlify/a
+# Render static site, Django on a Render web service) — every origin the
+# frontend can actually be served from must be listed explicitly here.
+# Wildcards are deliberately never used in either list below.
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS", FRONTEND_URL)
 CORS_ALLOW_CREDENTIALS = True
+
+# CSRF only actually matters for the session-authenticated Django admin
+# site (/admin/) — every DRF API view here is JWT-authenticated and
+# CSRF-exempt by design (DRF marks APIView.as_view() csrf_exempt so
+# token-based clients never need a CSRF token). It still needs the
+# backend's own public origin trusted, since Django 4+ checks the admin
+# login POST's Origin header against this list, and that origin only
+# matches automatically when the request looks same-origin over plain
+# HTTP — which it never does once Render's proxy terminates TLS in front
+# of the app.
+_csrf_trusted = env_list("CSRF_TRUSTED_ORIGINS", "")
+if not _csrf_trusted:
+    _csrf_trusted = list(CORS_ALLOWED_ORIGINS)
+if RENDER_EXTERNAL_HOSTNAME:
+    _csrf_trusted.append(f"https://{RENDER_EXTERNAL_HOSTNAME}")
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(_csrf_trusted))  # de-dupe, keep order
 
 
 # Google OAuth integration point (Phase A stub — see accounts/views.py GoogleLoginView).
@@ -218,4 +281,65 @@ SIMPLE_JWT = {
     "UPDATE_LAST_LOGIN": True,
     "USER_ID_FIELD": "id",
     "USER_ID_CLAIM": "user_id",
+}
+
+
+# Security hardening
+# Render (like every PaaS load balancer) terminates TLS at its edge and
+# forwards plain HTTP to the app with X-Forwarded-Proto set — without this,
+# Django thinks every request is insecure, and SECURE_SSL_REDIRECT below
+# would redirect-loop forever.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
+
+# All of the below are meaningless (and actively annoying) over plain HTTP
+# in local dev, so they're only turned on for a real, non-DEBUG deployment.
+# SECURE_SSL_REDIRECT can still be forced off in a DEBUG=False environment
+# that isn't yet behind HTTPS (e.g. a first smoke-test deploy) via the env
+# var, without touching code.
+if not DEBUG:
+    SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", True)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "31536000"))  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+else:
+    SECURE_SSL_REDIRECT = False
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SECURE_HSTS_SECONDS = 0
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+    SECURE_HSTS_PRELOAD = False
+
+# Always on, in every environment — cheap, no HTTPS dependency, no reason
+# to ever disable them locally.
+X_FRAME_OPTIONS = "DENY"
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+# SECURE_BROWSER_XSS_FILTER is deliberately not set: Django dropped it
+# (browsers themselves removed the X-XSS-Protection header it controlled),
+# so setting it would be a dead, do-nothing line.
+
+
+# Logging — Render captures stdout/stderr as the service's log stream, so
+# everything just goes to the console instead of a log file the ephemeral
+# disk would lose anyway.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": os.environ.get("DJANGO_LOG_LEVEL", "INFO"),
+    },
+    "loggers": {
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+    },
 }
