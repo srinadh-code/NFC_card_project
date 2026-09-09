@@ -25,6 +25,7 @@ urlpatterns = [
     path("api/customer/settings/", include("customer_management.customer_settings.urls")),
     path("api/customer/dashboard/", include("customer_management.customer_dashboard.urls")),
     path("api/customer/services/", include("customer_management.customer_services.urls")),
+    path("api/website/",include("website_content.urls")),
 ]
 
 if settings.DEBUG or not settings.MEDIA_USES_CLOUD_STORAGE:
