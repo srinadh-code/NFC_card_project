@@ -3,7 +3,9 @@ import { Route, Routes } from "react-router-dom"
 
 import { ScrollToTop } from "@/components/ScrollToTop"
 import { useAuthStore } from "@/store/auth-store"
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute"
 import PublicLayout from "@/components/layout/PublicLayout"
+import AuthLayout from "@/components/layout/AuthLayout"
 import AdminLayout from "@/components/layout/AdminLayout"
 import CustomerLayout from "@/components/layout/CustomerLayout"
 
@@ -35,10 +37,12 @@ import AdminSupport from "@/pages/admin/Support"
 import AdminWebsiteContent from "@/pages/admin/content"
 
 import Login from "@/pages/Login"
+import AdminLogin from "@/pages/admin/AdminLogin"
 import CustomerRegister from "@/pages/customer/Register"
 import CustomerDashboard from "@/pages/customer/Dashboard"
 import CustomerMyCard from "@/pages/customer/MyCard"
 import CustomerProfile from "@/pages/customer/Profile"
+import CustomerServices from "@/pages/customer/Services"
 import CustomerSocialLinks from "@/pages/customer/SocialLinks"
 import CustomerQrCode from "@/pages/customer/QrCode"
 import CustomerAnalytics from "@/pages/customer/Analytics"
@@ -72,47 +76,67 @@ function App() {
           <Route path="/how-it-works" element={<HowItWorks />} />
           <Route path="/shop" element={<Shop />} />
           <Route path="/cart" element={<Cart />} />
-          <Route path="/checkout" element={<Checkout />} />
+          {/* Checkout requires a real customer session — it still renders
+              inside the public storefront chrome, so it's guarded here
+              rather than moved into the customer-portal route group. */}
+          <Route element={<ProtectedRoute role="CUSTOMER" />}>
+            <Route path="/checkout" element={<Checkout />} />
+          </Route>
           <Route path="/order-success" element={<OrderSuccess />} />
           <Route path="/track-order" element={<TrackOrder />} />
           <Route path="/faq" element={<Faq />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/privacy-policy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
+        </Route>
 
-          {/* Unified login (public, unauthenticated) — routes to the right
-              dashboard by role after authenticating */}
+        {/* Authentication — no public navbar/footer. /login and /register are
+            customer-only; /admin/login is a fully separate admin-only page.
+            Neither page ever authenticates or redirects into the other
+            role's portal. Any future auth page (verify-email, OTP,
+            standalone reset-password, etc.) belongs in this route group so
+            it automatically gets AuthLayout. */}
+        <Route element={<AuthLayout />}>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<CustomerRegister />} />
+          <Route path="/admin/login" element={<AdminLogin />} />
         </Route>
 
-        {/* Admin portal */}
-        <Route path="/admin" element={<AdminLayout />}>
-          <Route path="dashboard" element={<AdminDashboard />} />
-          <Route path="customers" element={<AdminCustomers />} />
-          <Route path="customers/:id" element={<AdminCustomerDetails />} />
-          <Route path="cards" element={<AdminCards />} />
-          <Route path="orders" element={<AdminOrders />} />
-          <Route path="transactions" element={<AdminTransactions />} />
-          <Route path="profiles" element={<AdminProfiles />} />
-          <Route path="analytics" element={<AdminAnalytics />} />
-          <Route path="reports" element={<AdminReports />} />
-          <Route path="settings" element={<AdminSettings />} />
-          <Route path="support" element={<AdminSupport />} />
-          <Route path="content" element={<AdminWebsiteContent />} />
+        {/* Admin portal — gated by ProtectedRoute(role="ADMIN") before
+            AdminLayout ever mounts, so the chrome/sidebar never has to
+            reason about auth itself. */}
+        <Route element={<ProtectedRoute role="ADMIN" />}>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route path="dashboard" element={<AdminDashboard />} />
+            <Route path="customers" element={<AdminCustomers />} />
+            <Route path="customers/:id" element={<AdminCustomerDetails />} />
+            <Route path="cards" element={<AdminCards />} />
+            <Route path="orders" element={<AdminOrders />} />
+            <Route path="transactions" element={<AdminTransactions />} />
+            <Route path="profiles" element={<AdminProfiles />} />
+            <Route path="analytics" element={<AdminAnalytics />} />
+            <Route path="reports" element={<AdminReports />} />
+            <Route path="settings" element={<AdminSettings />} />
+            <Route path="support" element={<AdminSupport />} />
+            <Route path="content" element={<AdminWebsiteContent />} />
+          </Route>
         </Route>
 
-        {/* Customer portal */}
-        <Route element={<CustomerLayout />}>
-          <Route path="/dashboard" element={<CustomerDashboard />} />
-          <Route path="/my-card" element={<CustomerMyCard />} />
-          <Route path="/profile" element={<CustomerProfile />} />
-          <Route path="/social-links" element={<CustomerSocialLinks />} />
-          <Route path="/qr-code" element={<CustomerQrCode />} />
-          <Route path="/analytics" element={<CustomerAnalytics />} />
-          <Route path="/activity" element={<CustomerActivity />} />
-          <Route path="/orders" element={<CustomerOrders />} />
-          <Route path="/settings" element={<CustomerSettings />} />
+        {/* Customer portal — gated by ProtectedRoute(role="CUSTOMER") before
+            CustomerLayout ever mounts. */}
+        <Route element={<ProtectedRoute role="CUSTOMER" />}>
+          <Route element={<CustomerLayout />}>
+            <Route path="/dashboard" element={<CustomerDashboard />} />
+            <Route path="/my-card" element={<CustomerMyCard />} />
+            <Route path="/profile" element={<CustomerProfile />} />
+            <Route path="/services" element={<CustomerServices />} />
+            <Route path="/social-links" element={<CustomerSocialLinks />} />
+            <Route path="/qr-code" element={<CustomerQrCode />} />
+            <Route path="/analytics" element={<CustomerAnalytics />} />
+            <Route path="/activity" element={<CustomerActivity />} />
+            <Route path="/orders" element={<CustomerOrders />} />
+            <Route path="/settings" element={<CustomerSettings />} />
+          </Route>
         </Route>
 
         {/* Public digital business card profile */}

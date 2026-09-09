@@ -2,7 +2,16 @@ import { useMemo } from "react"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import type { AdminUser, CustomerUser } from "@/types"
-import { ApiError, type ApiUser, authApi, clearTokens, getAccessToken, getRefreshToken, setTokens } from "@/lib/api"
+import {
+  ApiError,
+  type ApiUser,
+  authApi,
+  clearTokens,
+  getAccessToken,
+  getRefreshToken,
+  setTokens,
+  setUnauthorizedHandler,
+} from "@/lib/api"
 
 interface AuthState {
   user: ApiUser | null
@@ -24,14 +33,34 @@ export const useAuthStore = create<AuthState>()(
       hydrated: false,
       setUser: (user) => set({ user }),
       bootstrap: async () => {
-        if (!getAccessToken()) {
-          set({ hydrated: true })
+        const hasToken = Boolean(getAccessToken())
+        if (import.meta.env.DEV) {
+          // Temporary, dev-only — see ProtectedRoute.tsx for the matching
+          // route-guard-decision log this pairs with.
+          // eslint-disable-next-line no-console
+          console.debug("[auth-store] bootstrap start", { hasToken })
+        }
+        if (!hasToken) {
+          // No token — whatever `user` is currently persisted (e.g. left
+          // over from a prior session where only the token keys got
+          // cleared) is stale and must not be trusted. Clearing it here is
+          // what makes every route guard's "is there a real session" check
+          // correct instead of trusting cached UI state.
+          set({ user: null, hydrated: true })
           return
         }
         try {
           const user = await authApi.me()
+          if (import.meta.env.DEV) {
+            // eslint-disable-next-line no-console
+            console.debug("[auth-store] bootstrap resolved", { role: user.role })
+          }
           set({ user, hydrated: true })
         } catch {
+          if (import.meta.env.DEV) {
+            // eslint-disable-next-line no-console
+            console.debug("[auth-store] bootstrap failed — clearing session")
+          }
           clearTokens()
           set({ user: null, hydrated: true })
         }
@@ -40,6 +69,25 @@ export const useAuthStore = create<AuthState>()(
     { name: "nexora-auth", partialize: (s) => ({ user: s.user }) },
   ),
 )
+
+// Any request anywhere in the app that discovers the session is truly
+// unrecoverable (401 with an already-expired/invalid refresh token) clears
+// the in-memory user too — otherwise a page that made a background API call
+// would keep rendering as "logged in" (stale store) until a manual logout
+// or full page reload, even though every subsequent request would 401.
+setUnauthorizedHandler(() => useAuthStore.getState().setUser(null))
+
+/**
+ * The single source of truth for "is this browser really authenticated as
+ * `role`". Checking `user?.role` alone isn't enough — the persisted
+ * Zustand `user` blob can outlive the actual JWTs (tokens cleared/expired
+ * independently of the store, e.g. via devtools or an untouched-since-login
+ * localStorage). Every route guard and facade must go through this so
+ * cached UI state can never stand in for a real, currently-present token.
+ */
+export function hasValidSession(user: ApiUser | null, role: "ADMIN" | "CUSTOMER"): boolean {
+  return Boolean(user) && user!.role === role && Boolean(getAccessToken())
+}
 
 function toCustomerUser(u: ApiUser): CustomerUser {
   return { id: String(u.id), name: u.full_name, email: u.email, avatar: u.avatar }
@@ -62,7 +110,28 @@ async function performLogin(email: string, password: string, expectedRole: "ADMI
   try {
     const payload = await authApi.login({ email, password })
     if (payload.user.role !== expectedRole) {
-      return { success: false, error: `No ${expectedRole.toLowerCase()} account found with those credentials.` }
+      if (import.meta.env.DEV) {
+        // Temporary, dev-only — pairs with ProtectedRoute.tsx's and
+        // auth-store.ts's bootstrap() logs for tracing auth decisions.
+        // eslint-disable-next-line no-console
+        console.debug("[auth-store] performLogin role mismatch", {
+          expectedRole,
+          actualRole: payload.user.role,
+          userId: payload.user.id,
+        })
+      }
+      // The credentials are valid — this account just belongs to the
+      // other portal. Naming that explicitly (rather than a generic
+      // "invalid credentials") is what turns "why won't my admin account
+      // log in" into a one-glance answer instead of a support ticket.
+      const hint =
+        expectedRole === "CUSTOMER"
+          ? "This looks like an admin account — use the Admin Portal login instead."
+          : "This looks like a customer account — use the Customer login instead."
+      return {
+        success: false,
+        error: `No ${expectedRole.toLowerCase()} account found with those credentials. ${hint}`,
+      }
     }
     setTokens(payload.access, payload.refresh)
     useAuthStore.getState().setUser(payload.user)
@@ -88,7 +157,7 @@ export function useCustomerAuthStore<T>(selector: (state: CustomerAuthFacade) =>
   // when `user` hasn't changed — otherwise every selector call returns a
   // brand-new object and React's useSyncExternalStore loops forever.
   const facade = useMemo<CustomerAuthFacade>(() => {
-    const isCustomer = user?.role === "CUSTOMER"
+    const isCustomer = hasValidSession(user, "CUSTOMER")
     return {
       customer: isCustomer ? toCustomerUser(user!) : null,
       login: (email, password) => performLogin(email, password, "CUSTOMER"),
@@ -108,7 +177,7 @@ interface AdminAuthFacade {
 export function useAdminAuthStore<T>(selector: (state: AdminAuthFacade) => T): T {
   const user = useAuthStore((s) => s.user)
   const facade = useMemo<AdminAuthFacade>(() => {
-    const isAdmin = user?.role === "ADMIN"
+    const isAdmin = hasValidSession(user, "ADMIN")
     return {
       admin: isAdmin ? toAdminUser(user!) : null,
       login: (email, password) => performLogin(email, password, "ADMIN"),

@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Navigate, Link, useNavigate, useLocation } from "react-router-dom"
+import { Navigate, Link, useNavigate, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 import { Check, Sparkles, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useCustomerAuthStore, useAuthStore } from "@/store/auth-store"
 import { ApiError, authApi, setTokens } from "@/lib/api"
+import { sanitizeRedirect } from "@/lib/utils"
 
 const CHECKLIST = [
   "Digital Business Profile",
@@ -17,12 +18,15 @@ const CHECKLIST = [
 
 export default function CustomerRegister() {
   const navigate = useNavigate()
-  const location = useLocation()
+  const [searchParams] = useSearchParams()
   const customer = useCustomerAuthStore((s) => s.customer)
 
   // Mirrors Login.tsx: if we arrived via the "order a card while logged
   // out" redirect, send the new account straight back to finish checkout.
-  const redirectTo = (location.state as { from?: string } | null)?.from || "/dashboard"
+  const redirectTo = sanitizeRedirect(searchParams.get("redirect"), "/dashboard")
+  const redirectQuery = searchParams.get("redirect")
+    ? `?redirect=${encodeURIComponent(searchParams.get("redirect")!)}`
+    : ""
 
   const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" })
   const [formError, setFormError] = useState<string | null>(null)
@@ -176,7 +180,7 @@ export default function CustomerRegister() {
 
           <p className="text-center text-sm text-muted-foreground">
             Already have an account?{" "}
-            <Link to="/login" state={location.state} className="font-medium text-primary hover:underline">
+            <Link to={`/login${redirectQuery}`} className="font-medium text-primary hover:underline">
               Login
             </Link>
           </p>
