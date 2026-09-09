@@ -158,14 +158,34 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 # Render's web service disk is ephemeral — anything written to MEDIA_ROOT
 # (profile avatars, cover images, generated QR codes) is wiped on every
-# deploy/restart. Setting CLOUDINARY_URL switches customer-uploaded media
-# to Cloudinary (persistent, CDN-backed) with no other code changes: every
-# ImageField already reads its .url through request.build_absolute_uri()
+# deploy/restart. Setting Cloudinary credentials switches customer-uploaded
+# media to Cloudinary (persistent, CDN-backed) with no other code changes:
+# every ImageField already reads its .url through request.build_absolute_uri()
 # (see profiles/serializers.py, customer_profiles/serializers.py,
-# customer_qr_codes/*), which transparently returns whatever the active
-# storage backend produces. Leave CLOUDINARY_URL unset for local dev, or
-# for a Render deployment that accepts losing uploads on every deploy.
+# customer_qr_codes/serializers.py) — that call is a no-op passthrough for an
+# already-absolute Cloudinary URL and only adds a scheme+host for a relative
+# local path, so the exact same serializer code is correct for both storage
+# backends. Leave both unset for local dev, or for a Render deployment that
+# accepts losing uploads on every deploy.
+#
+# Two ways to configure it — set whichever is easier to get from the
+# Cloudinary dashboard:
+#   1. CLOUDINARY_URL alone, e.g. cloudinary://<api_key>:<api_secret>@<cloud_name>
+#      (the single string Cloudinary's own dashboard gives you)
+#   2. CLOUDINARY_CLOUD_NAME + CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET
+#      separately — combined into the same URL form internally.
 CLOUDINARY_URL = os.environ.get("CLOUDINARY_URL", "").strip()
+if not CLOUDINARY_URL:
+    _cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "").strip()
+    _api_key = os.environ.get("CLOUDINARY_API_KEY", "").strip()
+    _api_secret = os.environ.get("CLOUDINARY_API_SECRET", "").strip()
+    if _cloud_name and _api_key and _api_secret:
+        CLOUDINARY_URL = f"cloudinary://{_api_key}:{_api_secret}@{_cloud_name}"
+        # cloudinary's SDK reads this env var directly (not just the Django
+        # setting above) the moment it's imported, so it must actually be
+        # set here too — not only assigned to a Django setting.
+        os.environ["CLOUDINARY_URL"] = CLOUDINARY_URL
+
 MEDIA_USES_CLOUD_STORAGE = bool(CLOUDINARY_URL)
 
 if MEDIA_USES_CLOUD_STORAGE:
