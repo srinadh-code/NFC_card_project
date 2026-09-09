@@ -53,10 +53,10 @@ export default function About() {
       />
 
       {/* Premium hero showcase — story left, NFC card product render right */}
-      <section className="bg-white py-16 sm:py-20">
+      <section className="bg-background py-16 sm:py-20">
         <div className="container-page grid items-center gap-12 lg:grid-cols-2">
           <div>
-            <span className="inline-flex items-center rounded-full bg-[#4F46E5]/10 px-3 py-1 text-xs font-semibold tracking-wide text-[#4F46E5]">
+            <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold tracking-wide text-primary">
               OUR STORY
             </span>
             <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
@@ -78,7 +78,7 @@ export default function About() {
             <ul className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {FEATURE_HIGHLIGHTS.map((f) => (
                 <li key={f.label} className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <CheckCircle2 className="size-5 shrink-0 text-[#4F46E5]" />
+                  <CheckCircle2 className="size-5 shrink-0 text-primary" />
                   {f.label}
                 </li>
               ))}
@@ -98,7 +98,7 @@ export default function About() {
       <StatsShowcaseCard />
 
       {/* Why Choose VR's NEXORA */}
-      <section className="bg-white py-20">
+      <section className="bg-background py-20">
         <div className="container-page">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight text-foreground">Why Choose VR's NEXORA?</h2>
@@ -110,7 +110,7 @@ export default function About() {
             {WHY_CHOOSE.map((f) => (
               <div
                 key={f.title}
-                className="card-hover group relative rounded-[24px] border border-[#8B5CF6]/20 bg-white p-6 shadow-[0_10px_30px_rgba(15,23,42,0.05)]"
+                className="card-hover group relative rounded-[24px] border border-[#8B5CF6]/20 bg-card p-6 shadow-[0_10px_30px_rgba(15,23,42,0.05)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
               >
                 <span
                   className="flex size-12 items-center justify-center rounded-xl text-white shadow-md"
@@ -130,7 +130,7 @@ export default function About() {
       </section>
 
       {/* Our Story + Values */}
-      <section className="bg-[#F8FAFC] py-20">
+      <section className="bg-secondary py-20">
         <div className="container-page">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight text-foreground">Built From Experience</h2>
@@ -158,7 +158,7 @@ export default function About() {
           </div>
           <div className="mt-16 grid grid-cols-2 gap-6 lg:grid-cols-4">
             {VALUES.map((v) => (
-              <div key={v.title} className={`${cardClass} bg-white p-6 text-center`}>
+              <div key={v.title} className={`${cardClass} bg-card p-6 text-center`}>
                 <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-md">
                   <v.icon className="size-6" />
                 </div>

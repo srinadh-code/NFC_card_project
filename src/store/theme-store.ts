@@ -5,6 +5,7 @@ import type { ThemeMode } from "@/types"
 interface ThemeState {
   mode: ThemeMode
   setMode: (mode: ThemeMode) => void
+  toggle: () => void
 }
 
 function applyTheme(mode: ThemeMode) {
@@ -16,17 +17,22 @@ function applyTheme(mode: ThemeMode) {
 
 export const useThemeStore = create<ThemeState>()(
   persist(
-    (set) => ({
-      mode: "light",
+    (set, get) => ({
+      mode: "dark",
       setMode: (mode) => {
         applyTheme(mode)
         set({ mode })
+      },
+      toggle: () => {
+        const next = get().mode === "dark" ? "light" : "dark"
+        applyTheme(next)
+        set({ mode: next })
       },
     }),
     {
       name: "taplink-theme",
       onRehydrateStorage: () => (state) => {
-        applyTheme(state?.mode ?? "light")
+        applyTheme(state?.mode ?? "dark")
       },
     },
   ),

@@ -12,15 +12,18 @@ export default function Faq() {
         subtitle="Everything you need to know about VR's NEXORA cards and profiles."
       />
 
-      <section className="bg-white px-4 py-16">
+      <section className="bg-background px-4 py-16">
         <div className="mx-auto max-w-3xl">
           <Accordion
             type="single"
             collapsible
-            className={cn(cardClass, "px-6 hover:translate-y-0 hover:shadow-[0_10px_30px_rgba(0,0,0,0.06)]")}
+            className={cn(
+              cardClass,
+              "bg-card border-border px-6 hover:translate-y-0 hover:shadow-[0_10px_30px_rgba(0,0,0,0.06)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
+            )}
           >
             {FAQS.map((faq, i) => (
-              <AccordionItem key={faq.q} value={`item-${i}`} className="border-[#E2E8F0]">
+              <AccordionItem key={faq.q} value={`item-${i}`} className="border-border">
                 <AccordionTrigger className="text-base hover:no-underline">{faq.q}</AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">{faq.a}</AccordionContent>
               </AccordionItem>

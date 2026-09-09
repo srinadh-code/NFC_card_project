@@ -88,7 +88,7 @@ export default function Shop() {
         subtitle="One smart card that replaces your entire stack of paper business cards. Order yours below."
       />
 
-      <section className="bg-[#F8FAFC] px-4 py-16">
+      <section className="bg-secondary px-4 py-16">
         <div
           className={cn(
             cardClass,
@@ -101,7 +101,7 @@ export default function Shop() {
               <div className="flex flex-wrap items-center gap-3">
                 <h2 className="text-2xl font-bold text-foreground">{DISPLAY_NAME}</h2>
                 {FLAGSHIP_PRODUCT.popular && (
-                  <span className="rounded-full bg-[#4F46E5]/10 px-3 py-1 text-xs font-semibold text-[#4F46E5]">
+                  <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                     Most Popular
                   </span>
                 )}
@@ -115,7 +115,7 @@ export default function Shop() {
             <ul className="space-y-3">
               {DISPLAY_FEATURES.map((feature) => (
                 <li key={feature} className="flex items-start gap-3 text-sm font-medium text-foreground">
-                  <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-[#4F46E5]" />
+                  <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary" />
                   {feature}
                 </li>
               ))}
@@ -161,7 +161,7 @@ export default function Shop() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-4 rounded-[24px] border border-[#E2E8F0] bg-[#F8FAFC] p-5 shadow-[0_10px_30px_rgba(0,0,0,0.06)] sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-4 rounded-[24px] border border-border bg-card p-5 shadow-[0_10px_30px_rgba(0,0,0,0.06)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Price</p>
                 <p className="bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#EC4899] bg-clip-text text-2xl font-bold text-transparent">
@@ -172,7 +172,7 @@ export default function Shop() {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="border-[#4F46E5] text-[#4F46E5] transition-all duration-300 hover:bg-[#4F46E5]/5"
+                  className="border-primary text-primary transition-all duration-300 hover:bg-primary/5"
                   onClick={handleAddToCart}
                 >
                   Add To Cart
@@ -191,9 +191,9 @@ export default function Shop() {
               {TRUST_BADGES.map((b) => (
                 <div
                   key={b.label}
-                  className="flex flex-col items-center gap-2 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 text-center"
+                  className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 text-center"
                 >
-                  <b.icon className="size-5 text-[#4F46E5]" />
+                  <b.icon className="size-5 text-primary" />
                   <span className="text-xs font-medium text-muted-foreground">{b.label}</span>
                 </div>
               ))}

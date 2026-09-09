@@ -71,9 +71,9 @@ function MiniChart() {
  * numbers rather than any live data. */
 export default function DashboardMockup() {
   return (
-    <div className="overflow-hidden rounded-[24px] border border-border/70 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.18)]">
-      {/* Browser chrome */}
-      <div className="flex items-center gap-1.5 border-b border-border/70 bg-[#F8FAFC] px-4 py-2.5">
+    <div className="overflow-hidden rounded-[24px] border border-border/70 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.18)] dark:shadow-[0_30px_80px_rgba(0,0,0,0.55)]">
+      {/* Browser chrome — deliberately kept as a fixed light-mode screenshot, see note below */}
+      <div className="flex items-center gap-1.5 border-b border-slate-200 bg-[#F8FAFC] px-4 py-2.5">
         <span className="size-2.5 rounded-full bg-[#EF4444]" />
         <span className="size-2.5 rounded-full bg-[#F59E0B]" />
         <span className="size-2.5 rounded-full bg-[#22C55E]" />
@@ -103,12 +103,14 @@ export default function DashboardMockup() {
           </nav>
         </div>
 
-        {/* Main content */}
+        {/* Main content — a fixed light-mode "product screenshot"; text/border tokens
+            below are intentionally pinned to slate rather than theme tokens so this
+            keeps reading as a crisp light UI even when the page is in dark mode. */}
         <div className="min-w-0 flex-1 p-4 sm:p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-bold text-foreground">Welcome back, Alex 👋</p>
-              <p className="text-[11px] text-muted-foreground">Track your growth and engagement</p>
+              <p className="text-sm font-bold text-slate-900">Welcome back, Alex 👋</p>
+              <p className="text-[11px] text-slate-500">Track your growth and engagement</p>
             </div>
             <img
               src="https://api.dicebear.com/9.x/notionists/svg?seed=alex-morgan"
@@ -119,32 +121,32 @@ export default function DashboardMockup() {
 
           <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
             {TILES.map((t) => (
-              <div key={t.label} className="rounded-xl border border-border/70 bg-white p-2.5 shadow-sm">
+              <div key={t.label} className="rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm">
                 <span
                   className="flex size-6 items-center justify-center rounded-md text-white"
                   style={{ background: t.bg }}
                 >
                   <t.icon className="size-3.5" />
                 </span>
-                <p className="mt-1.5 text-[10px] text-muted-foreground">{t.label}</p>
-                <p className="text-sm font-bold text-foreground">{t.value}</p>
+                <p className="mt-1.5 text-[10px] text-slate-500">{t.label}</p>
+                <p className="text-sm font-bold text-slate-900">{t.value}</p>
                 <p className="text-[10px] font-semibold text-[#22C55E]">↑ {t.delta}</p>
               </div>
             ))}
           </div>
 
           <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
-            <div className="rounded-xl border border-border/70 bg-white p-3 shadow-sm lg:col-span-2">
-              <p className="text-xs font-semibold text-foreground">Taps Over Time</p>
+            <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm lg:col-span-2">
+              <p className="text-xs font-semibold text-slate-900">Taps Over Time</p>
               <MiniChart />
             </div>
-            <div className="rounded-xl border border-border/70 bg-white p-3 shadow-sm">
-              <p className="text-xs font-semibold text-foreground">Top Locations</p>
+            <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+              <p className="text-xs font-semibold text-slate-900">Top Locations</p>
               <div className="mt-2.5 space-y-2">
                 {LOCATIONS.map((loc) => (
                   <div key={loc.name} className="flex items-center justify-between text-[10px]">
-                    <span className="font-medium text-muted-foreground">{loc.name}</span>
-                    <span className="font-semibold text-foreground">{loc.value.toLocaleString()}</span>
+                    <span className="font-medium text-slate-500">{loc.name}</span>
+                    <span className="font-semibold text-slate-900">{loc.value.toLocaleString()}</span>
                   </div>
                 ))}
               </div>

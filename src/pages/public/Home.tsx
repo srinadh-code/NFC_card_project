@@ -75,10 +75,10 @@ export default function Home() {
   return (
     <div>
       {/* Hero */}
-      <section className="relative overflow-hidden bg-white pb-20 pt-16 sm:pt-20">
+      <section className="relative overflow-hidden bg-background pb-20 pt-16 sm:pt-20">
         <div className="container-page grid items-center gap-12 lg:grid-cols-2">
           <div>
-            <span className="inline-flex items-center rounded-full bg-[#4F46E5]/10 px-3 py-1 text-xs font-semibold tracking-wide text-[#4F46E5]">
+            <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold tracking-wide text-primary">
               VR&apos;S NEXORA · DIGITAL IDENTITY PLATFORM
             </span>
             <h1 className="mt-5 text-4xl font-bold leading-tight tracking-tight text-foreground sm:text-5xl md:text-6xl">
@@ -95,7 +95,7 @@ export default function Home() {
             <ul className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {CHECKLIST.map((item) => (
                 <li key={item} className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <CheckCircle2 className="size-5 shrink-0 text-[#4F46E5]" />
+                  <CheckCircle2 className="size-5 shrink-0 text-primary" />
                   {item}
                 </li>
               ))}
@@ -107,7 +107,7 @@ export default function Home() {
               <Button
                 size="lg"
                 variant="outline"
-                className="gap-2 border-[#4F46E5] text-[#4F46E5] transition-all duration-300 hover:bg-[#4F46E5]/5"
+                className="gap-2 border-primary text-primary transition-all duration-300 hover:bg-primary/5"
                 onClick={() => setDemoOpen(true)}
               >
                 <PlayCircle className="size-4" />
@@ -121,7 +121,7 @@ export default function Home() {
                     key={seed}
                     src={`https://api.dicebear.com/9.x/notionists/svg?seed=${seed}`}
                     alt=""
-                    className="size-10 rounded-full border-2 border-white bg-[#F8FAFC] shadow-sm"
+                    className="size-10 rounded-full border-2 border-white bg-secondary shadow-sm"
                   />
                 ))}
               </div>
@@ -181,21 +181,21 @@ export default function Home() {
             </div>
 
             {/* Floating analytics widgets */}
-            <div className="absolute -left-2 top-4 z-20 hidden animate-float-slow rounded-2xl border border-border/70 bg-white p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] sm:block">
+            <div className="absolute -left-2 top-4 z-20 hidden animate-float-slow rounded-2xl border border-border/70 bg-card p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:block">
               <p className="text-[11px] font-medium text-muted-foreground">Total Taps</p>
               <p className="text-lg font-bold text-foreground">12,458</p>
               <p className="flex items-center gap-0.5 text-[11px] font-semibold text-[#22C55E]">
                 <TrendingUp className="size-3" /> 24.5%
               </p>
             </div>
-            <div className="absolute -right-2 top-1/3 z-20 hidden animate-float-slower rounded-2xl border border-border/70 bg-white p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] sm:block">
+            <div className="absolute -right-2 top-1/3 z-20 hidden animate-float-slower rounded-2xl border border-border/70 bg-card p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:block">
               <p className="text-[11px] font-medium text-muted-foreground">Profile Views</p>
               <p className="text-lg font-bold text-foreground">8,920</p>
               <p className="flex items-center gap-0.5 text-[11px] font-semibold text-[#22C55E]">
                 <TrendingUp className="size-3" /> 18.6%
               </p>
             </div>
-            <div className="absolute -left-4 bottom-6 z-20 hidden animate-float-slow rounded-2xl border border-border/70 bg-white p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] sm:block">
+            <div className="absolute -left-4 bottom-6 z-20 hidden animate-float-slow rounded-2xl border border-border/70 bg-card p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:block">
               <p className="text-[11px] font-medium text-muted-foreground">QR Scans</p>
               <p className="text-lg font-bold text-foreground">3,538</p>
               <p className="flex items-center gap-0.5 text-[11px] font-semibold text-[#22C55E]">
@@ -219,7 +219,7 @@ export default function Home() {
       <NfcShowcase />
 
       {/* Trusted by */}
-      <section className="border-y border-[#E2E8F0] bg-[#F8FAFC] py-10">
+      <section className="border-y border-border bg-secondary py-10">
         <div className="container-page">
           <p className="text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             Trusted by professionals at
@@ -235,7 +235,7 @@ export default function Home() {
       </section>
 
       {/* Stats */}
-      <section className="bg-white px-4 py-16">
+      <section className="bg-background px-4 py-16">
         <div className="mx-auto grid max-w-5xl grid-cols-2 gap-8 sm:grid-cols-4">
           {STATS.map((s) => (
             <StatCounter key={s.label} value={s.value} label={s.label} />
@@ -244,7 +244,7 @@ export default function Home() {
       </section>
 
       {/* Our Story */}
-      <section className="bg-[#F8FAFC] py-20">
+      <section className="bg-secondary py-20">
         <div className="container-page">
           <div className="grid items-center gap-12 lg:grid-cols-2">
             <div>
@@ -280,7 +280,7 @@ export default function Home() {
       </section>
 
       {/* Why choose */}
-      <section className="bg-white py-20">
+      <section className="bg-background py-20">
         <div className="container-page">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight text-foreground">Why Choose VR's NEXORA?</h2>
@@ -297,7 +297,7 @@ export default function Home() {
       </section>
 
       {/* Testimonials */}
-      <section className="bg-[#F8FAFC] py-20">
+      <section className="bg-secondary py-20">
         <div className="container-page">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight text-foreground">
@@ -316,7 +316,7 @@ export default function Home() {
       </section>
 
       {/* FAQ preview */}
-      <section className="bg-white px-4 py-20">
+      <section className="bg-background px-4 py-20">
         <div className="mx-auto max-w-3xl">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight text-foreground">
@@ -329,10 +329,10 @@ export default function Home() {
           <Accordion
             type="single"
             collapsible
-            className={cn(cardClass, "mt-10 px-6 hover:translate-y-0 hover:shadow-[0_10px_30px_rgba(0,0,0,0.06)]")}
+            className={cn(cardClass, "mt-10 px-6 hover:translate-y-0 hover:shadow-[0_10px_30px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_10px_30px_rgba(0,0,0,0.5)]")}
           >
             {FAQ_PREVIEW.map((faq, i) => (
-              <AccordionItem key={faq.q} value={`item-${i}`} className="border-[#E2E8F0]">
+              <AccordionItem key={faq.q} value={`item-${i}`} className="border-border">
                 <AccordionTrigger className="text-base hover:no-underline">{faq.q}</AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">{faq.a}</AccordionContent>
               </AccordionItem>
@@ -341,7 +341,7 @@ export default function Home() {
           <div className="mt-8 text-center">
             <Button
               variant="ghost"
-              className="text-[#4F46E5] hover:bg-[#4F46E5]/5 hover:text-[#4F46E5]"
+              className="text-primary hover:bg-primary/5 hover:text-primary"
               onClick={() => navigate("/faq")}
             >
               View all FAQs
@@ -352,9 +352,9 @@ export default function Home() {
       </section>
 
       {/* Contact CTA */}
-      <section className="bg-[#F8FAFC] px-4 py-20">
+      <section className="bg-secondary px-4 py-20">
         <div className="mx-auto max-w-4xl">
-          <div className="relative overflow-hidden rounded-[24px] border border-[#E2E8F0] bg-white p-10 text-center shadow-[0_10px_30px_rgba(0,0,0,0.06)] sm:p-14">
+          <div className="relative overflow-hidden rounded-[24px] border border-border bg-card p-10 text-center shadow-[0_10px_30px_rgba(0,0,0,0.06)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:p-14">
             <div className="pointer-events-none absolute -left-16 -top-16 size-56 rounded-full bg-[#4F46E5]/10 blur-3xl" />
             <div className="pointer-events-none absolute -bottom-16 -right-16 size-56 rounded-full bg-[#EC4899]/10 blur-3xl" />
             <div className="relative mx-auto flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-[0_4px_14px_rgba(79,70,229,0.4)]">

@@ -120,17 +120,13 @@ async function performLogin(email: string, password: string, expectedRole: "ADMI
           userId: payload.user.id,
         })
       }
-      // The credentials are valid — this account just belongs to the
-      // other portal. Naming that explicitly (rather than a generic
-      // "invalid credentials") is what turns "why won't my admin account
-      // log in" into a one-glance answer instead of a support ticket.
-      const hint =
-        expectedRole === "CUSTOMER"
-          ? "This looks like an admin account — use the Admin Portal login instead."
-          : "This looks like a customer account — use the Customer login instead."
+      // Deliberately generic: naming the actual account type here would let
+      // an attacker use this form to probe which role a given email/password
+      // pair belongs to. Keep this identical to a genuine wrong-password
+      // error (see the catch block below and Login.tsx's top-of-file note).
       return {
         success: false,
-        error: `No ${expectedRole.toLowerCase()} account found with those credentials. ${hint}`,
+        error: "Invalid email or password.",
       }
     }
     setTokens(payload.access, payload.refresh)

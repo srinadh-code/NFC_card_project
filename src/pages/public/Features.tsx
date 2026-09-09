@@ -44,7 +44,7 @@ export default function Features() {
   return (
     <div className="overflow-x-hidden">
       {/* ============ HERO ============ */}
-      <section className="relative overflow-hidden bg-white pb-24 pt-16 sm:pt-20">
+      <section className="relative overflow-hidden bg-background pb-24 pt-16 sm:pt-20">
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.35]"
           style={{
@@ -57,8 +57,8 @@ export default function Features() {
 
         <div className="relative container-page grid items-center gap-16 lg:grid-cols-2">
           <div>
-            <span className="inline-flex items-center gap-2 rounded-full border border-border bg-white px-3 py-1 text-xs font-semibold text-muted-foreground shadow-sm">
-              <span className="rounded-full bg-[#4F46E5]/10 px-2 py-0.5 text-[#4F46E5]">FEATURES</span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted-foreground shadow-sm">
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">FEATURES</span>
               Built for the Modern Professional
             </span>
             <h1 className="mt-5 text-4xl font-bold leading-tight tracking-tight text-foreground sm:text-5xl md:text-6xl">
@@ -89,7 +89,7 @@ export default function Features() {
                     key={seed}
                     src={`https://api.dicebear.com/9.x/notionists/svg?seed=${seed}`}
                     alt=""
-                    className="size-10 rounded-full border-2 border-white bg-[#F8FAFC] shadow-sm"
+                    className="size-10 rounded-full border-2 border-white bg-secondary shadow-sm"
                   />
                 ))}
               </div>
@@ -183,7 +183,7 @@ export default function Features() {
       </Dialog>
 
       {/* ============ FEATURE GRID ============ */}
-      <section className="bg-[#F8FAFC] py-20">
+      <section className="bg-secondary py-20">
         <div className="container-page">
           <Reveal>
             <div className="mx-auto max-w-2xl text-center">
@@ -199,7 +199,7 @@ export default function Features() {
           <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f, i) => (
               <Reveal key={f.title} delayMs={i * 80}>
-                <div className="card-hover group flex items-start gap-4 rounded-[24px] border border-border/70 bg-white p-6 shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
+                <div className="card-hover group flex items-start gap-4 rounded-[24px] border border-border/70 bg-card p-6 shadow-[0_10px_30px_rgba(15,23,42,0.06)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
                   <span
                     className="flex size-12 shrink-0 items-center justify-center rounded-xl text-white shadow-md"
                     style={{ background: f.bg }}
@@ -221,15 +221,15 @@ export default function Features() {
       </section>
 
       {/* ============ ANALYTICS SHOWCASE ============ */}
-      <section className="bg-white py-20">
+      <section className="bg-background py-20">
         <div className="container-page">
-          <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-[#EEF2FF] via-[#F5F3FF] to-[#FDF2F8] p-8 sm:p-14">
-            <div className="pointer-events-none absolute -left-16 -top-16 size-72 rounded-full bg-[#7C3AED]/15 blur-3xl" />
-            <div className="pointer-events-none absolute -bottom-16 -right-16 size-72 rounded-full bg-[#2563EB]/15 blur-3xl" />
+          <div className="relative overflow-hidden rounded-[32px] border border-border bg-card p-8 shadow-[0_10px_30px_rgba(15,23,42,0.06)] dark:shadow-[0_20px_45px_rgba(0,0,0,0.5)] sm:p-14">
+            <div className="pointer-events-none absolute -left-16 -top-16 size-72 rounded-full bg-primary/15 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-16 -right-16 size-72 rounded-full bg-[#EC4899]/15 blur-3xl" />
 
             <div className="relative grid items-center gap-12 lg:grid-cols-2">
               <Reveal>
-                <span className="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-semibold tracking-wide text-[#4F46E5] shadow-sm">
+                <span className="inline-flex items-center rounded-full bg-card px-3 py-1 text-xs font-semibold tracking-wide text-primary shadow-sm">
                   ANALYTICS · Data That Drives Opportunities
                 </span>
                 <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">

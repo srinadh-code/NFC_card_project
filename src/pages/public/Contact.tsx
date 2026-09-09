@@ -39,12 +39,15 @@ export default function Contact() {
     <div>
       <PageHeader title="Get in Touch" subtitle="Have a question or need help? We'd love to hear from you." />
 
-      <section className="bg-white px-4 py-16">
+      <section className="bg-background px-4 py-16">
         <div className="mx-auto grid max-w-6xl gap-12 lg:grid-cols-2">
           <div className="space-y-6">
             {INFO.map((item) => (
-              <div key={item.label} className={`flex items-start gap-4 p-5 ${cardClass}`}>
-                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-md">
+              <div
+                key={item.label}
+                className={cn(cardClass, "flex items-start gap-4 p-5 bg-card border-border dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)]")}
+              >
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-brand-br text-white shadow-md">
                   <item.icon className="size-5" />
                 </div>
                 <div>
@@ -57,7 +60,10 @@ export default function Contact() {
 
           <form
             onSubmit={handleSubmit}
-            className={cn(cardClass, "space-y-4 bg-[#F8FAFC] p-6 hover:translate-y-0 hover:shadow-[0_10px_30px_rgba(0,0,0,0.06)]")}
+            className={cn(
+              cardClass,
+              "space-y-4 bg-secondary border-border p-6 hover:translate-y-0 hover:shadow-[0_10px_30px_rgba(0,0,0,0.06)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
+            )}
           >
             <div className="space-y-1.5">
               <Label htmlFor="contact-name">Full Name</Label>
@@ -88,7 +94,7 @@ export default function Contact() {
             <Button
               type="submit"
               size="lg"
-              className="w-full rounded-xl bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-[0_4px_14px_rgba(79,70,229,0.4)] transition-all duration-200 hover:shadow-[0_6px_20px_rgba(79,70,229,0.55)] hover:brightness-110"
+              className="w-full rounded-xl bg-gradient-brand text-white shadow-[0_4px_14px_rgba(139,92,246,0.4)] transition-all duration-200 hover:shadow-[0_6px_20px_rgba(139,92,246,0.55)] hover:brightness-110"
             >
               Send Message
             </Button>
