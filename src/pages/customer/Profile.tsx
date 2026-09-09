@@ -186,14 +186,19 @@ export default function CustomerProfile() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">My Profile</h1>
-        <p className="text-sm text-muted-foreground">
-          This information appears on your public digital business card.
-        </p>
+      <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-4 border-b border-border bg-muted/30 py-4 backdrop-blur-sm">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight">My Profile</h1>
+          <p className="text-sm text-muted-foreground">
+            This information appears on your public digital business card.
+          </p>
+        </div>
+        <Button type="submit" form="profile-form" disabled={mutation.isPending}>
+          {mutation.isPending ? "Saving..." : "Save Changes"}
+        </Button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form id="profile-form" onSubmit={handleSubmit} className="space-y-6">
         <Card className="rounded-2xl">
           <CardHeader>
             <CardTitle>Profile Photo</CardTitle>
@@ -373,12 +378,6 @@ export default function CustomerProfile() {
             <CustomFieldsEditor fields={customFields} onChange={setCustomFields} />
           </CardContent>
         </Card>
-
-        <div className="flex justify-end">
-          <Button type="submit" size="lg" disabled={mutation.isPending}>
-            {mutation.isPending ? "Saving..." : "Save Changes"}
-          </Button>
-        </div>
       </form>
     </div>
   )

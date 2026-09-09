@@ -39,7 +39,7 @@ export default function HowItWorks() {
         subtitle="Get from unboxing to your first tap in five simple steps."
       />
 
-      <section className="bg-white py-20">
+      <section className="bg-background py-20">
         <div className="container-page">
           {isLoading ? (
             <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-5">
@@ -58,10 +58,10 @@ export default function HowItWorks() {
                   return (
                     <div
                       key={step.id}
-                      className="card-hover relative flex flex-col items-center rounded-[24px] p-6 text-center text-white shadow-[0_10px_30px_rgba(15,23,42,0.12)]"
+                      className="card-hover relative flex flex-col items-center rounded-[24px] p-6 text-center text-white shadow-[0_10px_30px_rgba(15,23,42,0.12)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
                       style={{ background: `linear-gradient(160deg, ${from}, ${to})` }}
                     >
-                      <span className="absolute -top-3 flex size-7 items-center justify-center rounded-full bg-white text-xs font-bold text-foreground shadow">
+                      <span className="absolute -top-3 flex size-7 items-center justify-center rounded-full bg-card text-xs font-bold text-foreground shadow">
                         {step.step_number}
                       </span>
                       <div className="mt-2 flex size-14 items-center justify-center rounded-2xl bg-white/20">

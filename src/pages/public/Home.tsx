@@ -79,7 +79,7 @@ export default function Home() {
   return (
     <div>
       {/* Hero */}
-      <section className="relative overflow-hidden bg-white pb-20 pt-16 sm:pt-20">
+      <section className="relative overflow-hidden bg-background pb-20 pt-16 sm:pt-20">
         <div className="container-page grid items-center gap-12 lg:grid-cols-2">
           <div>
             {isLoading ? (
@@ -91,11 +91,11 @@ export default function Home() {
             ) : (
               <>
                 {hero?.badge && (
-                  <span className="inline-flex items-center rounded-full bg-[#4F46E5]/10 px-3 py-1 text-xs font-semibold tracking-wide text-[#4F46E5]">
+                  <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold tracking-wide text-primary">
                     {hero.badge}
                   </span>
                 )}
-                <h1 className="mt-5 bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#EC4899] bg-clip-text text-4xl font-bold leading-tight tracking-tight text-transparent sm:text-5xl md:text-6xl">
+                <h1 className="mt-5 text-gradient-brand text-4xl font-bold leading-tight tracking-tight sm:text-5xl md:text-6xl">
                   {hero?.heading}
                 </h1>
                 <p className="mt-6 max-w-lg text-lg text-muted-foreground">{hero?.description}</p>
@@ -105,7 +105,7 @@ export default function Home() {
               <ul className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {data.hero_features.map((item) => (
                   <li key={item.id} className="flex items-center gap-2 text-sm font-medium text-foreground">
-                    <CheckCircle2 className="size-5 shrink-0 text-[#4F46E5]" />
+                    <CheckCircle2 className="size-5 shrink-0 text-primary" />
                     {item.label}
                   </li>
                 ))}
@@ -122,7 +122,7 @@ export default function Home() {
               <Button
                 size="lg"
                 variant="outline"
-                className="gap-2 border-[#4F46E5] text-[#4F46E5] transition-all duration-300 hover:bg-[#4F46E5]/5"
+                className="gap-2 border-primary text-primary transition-all duration-300 hover:bg-primary/5"
                 onClick={() => {
                   if (hero?.secondary_cta_link) navigate(hero.secondary_cta_link)
                   else setDemoOpen(true)
@@ -139,7 +139,7 @@ export default function Home() {
                     key={seed}
                     src={`https://api.dicebear.com/9.x/notionists/svg?seed=${seed}`}
                     alt=""
-                    className="size-10 rounded-full border-2 border-white bg-[#F8FAFC] shadow-sm"
+                    className="size-10 rounded-full border-2 border-white bg-secondary shadow-sm"
                   />
                 ))}
               </div>
@@ -199,21 +199,21 @@ export default function Home() {
             </div>
 
             {/* Floating analytics widgets */}
-            <div className="absolute -left-2 top-4 z-20 hidden animate-float-slow rounded-2xl border border-border/70 bg-white p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] sm:block">
+            <div className="absolute -left-2 top-4 z-20 hidden animate-float-slow rounded-2xl border border-border/70 bg-card p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:block">
               <p className="text-[11px] font-medium text-muted-foreground">Total Taps</p>
               <p className="text-lg font-bold text-foreground">12,458</p>
               <p className="flex items-center gap-0.5 text-[11px] font-semibold text-[#22C55E]">
                 <TrendingUp className="size-3" /> 24.5%
               </p>
             </div>
-            <div className="absolute -right-2 top-1/3 z-20 hidden animate-float-slower rounded-2xl border border-border/70 bg-white p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] sm:block">
+            <div className="absolute -right-2 top-1/3 z-20 hidden animate-float-slower rounded-2xl border border-border/70 bg-card p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:block">
               <p className="text-[11px] font-medium text-muted-foreground">Profile Views</p>
               <p className="text-lg font-bold text-foreground">8,920</p>
               <p className="flex items-center gap-0.5 text-[11px] font-semibold text-[#22C55E]">
                 <TrendingUp className="size-3" /> 18.6%
               </p>
             </div>
-            <div className="absolute -left-4 bottom-6 z-20 hidden animate-float-slow rounded-2xl border border-border/70 bg-white p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] sm:block">
+            <div className="absolute -left-4 bottom-6 z-20 hidden animate-float-slow rounded-2xl border border-border/70 bg-card p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:block">
               <p className="text-[11px] font-medium text-muted-foreground">QR Scans</p>
               <p className="text-lg font-bold text-foreground">3,538</p>
               <p className="flex items-center gap-0.5 text-[11px] font-semibold text-[#22C55E]">
@@ -235,7 +235,7 @@ export default function Home() {
 
       {/* NFC Showcase */}
       {isLoading ? (
-        <section className="bg-white py-20">
+        <section className="bg-background py-20">
           <div className="container-page space-y-4">
             <Skeleton className="h-8 w-64" />
             <Skeleton className="h-24 w-full max-w-lg" />
@@ -254,14 +254,14 @@ export default function Home() {
 
       {/* Trusted by */}
       {isLoading ? (
-        <section className="border-y border-[#E2E8F0] bg-[#F8FAFC] py-10">
+        <section className="border-y border-border bg-secondary py-10">
           <div className="container-page">
             <Skeleton className="mx-auto h-4 w-48" />
           </div>
         </section>
       ) : (
         data && data.companies.length > 0 && (
-          <section className="border-y border-[#E2E8F0] bg-[#F8FAFC] py-10">
+          <section className="border-y border-border bg-secondary py-10">
             <div className="container-page">
               <p className="text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                 Trusted by professionals at
@@ -289,7 +289,7 @@ export default function Home() {
 
       {/* Stats */}
       {isLoading ? (
-        <section className="bg-white px-4 py-16">
+        <section className="bg-background px-4 py-16">
           <div className="mx-auto grid max-w-5xl grid-cols-2 gap-8 sm:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-16 w-full" />
@@ -298,7 +298,7 @@ export default function Home() {
         </section>
       ) : (
         data && data.statistics.length > 0 && (
-          <section className="bg-white px-4 py-16">
+          <section className="bg-background px-4 py-16">
             <div className="mx-auto grid max-w-5xl grid-cols-2 gap-8 sm:grid-cols-4">
               {data.statistics.map((s) => (
                 <StatCounter key={s.id} value={s.value} label={s.label} />
@@ -309,7 +309,7 @@ export default function Home() {
       )}
 
       {/* Our Story */}
-      <section className="bg-[#F8FAFC] py-20">
+      <section className="bg-secondary py-20">
         <div className="container-page">
           <div className="grid items-center gap-12 lg:grid-cols-2">
             <div>
@@ -359,7 +359,7 @@ export default function Home() {
 
       {/* Why choose */}
       {features && features.length > 0 && (
-        <section className="bg-white py-20">
+        <section className="bg-background py-20">
           <div className="container-page">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="text-3xl font-bold tracking-tight text-foreground">Why Choose VR's NEXORA?</h2>
@@ -378,7 +378,7 @@ export default function Home() {
 
       {/* Testimonials */}
       {isLoading ? (
-        <section className="bg-[#F8FAFC] py-20">
+        <section className="bg-secondary py-20">
           <div className="container-page grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-56 w-full" />
@@ -387,7 +387,7 @@ export default function Home() {
         </section>
       ) : (
         data && data.testimonials.length > 0 && (
-          <section className="bg-[#F8FAFC] py-20">
+          <section className="bg-secondary py-20">
             <div className="container-page">
               <div className="mx-auto max-w-2xl text-center">
                 <h2 className="text-3xl font-bold tracking-tight text-foreground">
@@ -409,7 +409,7 @@ export default function Home() {
 
       {/* FAQ preview */}
       {isLoading ? (
-        <section className="bg-white px-4 py-20">
+        <section className="bg-background px-4 py-20">
           <div className="mx-auto max-w-3xl space-y-3">
             <Skeleton className="mx-auto h-8 w-72" />
             <Skeleton className="h-64 w-full" />
@@ -417,7 +417,7 @@ export default function Home() {
         </section>
       ) : (
         data && data.faqs_preview.length > 0 && (
-          <section className="bg-white px-4 py-20">
+          <section className="bg-background px-4 py-20">
             <div className="mx-auto max-w-3xl">
               <div className="mx-auto max-w-2xl text-center">
                 <h2 className="text-3xl font-bold tracking-tight text-foreground">
@@ -430,10 +430,10 @@ export default function Home() {
               <Accordion
                 type="single"
                 collapsible
-                className={cn(cardClass, "mt-10 px-6 hover:translate-y-0 hover:shadow-[0_10px_30px_rgba(0,0,0,0.06)]")}
+                className={cn(cardClass, "mt-10 px-6 hover:translate-y-0 hover:shadow-[0_10px_30px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_10px_30px_rgba(0,0,0,0.5)]")}
               >
                 {data.faqs_preview.map((faq) => (
-                  <AccordionItem key={faq.id} value={`item-${faq.id}`} className="border-[#E2E8F0]">
+                  <AccordionItem key={faq.id} value={`item-${faq.id}`} className="border-border">
                     <AccordionTrigger className="text-base hover:no-underline">{faq.question}</AccordionTrigger>
                     <AccordionContent className="text-muted-foreground">{faq.answer}</AccordionContent>
                   </AccordionItem>
@@ -442,7 +442,7 @@ export default function Home() {
               <div className="mt-8 text-center">
                 <Button
                   variant="ghost"
-                  className="text-[#4F46E5] hover:bg-[#4F46E5]/5 hover:text-[#4F46E5]"
+                  className="text-primary hover:bg-primary/5 hover:text-primary"
                   onClick={() => navigate("/faq")}
                 >
                   View all FAQs
@@ -456,9 +456,9 @@ export default function Home() {
 
       {/* Contact CTA */}
       {data?.cta && (
-        <section className="bg-[#F8FAFC] px-4 py-20">
+        <section className="bg-secondary px-4 py-20">
           <div className="mx-auto max-w-4xl">
-            <div className="relative overflow-hidden rounded-[24px] border border-[#E2E8F0] bg-white p-10 text-center shadow-[0_10px_30px_rgba(0,0,0,0.06)] sm:p-14">
+            <div className="relative overflow-hidden rounded-[24px] border border-border bg-card p-10 text-center shadow-[0_10px_30px_rgba(0,0,0,0.06)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:p-14">
               <div className="pointer-events-none absolute -left-16 -top-16 size-56 rounded-full bg-[#4F46E5]/10 blur-3xl" />
               <div className="pointer-events-none absolute -bottom-16 -right-16 size-56 rounded-full bg-[#EC4899]/10 blur-3xl" />
               <div className="relative mx-auto flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-[0_4px_14px_rgba(79,70,229,0.4)]">

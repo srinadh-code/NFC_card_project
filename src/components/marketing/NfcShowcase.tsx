@@ -15,7 +15,7 @@ interface NfcShowcaseProps {
 
 export default function NfcShowcase({ badge, heading, description, points }: NfcShowcaseProps) {
   return (
-    <section className="overflow-hidden bg-white py-20 sm:py-24">
+    <section className="overflow-hidden bg-background py-20 sm:py-24">
       <div className="container-page grid items-center gap-16 lg:grid-cols-2">
         {/* Visual mockup */}
         <div className="relative order-2 flex items-center justify-center py-8 lg:order-1">
@@ -36,15 +36,15 @@ export default function NfcShowcase({ badge, heading, description, points }: Nfc
           <div className="absolute -right-2 bottom-16 sm:-right-6">
             <span className="absolute inset-0 -m-7 animate-ping rounded-full bg-[#EC4899]/40 [animation-duration:2s]" />
             <span className="absolute inset-0 -m-3.5 animate-pulse rounded-full bg-[#4F46E5]/30" />
-            <div className="relative flex h-16 w-24 items-center justify-center rounded-xl bg-white shadow-xl ring-1 ring-black/5">
-              <Nfc className="size-6 text-[#4F46E5]" />
+            <div className="relative flex h-16 w-24 items-center justify-center rounded-xl bg-card shadow-xl ring-1 ring-black/5">
+              <Nfc className="size-6 text-primary" />
             </div>
           </div>
         </div>
 
         {/* Copy */}
         <div className="order-1 lg:order-2">
-          <span className="inline-flex items-center rounded-full bg-[#4F46E5]/10 px-3 py-1 text-xs font-semibold tracking-wide text-[#4F46E5]">
+          <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold tracking-wide text-primary">
             {badge}
           </span>
           <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">{heading}</h2>

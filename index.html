@@ -11,6 +11,20 @@
       rel="stylesheet"
     />
     <title>VR's NEXORA — Digital Identity</title>
+    <script>
+      (function () {
+        try {
+          var stored = JSON.parse(localStorage.getItem("taplink-theme") || "null");
+          var mode = (stored && stored.state && stored.state.mode) || "dark";
+          var isDark =
+            mode === "dark" ||
+            (mode === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", isDark);
+        } catch (e) {
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -313,11 +313,16 @@ export default function CustomerSocialLinks() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">Social Links</h1>
-        <p className="text-sm text-muted-foreground">
-          Drag to reorder, toggle to show or hide, and edit the links on your public profile.
-        </p>
+      <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-4 border-b border-border bg-muted/30 py-4 backdrop-blur-sm">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight">Social Links</h1>
+          <p className="text-sm text-muted-foreground">
+            Drag to reorder, toggle to show or hide, and edit the links on your public profile.
+          </p>
+        </div>
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? "Saving..." : "Save Links"}
+        </Button>
       </div>
 
       <Card className="rounded-2xl">
@@ -373,12 +378,6 @@ export default function CustomerSocialLinks() {
           </Button>
         </CardContent>
       </Card>
-
-      <div className="flex justify-end">
-        <Button size="lg" onClick={handleSave} disabled={saving}>
-          {saving ? "Saving..." : "Save Links"}
-        </Button>
-      </div>
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent>
