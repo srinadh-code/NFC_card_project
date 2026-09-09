@@ -16,3 +16,16 @@ export function sanitizeRedirect(path: string | null | undefined, fallback: stri
   if (!path.startsWith("/") || path.startsWith("//")) return fallback
   return path
 }
+
+/** `mailto:` href, or undefined when there's no email to link to — never
+ *  renders a broken `mailto:` link. */
+export function buildMailtoHref(email: string | undefined | null): string | undefined {
+  return email ? `mailto:${email}` : undefined
+}
+
+/** `tel:` href (digits/leading + only), or undefined when there's no phone
+ *  number to link to — never renders a broken `tel:` link. */
+export function buildTelHref(phone: string | undefined | null): string | undefined {
+  const digits = phone?.replace(/[^\d+]/g, "") ?? ""
+  return digits ? `tel:${digits}` : undefined
+}

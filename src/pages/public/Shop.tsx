@@ -19,6 +19,7 @@ import { useCartStore } from "@/store/cart-store"
 import { cn } from "@/lib/utils"
 import { cardClass } from "@/components/marketing/PremiumCard"
 import { NfcCardFace } from "@/components/marketing/NfcCardShowcase"
+import { usePublicSettings } from "@/hooks/usePublicSettings"
 
 // The card only ships in one premium finish now — no color picker — but
 // CartLine/OrderItem still model a color, so we pass this fixed value through
@@ -50,6 +51,7 @@ const TRUST_BADGES = [
 export default function Shop() {
   const navigate = useNavigate()
   const addLine = useCartStore((s) => s.addLine)
+  const { settings } = usePublicSettings()
   const [qty, setQty] = useState(1)
   const [logoName, setLogoName] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -107,7 +109,7 @@ export default function Shop() {
                 )}
               </div>
               <p className="mt-3 bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#EC4899] bg-clip-text text-3xl font-bold text-transparent">
-                {formatCurrency(DISPLAY_PRICE)}
+                {formatCurrency(DISPLAY_PRICE, settings.currency)}
               </p>
               <p className="mt-3 max-w-lg text-muted-foreground">{FLAGSHIP_PRODUCT.description}</p>
             </div>
@@ -165,7 +167,7 @@ export default function Shop() {
               <div>
                 <p className="text-sm text-muted-foreground">Total Price</p>
                 <p className="bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#EC4899] bg-clip-text text-2xl font-bold text-transparent">
-                  {formatCurrency(DISPLAY_PRICE * qty)}
+                  {formatCurrency(DISPLAY_PRICE * qty, settings.currency)}
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">

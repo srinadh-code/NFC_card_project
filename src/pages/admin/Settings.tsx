@@ -7,6 +7,7 @@ import {
   Mail,
   MessageSquare,
   ShieldCheck,
+  Loader2,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -14,8 +15,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { useSettingsStore } from "@/store/settings-store"
+import { useSingletonSection } from "@/components/admin/content/useSingletonSection"
+import { settingsApi } from "@/lib/contentApi"
+import type { GeneralSettings } from "@/types/content"
 
 const SECTIONS = [
   { key: "general", label: "General", icon: SettingsIcon },
@@ -42,17 +47,22 @@ export default function AdminSettings() {
   const settings = useSettingsStore((s) => s.settings)
   const updateSection = useSettingsStore((s) => s.updateSection)
 
-  const [general, setGeneral] = useState(settings.general)
+  // General is database-backed (single source of truth) — see
+  // GeneralSettings in tracker-backend/website_content. Every other section
+  // below is still local-only (zustand + localStorage), unchanged.
+  const general = useSingletonSection<GeneralSettings>({
+    queryKey: ["settings", "admin"],
+    get: settingsApi.get,
+    update: settingsApi.update,
+    label: "General Settings",
+  })
+
   const [payment, setPayment] = useState(settings.payment)
   const [shipping, setShipping] = useState(settings.shipping)
   const [email, setEmail] = useState(settings.email)
   const [sms, setSms] = useState(settings.sms)
   const [security, setSecurity] = useState(settings.security)
 
-  function saveGeneral() {
-    updateSection("general", general)
-    toast.success("Settings saved successfully.")
-  }
   function savePayment() {
     updateSection("payment", payment)
     toast.success("Settings saved successfully.")
@@ -105,50 +115,84 @@ export default function AdminSettings() {
             <Card>
               <CardHeader>
                 <CardTitle>General</CardTitle>
-                <CardDescription>Basic information about your VR's NEXORA platform.</CardDescription>
+                <CardDescription>
+                  Basic information shown on the public website — header, footer, contact page, prices and dates.
+                </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <FieldRow label="Site Name">
-                    <Input value={general.siteName} onChange={(e) => setGeneral((v) => ({ ...v, siteName: e.target.value }))} />
-                  </FieldRow>
-                  <FieldRow label="Site Email">
-                    <Input value={general.siteEmail} onChange={(e) => setGeneral((v) => ({ ...v, siteEmail: e.target.value }))} />
-                  </FieldRow>
-                  <FieldRow label="Site Phone">
-                    <Input value={general.sitePhone} onChange={(e) => setGeneral((v) => ({ ...v, sitePhone: e.target.value }))} />
-                  </FieldRow>
-                  <FieldRow label="Currency">
-                    <Select value={general.currency} onValueChange={(v) => setGeneral((s) => ({ ...s, currency: v }))}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="INR">INR - Indian Rupee</SelectItem>
-                        <SelectItem value="USD">USD - US Dollar</SelectItem>
-                        <SelectItem value="EUR">EUR - Euro</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FieldRow>
-                  <FieldRow label="Timezone">
-                    <Select value={general.timezone} onValueChange={(v) => setGeneral((s) => ({ ...s, timezone: v }))}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Asia/Kolkata">Asia/Kolkata (IST)</SelectItem>
-                        <SelectItem value="UTC">UTC</SelectItem>
-                        <SelectItem value="America/New_York">America/New_York</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FieldRow>
-                  <FieldRow label="Site Address">
-                    <Input value={general.siteAddress} onChange={(e) => setGeneral((v) => ({ ...v, siteAddress: e.target.value }))} />
-                  </FieldRow>
-                </div>
-                <div>
-                  <Button onClick={saveGeneral}>Save Changes</Button>
-                </div>
+                {general.isLoading ? (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <Skeleton key={i} className="h-10 w-full" />
+                    ))}
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <FieldRow label="Site Name">
+                        <Input
+                          value={general.values.site_name ?? ""}
+                          onChange={(e) => general.setField("site_name", e.target.value)}
+                        />
+                      </FieldRow>
+                      <FieldRow label="Site Email">
+                        <Input
+                          type="email"
+                          value={general.values.site_email ?? ""}
+                          onChange={(e) => general.setField("site_email", e.target.value)}
+                        />
+                      </FieldRow>
+                      <FieldRow label="Site Phone">
+                        <Input
+                          value={general.values.site_phone ?? ""}
+                          onChange={(e) => general.setField("site_phone", e.target.value)}
+                        />
+                      </FieldRow>
+                      <FieldRow label="Currency">
+                        <Select
+                          value={general.values.currency ?? "INR"}
+                          onValueChange={(v) => general.setField("currency", v)}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="INR">INR - Indian Rupee</SelectItem>
+                            <SelectItem value="USD">USD - US Dollar</SelectItem>
+                            <SelectItem value="EUR">EUR - Euro</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FieldRow>
+                      <FieldRow label="Timezone">
+                        <Select
+                          value={general.values.timezone ?? "Asia/Kolkata"}
+                          onValueChange={(v) => general.setField("timezone", v)}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Asia/Kolkata">Asia/Kolkata (IST)</SelectItem>
+                            <SelectItem value="UTC">UTC</SelectItem>
+                            <SelectItem value="America/New_York">America/New_York</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FieldRow>
+                      <FieldRow label="Site Address">
+                        <Input
+                          value={general.values.site_address ?? ""}
+                          onChange={(e) => general.setField("site_address", e.target.value)}
+                        />
+                      </FieldRow>
+                    </div>
+                    <div>
+                      <Button onClick={general.save} disabled={general.isSaving}>
+                        {general.isSaving ? <Loader2 className="size-4 animate-spin" /> : null}
+                        Save Changes
+                      </Button>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           )}

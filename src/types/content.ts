@@ -210,3 +210,21 @@ export interface PublicAboutPayload {
   statistics: Statistic[]
   values: Value[]
 }
+
+// ---------------------------------------------------------------------
+// General Settings (Admin Settings > General) — single source of truth
+// for the public site's branding/contact info, currency and timezone.
+// ---------------------------------------------------------------------
+
+export interface GeneralSettings extends WithId {
+  site_name: string
+  site_email: string
+  site_phone: string
+  site_address: string
+  currency: string
+  timezone: string
+  updated_at: string
+}
+
+// What the public website is allowed to read — no id/timestamps.
+export type PublicGeneralSettings = Omit<GeneralSettings, "id" | "updated_at">

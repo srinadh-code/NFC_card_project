@@ -10,6 +10,7 @@ import { useCartStore } from "@/store/cart-store"
 import { useCustomerAuthStore } from "@/store/auth-store"
 import { ordersApi, ApiError, type CreateOrderPayload } from "@/lib/api"
 import { formatCurrency } from "@/lib/mock-api"
+import { usePublicSettings } from "@/hooks/usePublicSettings"
 
 interface BillingForm {
   fullName: string
@@ -33,6 +34,7 @@ export default function Checkout() {
   const navigate = useNavigate()
   const customer = useCustomerAuthStore((s) => s.customer)
   const { lines, subtotal, couponCode, discount, clearCart } = useCartStore()
+  const { settings } = usePublicSettings()
 
   const [form, setForm] = useState<BillingForm>(INITIAL_FORM)
   const [errors, setErrors] = useState<Partial<Record<keyof BillingForm, boolean>>>({})
@@ -211,24 +213,24 @@ export default function Checkout() {
                 <span>
                   {l.name} × {l.qty}
                 </span>
-                <span className="text-foreground">{formatCurrency(l.price * l.qty)}</span>
+                <span className="text-foreground">{formatCurrency(l.price * l.qty, settings.currency)}</span>
               </div>
             ))}
           </div>
           <div className="mt-4 space-y-2 text-sm">
             <div className="flex justify-between text-muted-foreground">
               <span>Subtotal</span>
-              <span className="text-foreground">{formatCurrency(sub)}</span>
+              <span className="text-foreground">{formatCurrency(sub, settings.currency)}</span>
             </div>
             {couponCode && (
               <div className="flex justify-between text-success">
                 <span>Discount ({couponCode})</span>
-                <span>- {formatCurrency(discount)}</span>
+                <span>- {formatCurrency(discount, settings.currency)}</span>
               </div>
             )}
             <div className="flex justify-between border-t pt-3 text-base font-semibold text-foreground">
               <span>Total</span>
-              <span>{formatCurrency(total)}</span>
+              <span>{formatCurrency(total, settings.currency)}</span>
             </div>
           </div>
           <Button type="submit" size="lg" className="mt-6 w-full" disabled={placeOrderMutation.isPending}>

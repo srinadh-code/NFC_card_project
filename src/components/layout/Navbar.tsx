@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useCartStore } from "@/store/cart-store"
 import { useCustomerAuthStore } from "@/store/auth-store"
+import { usePublicSettings } from "@/hooks/usePublicSettings"
 import { cn } from "@/lib/utils"
 
 const NAV_LINKS = [
@@ -27,6 +28,7 @@ const NAV_LINKS = [
 const ORDER_BUTTON_GRADIENT = "linear-gradient(135deg, #5B4DFF 0%, #7C3AED 50%, #EC4899 100%)"
 
 function Logo() {
+  const { settings } = usePublicSettings()
   return (
     <Link to="/" className="flex items-center gap-2.5">
       {/* Luxury coin emblem */}
@@ -35,7 +37,7 @@ function Logo() {
         <span className="relative font-serif text-lg font-bold text-[#D4AF37]">N</span>
       </span>
       <span className="flex flex-col leading-none">
-        <span className="text-lg font-bold tracking-tight text-foreground">VR's NEXORA</span>
+        <span className="text-lg font-bold tracking-tight text-foreground">{settings.site_name}</span>
         <span className="mt-1 text-[11px] font-medium text-muted-foreground">Digital Identity</span>
       </span>
     </Link>

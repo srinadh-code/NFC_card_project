@@ -7,10 +7,14 @@ import {
   AtSign,
   Briefcase,
   PlayCircle,
+  Mail,
+  Phone,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
+import { usePublicSettings } from "@/hooks/usePublicSettings"
+import { buildMailtoHref, buildTelHref } from "@/lib/utils"
 
 const QUICK_LINKS = [
   { to: "/", label: "Home" },
@@ -47,6 +51,9 @@ const SOCIALS = [
 
 export default function Footer() {
   const [email, setEmail] = useState("")
+  const { settings } = usePublicSettings()
+  const mailtoHref = buildMailtoHref(settings.site_email)
+  const telHref = buildTelHref(settings.site_phone)
 
   function handleSubscribe(e: FormEvent) {
     e.preventDefault()
@@ -67,12 +74,26 @@ export default function Footer() {
               <span className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white">
                 <Nfc className="size-4" />
               </span>
-              <span className="text-base font-bold tracking-tight text-white">VR's NEXORA</span>
+              <span className="text-base font-bold tracking-tight text-white">{settings.site_name}</span>
             </Link>
             <p className="mt-2.5 max-w-xs text-sm text-slate-400">
               Smart NFC digital business cards that help professionals share their contact
               details, social profiles, and portfolios with a single tap.
             </p>
+            <div className="mt-3 flex flex-col gap-1.5 text-sm text-slate-400">
+              {mailtoHref && (
+                <a href={mailtoHref} className="flex items-center gap-2 transition-colors duration-200 hover:text-[#EC4899]">
+                  <Mail className="size-3.5 shrink-0" />
+                  {settings.site_email}
+                </a>
+              )}
+              {telHref && (
+                <a href={telHref} className="flex items-center gap-2 transition-colors duration-200 hover:text-[#EC4899]">
+                  <Phone className="size-3.5 shrink-0" />
+                  {settings.site_phone}
+                </a>
+              )}
+            </div>
             <div className="mt-3 flex items-center gap-1.5">
               {SOCIALS.map(({ icon: Icon, label }) => (
                 <a
@@ -164,7 +185,7 @@ export default function Footer() {
       <div className="border-t border-white/10">
         <div className="container-page flex flex-col items-center justify-between gap-2 py-3.5 sm:flex-row">
           <p className="text-xs text-slate-500">
-            © 2026 VR's NEXORA. All rights reserved.
+            © 2026 {settings.site_name}. All rights reserved.
           </p>
           <div className="flex items-center gap-2">
             {["VISA", "Mastercard", "UPI"].map((p) => (

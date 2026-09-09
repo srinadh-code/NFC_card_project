@@ -14,6 +14,7 @@ import type {
   Cta,
   Faq,
   Feature,
+  GeneralSettings,
   Hero,
   HeroFeature,
   HowItFeels,
@@ -21,6 +22,7 @@ import type {
   HowItWorksStep,
   Mission,
   PublicAboutPayload,
+  PublicGeneralSettings,
   PublicHomePayload,
   Statistic,
   StatisticPage,
@@ -158,6 +160,12 @@ export const companiesApi = {
 }
 export const statisticsApi = makeCrudApi<Statistic>(`${ADMIN}/statistics`)
 
+// ---------------------------------------------------------------------
+// General Settings (singleton) — Admin Settings > General
+// ---------------------------------------------------------------------
+
+export const settingsApi = makeSingletonApi<GeneralSettings>(`${ADMIN}/settings`)
+
 export function listStatisticsByPage(page: StatisticPage) {
   return statisticsApi.list({ page })
 }
@@ -213,4 +221,5 @@ export const publicWebsiteApi = {
   getStatistics: (page?: StatisticPage) => request<Statistic[]>(`${PUBLIC}/statistics/${buildQuery({ page })}`, { auth: false }),
   submitContactMessage: (body: { name: string; email: string; subject: string; message: string }) =>
     request<null>(`${PUBLIC}/contact/`, { method: "POST", body, auth: false }),
+  getSettings: () => request<PublicGeneralSettings>(`${PUBLIC}/settings/`, { auth: false }),
 }

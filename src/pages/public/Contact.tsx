@@ -8,21 +8,23 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { cardClass } from "@/components/marketing/PremiumCard"
-import { cn } from "@/lib/utils"
+import { buildMailtoHref, buildTelHref, cn } from "@/lib/utils"
 import { publicWebsiteApi } from "@/lib/contentApi"
 import { ApiError } from "@/lib/api"
-
-const INFO = [
-  { icon: Mail, label: "Email", value: "support@vrsnexora.com" },
-  { icon: Phone, label: "Phone", value: "+91 98765 43210" },
-  { icon: MapPin, label: "Address", value: "VR's NEXORA Technologies Pvt. Ltd., Hyderabad, Telangana, India" },
-  { icon: Clock, label: "Business Hours", value: "Mon – Sat, 9:00 AM – 6:00 PM" },
-]
+import { usePublicSettings } from "@/hooks/usePublicSettings"
 
 const INITIAL_FORM = { fullName: "", email: "", subject: "", message: "" }
 
 export default function Contact() {
   const [form, setForm] = useState(INITIAL_FORM)
+  const { settings } = usePublicSettings()
+
+  const INFO = [
+    { icon: Mail, label: "Email", value: settings.site_email, href: buildMailtoHref(settings.site_email) },
+    { icon: Phone, label: "Phone", value: settings.site_phone, href: buildTelHref(settings.site_phone) },
+    { icon: MapPin, label: "Address", value: settings.site_address },
+    { icon: Clock, label: "Business Hours", value: "Mon – Sat, 9:00 AM – 6:00 PM" },
+  ]
 
   const mutation = useMutation({
     mutationFn: (body: { name: string; email: string; subject: string; message: string }) =>
@@ -68,7 +70,13 @@ export default function Contact() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-foreground">{item.label}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{item.value}</p>
+                  {"href" in item && item.href ? (
+                    <a href={item.href} className="mt-1 block text-sm text-muted-foreground hover:text-primary">
+                      {item.value}
+                    </a>
+                  ) : (
+                    <p className="mt-1 text-sm text-muted-foreground">{item.value}</p>
+                  )}
                 </div>
               </div>
             ))}
