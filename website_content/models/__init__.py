@@ -20,6 +20,7 @@ from .testimonials import Testimonial
 from .companies import Company
 from .statistics import Statistic
 from .contact import ContactMessage, ContactMessageReply
+from .settings import GeneralSettings
 
 __all__ = [
     "HomeHero",
@@ -41,4 +42,5 @@ __all__ = [
     "Statistic",
     "ContactMessage",
     "ContactMessageReply",
+    "GeneralSettings",
 ]

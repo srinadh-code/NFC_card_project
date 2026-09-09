@@ -6,6 +6,7 @@ from website_content.views.public import (
     ContactMessagePublicCreateView,
     FaqsPublicView,
     FeaturesPublicView,
+    GeneralSettingsPublicView,
     HomePublicView,
     HowItWorksPublicView,
     StatisticsPublicView,
@@ -24,4 +25,5 @@ urlpatterns = [
     path("statistics/", StatisticsPublicView.as_view(), name="public-statistics"),
     path("values/", ValuesPublicView.as_view(), name="public-values"),
     path("contact/", ContactMessagePublicCreateView.as_view(), name="public-contact-create"),
+    path("settings/", GeneralSettingsPublicView.as_view(), name="public-settings"),
 ]

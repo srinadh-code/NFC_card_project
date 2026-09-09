@@ -25,6 +25,7 @@ from .contact import (
     ContactMessageReplySerializer,
     ContactMessageSerializer,
 )
+from .settings import GeneralSettingsSerializer, PublicGeneralSettingsSerializer
 
 __all__ = [
     "HomeHeroSerializer",
@@ -48,4 +49,6 @@ __all__ = [
     "ContactMessageCreateSerializer",
     "ContactMessageReplySerializer",
     "ContactMessageReplyCreateSerializer",
+    "GeneralSettingsSerializer",
+    "PublicGeneralSettingsSerializer",
 ]

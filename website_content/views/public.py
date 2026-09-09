@@ -23,6 +23,7 @@ from website_content.models import (
     Company,
     Faq,
     Feature,
+    GeneralSettings,
     HomeCTA,
     HomeHero,
     HomeHeroFeatureHighlight,
@@ -49,12 +50,13 @@ from website_content.serializers import (
     HomeHowItFeelsPointSerializer,
     HomeHowItFeelsSerializer,
     HowItWorksStepSerializer,
+    PublicGeneralSettingsSerializer,
     StatisticSerializer,
     TestimonialSerializer,
     ValueSerializer,
 )
 
-from .base import PublicListAPIView
+from .base import PublicListAPIView, PublicSingletonAPIView
 
 HOME_FAQ_PREVIEW_COUNT = 5
 
@@ -178,3 +180,8 @@ class ContactMessagePublicCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return success(None, message="Message sent! We'll get back to you within 24 hours.", status=201)
+
+
+class GeneralSettingsPublicView(PublicSingletonAPIView):
+    model = GeneralSettings
+    serializer_class = PublicGeneralSettingsSerializer

@@ -24,6 +24,7 @@ from website_content.views.admin import (
     FeatureAdminDetailView,
     FeatureAdminListView,
     FeatureAdminReorderView,
+    GeneralSettingsAdminView,
     HomeCTAAdminView,
     HomeHeroAdminView,
     HomeHeroFeatureHighlightAdminDetailView,
@@ -192,4 +193,6 @@ urlpatterns = [
         ContactMessageReplyAdminView.as_view(),
         name="admin-contact-message-reply",
     ),
+    # Settings
+    path("settings/", GeneralSettingsAdminView.as_view(), name="admin-settings"),
 ]

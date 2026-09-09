@@ -22,6 +22,7 @@ from website_content.models import (
     ContactMessageReply,
     Faq,
     Feature,
+    GeneralSettings,
     HomeCTA,
     HomeHero,
     HomeHeroFeatureHighlight,
@@ -43,6 +44,7 @@ from website_content.serializers import (
     ContactMessageSerializer,
     FaqSerializer,
     FeatureSerializer,
+    GeneralSettingsSerializer,
     HomeCTASerializer,
     HomeHeroFeatureHighlightSerializer,
     HomeHeroSerializer,
@@ -363,3 +365,13 @@ class ContactMessageReplyAdminView(APIView):
             message="Reply sent.",
             status=201,
         )
+
+
+# ---------------------------------------------------------------------------
+# General Settings
+# ---------------------------------------------------------------------------
+
+
+class GeneralSettingsAdminView(AdminSingletonAPIView):
+    model = GeneralSettings
+    serializer_class = GeneralSettingsSerializer
