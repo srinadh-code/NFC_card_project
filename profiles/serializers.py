@@ -32,6 +32,8 @@ class ProfileSerializer(serializers.ModelSerializer):
     phone = serializers.CharField(source="user.phone", max_length=20, required=False, allow_blank=True)
     avatar = serializers.SerializerMethodField()
     profile_url = serializers.SerializerMethodField()
+    plan = serializers.SerializerMethodField()
+    available_templates = serializers.SerializerMethodField()
     social_links = SocialLinkSerializer(many=True, read_only=True)
     custom_links = CustomLinkSerializer(many=True, read_only=True)
     custom_fields = CustomFieldSerializer(many=True, read_only=True)
@@ -55,6 +57,9 @@ class ProfileSerializer(serializers.ModelSerializer):
             "profile_public",
             "show_contact_info",
             "show_in_search",
+            "selected_template",
+            "plan",
+            "available_templates",
             "social_links",
             "custom_links",
             "custom_fields",
@@ -71,6 +76,26 @@ class ProfileSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         path = obj.public_url_path
         return request.build_absolute_uri(path) if request else path
+
+    def get_plan(self, obj):
+        from orders.services import resolve_customer_plan
+
+        return resolve_customer_plan(obj.user)
+
+    def get_available_templates(self, obj):
+        from orders.services import get_allowed_templates
+
+        return get_allowed_templates(obj.user)
+
+    def validate_selected_template(self, value):
+        from orders.services import get_allowed_templates
+
+        request = self.context.get("request")
+        user = request.user if request else None
+        allowed = get_allowed_templates(user)
+        if value not in allowed:
+            raise serializers.ValidationError("This template isn't included in your current plan.")
+        return value
 
     def update(self, instance, validated_data):
         user_data = validated_data.pop("user", {})
@@ -124,6 +149,7 @@ class PublicProfileSerializer(serializers.ModelSerializer):
             "bio",
             "avatar",
             "cover_image",
+            "selected_template",
             "social_links",
             "custom_links",
             "custom_fields",

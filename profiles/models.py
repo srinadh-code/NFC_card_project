@@ -4,6 +4,8 @@ from django.core.validators import URLValidator
 from django.db import models
 from django.utils.text import slugify
 
+from common.templates import DEFAULT_TEMPLATE, TEMPLATE_CHOICES
+
 GOOGLE_MAPS_URL_MARKERS = ("google.com/maps", "maps.google.", "goo.gl/maps", "maps.app.goo.gl")
 
 
@@ -53,6 +55,13 @@ class Profile(models.Model):
     avatar = models.ImageField(upload_to="profile_avatars/", null=True, blank=True)
     cover_image = models.ImageField(upload_to="profile_covers/", null=True, blank=True)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.ACTIVE)
+
+    # The one profile-card visual template this customer has chosen, from
+    # among the templates their purchased plan entitles them to (see
+    # common.templates / orders.services.get_allowed_templates). Selected in
+    # the QR Code page and used by both the QR-page preview and the public
+    # profile — a single field so there's exactly one source of truth.
+    selected_template = models.CharField(max_length=30, choices=TEMPLATE_CHOICES, default=DEFAULT_TEMPLATE)
 
     # Per-profile privacy settings (replaces the frontend's single global
     # client-side store — each customer's visibility is now their own).

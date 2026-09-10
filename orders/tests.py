@@ -8,7 +8,7 @@ from .models import Order
 
 def _valid_payload(**overrides):
     payload = {
-        "items": [{"product_id": "p1", "name": "Standard Card", "card_type": "STANDARD", "color": "Black", "qty": 2, "price": "499.00"}],
+        "items": [{"product_id": "p1", "name": "Classic Card", "card_type": "CLASSIC", "color": "Black", "qty": 2, "price": "499.00"}],
         "shipping": "49.00",
         "payment_method": "UPI",
         "shipping_line1": "123 Main St",

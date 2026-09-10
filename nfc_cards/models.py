@@ -4,10 +4,10 @@ from django.db import models
 
 class NfcCard(models.Model):
     class CardType(models.TextChoices):
-        STANDARD = "STANDARD", "Standard"
+        CLASSIC = "CLASSIC", "Classic"
         PREMIUM = "PREMIUM", "Premium"
         WOODEN = "WOODEN", "Wooden"
-        METAL = "METAL", "Metal"
+        CUSTOM = "CUSTOM", "Custom"
 
     class Status(models.TextChoices):
         ACTIVE = "ACTIVE", "Active"
@@ -19,7 +19,7 @@ class NfcCard(models.Model):
 
     uid = models.CharField(max_length=32, unique=True, db_index=True)
     serial_number = models.CharField(max_length=20, unique=True, db_index=True)
-    card_type = models.CharField(max_length=10, choices=CardType.choices, default=CardType.STANDARD)
+    card_type = models.CharField(max_length=10, choices=CardType.choices, default=CardType.CLASSIC)
     color = models.CharField(max_length=30, default="Black")
 
     user = models.ForeignKey(

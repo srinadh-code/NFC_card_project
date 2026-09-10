@@ -62,7 +62,7 @@ class AdminCardListCreateView(APIView):
         card = NfcCard.objects.create(
             uid=data.get("uid") or generate_uid(),
             serial_number=data.get("serial_number") or NfcCard.generate_serial_number(),
-            card_type=data.get("card_type", NfcCard.CardType.STANDARD),
+            card_type=data.get("card_type", NfcCard.CardType.CLASSIC),
             color=data.get("color", "Black"),
             user=customer,
             status=status_value,
