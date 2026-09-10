@@ -39,7 +39,7 @@ import { orderStatusLabel } from "@/lib/order-status"
 import { downloadQrPng, shareOrCopyLink } from "@/components/customer/qr-utils"
 import { analyticsApi, nfcApi, ordersApi } from "@/lib/api"
 
-const IN_PROGRESS_ORDER_STATUSES = ["PENDING", "CONFIRMED", "PROCESSING", "PRINTED", "SHIPPED"]
+const IN_PROGRESS_ORDER_STATUSES = ["PENDING", "PROCESSING", "SHIPPED"]
 
 // Known demo UIDs seeded by `python manage.py seed_demo_cards` on the
 // backend — used only to prefill the manual-entry/"simulate scan" demo
@@ -90,7 +90,7 @@ export default function CustomerMyCard() {
   const processingOrder =
     (ordersQuery.data?.items ?? [])
       .filter((o) => IN_PROGRESS_ORDER_STATUSES.includes(o.status))
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] ?? null
+      .sort((a, b) => new Date(b.placed_at).getTime() - new Date(a.placed_at).getTime())[0] ?? null
 
   const [uid, setUid] = useState("")
   const [showManualEntry, setShowManualEntry] = useState(false)
@@ -409,9 +409,9 @@ export default function CustomerMyCard() {
                 <Clock className="size-6" />
               </div>
               <div className="flex-1">
-                <p className="font-semibold">Order {processingOrder.order_number} is being processed</p>
+                <p className="font-semibold">Order #{processingOrder.id} is being processed</p>
                 <p className="text-sm text-muted-foreground">
-                  Placed on {formatDate(processingOrder.created_at)} · Status:{" "}
+                  Placed on {formatDate(processingOrder.placed_at)} · Status:{" "}
                   <StatusBadge status={orderStatusLabel(processingOrder.status)} className="ml-1" />
                 </p>
               </div>

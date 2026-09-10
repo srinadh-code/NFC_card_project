@@ -9,9 +9,11 @@ import { useDataStore } from "@/store/data-store"
 import { formatCurrency, formatDate } from "@/lib/mock-api"
 import type { Order } from "@/types"
 import { cn } from "@/lib/utils"
+import { usePublicSettings } from "@/hooks/usePublicSettings"
 
 export default function TrackOrder() {
   const orders = useDataStore((s) => s.orders)
+  const { settings } = usePublicSettings()
   const [orderIdInput, setOrderIdInput] = useState("")
   const [result, setResult] = useState<Order | null | undefined>(undefined)
 
@@ -28,18 +30,20 @@ export default function TrackOrder() {
 
   function handleDownloadInvoice(order: Order) {
     const content = [
-      `VR's NEXORA Invoice`,
+      `${settings.site_name} Invoice`,
       `Order ID: ${order.id}`,
-      `Date: ${formatDate(order.date)}`,
+      `Date: ${formatDate(order.date, settings.timezone)}`,
       `Customer: ${order.customerName}`,
       `Payment Method: ${order.paymentMethod}`,
       ``,
       `Items:`,
-      ...order.items.map((i) => `- ${i.name} (${i.cardType}, ${i.color}) x${i.qty} — ${formatCurrency(i.price * i.qty)}`),
+      ...order.items.map(
+        (i) => `- ${i.name} (${i.cardType}, ${i.color}) x${i.qty} — ${formatCurrency(i.price * i.qty, settings.currency)}`,
+      ),
       ``,
-      `Subtotal: ${formatCurrency(order.amount)}`,
-      `Shipping: ${formatCurrency(order.shipping)}`,
-      `Total: ${formatCurrency(order.total)}`,
+      `Subtotal: ${formatCurrency(order.amount, settings.currency)}`,
+      `Shipping: ${formatCurrency(order.shipping, settings.currency)}`,
+      `Total: ${formatCurrency(order.total, settings.currency)}`,
     ].join("\n")
     const blob = new Blob([content], { type: "text/plain" })
     const url = URL.createObjectURL(blob)
@@ -96,7 +100,7 @@ export default function TrackOrder() {
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground">Date</dt>
-                  <dd className="text-foreground">{formatDate(result.date)}</dd>
+                  <dd className="text-foreground">{formatDate(result.date, settings.timezone)}</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground">Payment Method</dt>
@@ -108,7 +112,7 @@ export default function TrackOrder() {
                 </div>
                 <div className="flex justify-between border-t pt-3">
                   <dt className="font-medium text-foreground">Total Amount</dt>
-                  <dd className="font-semibold text-primary">{formatCurrency(result.total)}</dd>
+                  <dd className="font-semibold text-primary">{formatCurrency(result.total, settings.currency)}</dd>
                 </div>
               </dl>
               <Button variant="outline" className="mt-6 w-full" onClick={() => handleDownloadInvoice(result)}>
@@ -140,7 +144,7 @@ export default function TrackOrder() {
                         {step.label}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {step.date ? formatDate(step.date) : "Pending"}
+                        {step.date ? formatDate(step.date, settings.timezone) : "Pending"}
                       </p>
                     </div>
                   </li>

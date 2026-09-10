@@ -25,33 +25,33 @@ import { orderStatusLabel } from "@/lib/order-status"
 function productSummary(order: ApiOrder) {
   const [first, ...rest] = order.items
   if (!first) return "—"
-  const extraQty = rest.reduce((s, i) => s + i.quantity, 0)
-  const label = `${first.card_type} (${first.color}) ×${first.quantity}`
+  const extraQty = rest.reduce((s, i) => s + i.qty, 0)
+  const label = `${first.card_type} (${first.color}) ×${first.qty}`
   return extraQty > 0 ? `${label} +${extraQty} more` : label
 }
 
 function downloadInvoice(order: ApiOrder) {
   const lines = [
-    `VR's NEXORA — Invoice for ${order.order_number}`,
-    `Date: ${formatDate(order.created_at)}`,
+    `VR's NEXORA — Invoice for Order #${order.id}`,
+    `Date: ${formatDate(order.placed_at)}`,
     `Status: ${orderStatusLabel(order.status)}`,
     "",
     "Items:",
     ...order.items.map(
-      (it) => `  - ${it.card_type} (${it.color}) x${it.quantity} @ ${formatCurrency(Number(it.unit_price))}`,
+      (it) => `  - ${it.name} — ${it.card_type} (${it.color}) x${it.qty} @ ${formatCurrency(Number(it.price))}`,
     ),
     "",
-    `Subtotal: ${formatCurrency(Number(order.subtotal))}`,
-    `Discount: ${formatCurrency(Number(order.discount))}`,
+    `Amount: ${formatCurrency(Number(order.amount))}`,
+    `Shipping: ${formatCurrency(Number(order.shipping))}`,
     `Total: ${formatCurrency(Number(order.total))}`,
     "",
-    `Shipping Address: ${order.shipping_address}, ${order.shipping_city}, ${order.shipping_state} ${order.shipping_postal_code}, ${order.shipping_country}`,
+    `Shipping Address: ${order.address.line1}, ${order.address.city}, ${order.address.state} ${order.address.pincode}, ${order.address.country}`,
   ]
   const blob = new Blob([lines.join("\n")], { type: "text/plain" })
   const url = URL.createObjectURL(blob)
   const a = document.createElement("a")
   a.href = url
-  a.download = `invoice-${order.order_number}.txt`
+  a.download = `invoice-order-${order.id}.txt`
   document.body.appendChild(a)
   a.click()
   a.remove()
@@ -123,8 +123,8 @@ export default function CustomerOrders() {
                 <TableBody>
                   {orders.map((order) => (
                     <TableRow key={order.id}>
-                      <TableCell className="font-mono text-xs font-medium">{order.order_number}</TableCell>
-                      <TableCell className="whitespace-nowrap">{formatDate(order.created_at)}</TableCell>
+                      <TableCell className="font-mono text-xs font-medium">#{order.id}</TableCell>
+                      <TableCell className="whitespace-nowrap">{formatDate(order.placed_at)}</TableCell>
                       <TableCell>{productSummary(order)}</TableCell>
                       <TableCell>
                         <Badge>{orderStatusLabel(order.status)}</Badge>
@@ -201,32 +201,30 @@ export default function CustomerOrders() {
       <Dialog open={Boolean(trackOrder)} onOpenChange={(open) => !open && setTrackOrder(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Track Order {trackOrder?.order_number}</DialogTitle>
-            <DialogDescription>Status history for this order.</DialogDescription>
+            <DialogTitle>Track Order #{trackOrder?.id}</DialogTitle>
+            <DialogDescription>Shipping timeline for this order.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            {trackOrder?.status_history.map((step, i) => (
-              <div key={i} className="flex gap-3">
+            {trackOrder?.tracking.map((step, i) => (
+              <div key={step.label} className="flex gap-3">
                 <div className="flex flex-col items-center">
-                  {trackOrder.status_history.length - 1 === i ? (
+                  {step.done ? (
                     <CheckCircle2 className="size-5 text-success" />
                   ) : (
                     <Circle className="size-5 text-muted-foreground" />
                   )}
-                  {i < trackOrder.status_history.length - 1 && <div className="mt-1 h-8 w-px bg-success" />}
+                  {trackOrder && i < trackOrder.tracking.length - 1 && (
+                    <div className={`mt-1 h-8 w-px ${step.done ? "bg-success" : "bg-border"}`} />
+                  )}
                 </div>
                 <div className="pb-2">
-                  <p className="text-sm font-medium">{orderStatusLabel(step.status)}</p>
-                  <p className="text-xs text-muted-foreground">{formatDateTime(step.created_at)}</p>
-                  {step.note && <p className="text-xs text-muted-foreground">{step.note}</p>}
+                  <p className="text-sm font-medium">{step.label}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {step.date ? formatDateTime(step.date) : "Pending"}
+                  </p>
                 </div>
               </div>
             ))}
-            {trackOrder?.tracking_number && (
-              <p className="text-sm">
-                Tracking Number: <span className="font-mono">{trackOrder.tracking_number}</span>
-              </p>
-            )}
           </div>
         </DialogContent>
       </Dialog>

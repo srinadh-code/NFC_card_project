@@ -34,7 +34,7 @@ export default function ProfilePhonePreview({ className }: { className?: string 
               key={label}
               className={
                 i === 0
-                  ? "rounded-lg bg-white/95 py-1.5 text-[10px] font-semibold text-[#4F46E5] shadow-sm"
+                  ? "rounded-lg bg-white/95 py-1.5 text-[10px] font-semibold text-primary shadow-sm"
                   : "rounded-lg border border-white/40 py-1.5 text-[10px] font-semibold text-white"
               }
             >

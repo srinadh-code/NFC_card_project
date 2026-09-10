@@ -7,6 +7,7 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-background: var(--background);
+  --color-background-secondary: var(--background-secondary);
   --color-foreground: var(--foreground);
 
   --color-primary: var(--primary);
@@ -109,32 +110,37 @@
   --accent-cyan: #06B6D4;
   --gradient-brand: linear-gradient(90deg, var(--brand-1) 0%, var(--brand-2) 55%, var(--brand-3) 100%);
   --gradient-brand-br: linear-gradient(135deg, var(--brand-1) 0%, var(--brand-2) 55%, var(--brand-3) 100%);
+
+  --background-secondary: #F1F5F9;
+  --glass-bg: rgba(255, 255, 255, 0.95);
+  --glass-border: rgba(124, 58, 237, 0.08);
 }
 
 .dark {
-  --background: #0B1120;
-  --foreground: #E2E8F0;
+  --background: #0B0F19;
+  --background-secondary: #111827;
+  --foreground: #FFFFFF;
 
-  --card: #111827;
-  --card-foreground: #E2E8F0;
+  --card: #1F2937;
+  --card-foreground: #FFFFFF;
 
-  --popover: #111827;
-  --popover-foreground: #E2E8F0;
+  --popover: #1F2937;
+  --popover-foreground: #FFFFFF;
 
-  --primary: #6366F1;
-  --primary-foreground: #0B1120;
+  --primary: #8B5CF6;
+  --primary-foreground: #FFFFFF;
 
-  --secondary: #1E293B;
-  --secondary-foreground: #E2E8F0;
+  --secondary: #111827;
+  --secondary-foreground: #FFFFFF;
 
-  --muted: #1E293B;
-  --muted-foreground: #94A3B8;
+  --muted: #111827;
+  --muted-foreground: #9CA3AF;
 
-  --accent: #1E1B4B;
-  --accent-foreground: #C7D2FE;
+  --accent: #2D2440;
+  --accent-foreground: #C4B5FD;
 
   --destructive: #F87171;
-  --destructive-foreground: #0B1120;
+  --destructive-foreground: #0B0F19;
 
   --success: #4ADE80;
   --success-foreground: #052E16;
@@ -145,21 +151,40 @@
   --info: #22D3EE;
   --info-foreground: #083344;
 
-  --border: #1E293B;
-  --input: #1E293B;
-  --ring: #6366F1;
+  --border: #1F2937;
+  --input: #1F2937;
+  --ring: #8B5CF6;
 
-  --sidebar: #060913;
-  --sidebar-foreground: #94A3B8;
-  --sidebar-primary: #6366F1;
+  --sidebar: #0B0F19;
+  --sidebar-foreground: #9CA3AF;
+  --sidebar-primary: #8B5CF6;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #17203A;
+  --sidebar-accent: #1F2937;
   --sidebar-accent-foreground: #FFFFFF;
   --sidebar-border: rgba(255, 255, 255, 0.06);
+
+  /* Dark-theme brand gradient: violet -> pink premium SaaS accent pair */
+  --brand-1: #8B5CF6;
+  --brand-2: #A855F7;
+  --brand-3: #EC4899;
+  --accent-violet: #8B5CF6;
+  --glass-bg: rgba(17, 24, 39, 0.75);
+  --glass-border: rgba(139, 92, 246, 0.18);
 }
 
 * {
   border-color: var(--color-border);
+}
+
+/* Smooth, non-jarring theme switching across every themed surface. Scoped to
+   color-related properties only (not transform) so hover/press animations
+   stay crisp. */
+*,
+*::before,
+*::after {
+  transition-property: background-color, border-color, color, box-shadow, fill, stroke;
+  transition-duration: 300ms;
+  transition-timing-function: ease;
 }
 
 body {
@@ -209,6 +234,12 @@ body {
 .shadow-glow-primary-lg {
   box-shadow: 0 20px 45px rgba(79, 70, 229, 0.4);
 }
+.dark .shadow-glow-primary {
+  box-shadow: 0 10px 30px rgba(139, 92, 246, 0.35);
+}
+.dark .shadow-glow-primary-lg {
+  box-shadow: 0 20px 45px rgba(139, 92, 246, 0.45);
+}
 .card-hover {
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
@@ -216,8 +247,14 @@ body {
   transform: translateY(-6px);
   box-shadow: 0 24px 48px rgba(15, 23, 42, 0.12);
 }
+.dark .card-hover:hover {
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(139, 92, 246, 0.12);
+}
+/* Reusable glassmorphism surface (navbar, floating panels). Swaps tint via
+   the --glass-bg/--glass-border tokens redefined per theme in :root/.dark. */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }

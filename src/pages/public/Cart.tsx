@@ -7,11 +7,13 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useCartStore } from "@/store/cart-store"
 import { formatCurrency } from "@/lib/mock-api"
+import { usePublicSettings } from "@/hooks/usePublicSettings"
 
 export default function Cart() {
   const navigate = useNavigate()
   const { lines, updateQty, removeLine, applyCoupon, subtotal, couponCode, discount } = useCartStore()
   const [coupon, setCoupon] = useState("")
+  const { settings } = usePublicSettings()
 
   const sub = subtotal()
   const shipping = sub === 0 ? 0 : sub > 999 ? 0 : 49
@@ -79,7 +81,7 @@ export default function Cart() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>{formatCurrency(line.price)}</TableCell>
+                    <TableCell>{formatCurrency(line.price, settings.currency)}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Button
@@ -101,7 +103,7 @@ export default function Cart() {
                         </Button>
                       </div>
                     </TableCell>
-                    <TableCell className="font-medium">{formatCurrency(line.price * line.qty)}</TableCell>
+                    <TableCell className="font-medium">{formatCurrency(line.price * line.qty, settings.currency)}</TableCell>
                     <TableCell>
                       <Button
                         variant="ghost"
@@ -136,21 +138,21 @@ export default function Cart() {
           <div className="mt-4 space-y-3 text-sm">
             <div className="flex justify-between text-muted-foreground">
               <span>Subtotal</span>
-              <span className="text-foreground">{formatCurrency(sub)}</span>
+              <span className="text-foreground">{formatCurrency(sub, settings.currency)}</span>
             </div>
             <div className="flex justify-between text-muted-foreground">
               <span>Shipping</span>
-              <span className="text-foreground">{shipping === 0 ? "Free" : formatCurrency(shipping)}</span>
+              <span className="text-foreground">{shipping === 0 ? "Free" : formatCurrency(shipping, settings.currency)}</span>
             </div>
             {couponCode && (
               <div className="flex justify-between text-success">
                 <span>Discount ({couponCode})</span>
-                <span>- {formatCurrency(discount)}</span>
+                <span>- {formatCurrency(discount, settings.currency)}</span>
               </div>
             )}
             <div className="border-t pt-3 flex justify-between text-base font-semibold text-foreground">
               <span>Total</span>
-              <span>{formatCurrency(total)}</span>
+              <span>{formatCurrency(total, settings.currency)}</span>
             </div>
           </div>
           <Button className="mt-6 w-full" size="lg" onClick={() => navigate("/checkout")}>

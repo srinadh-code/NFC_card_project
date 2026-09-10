@@ -1,14 +1,7 @@
-﻿import { useNavigate } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import {
   CheckCircle2,
-  Sparkles,
-  Feather,
-  ShieldCheck,
-  Trophy,
-  Share2,
-  UserCog,
-  BarChart3,
-  Lock,
   ArrowRight,
   MessageCircle,
   PlayCircle,
@@ -22,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useState } from "react"
 import heroImg from "@/assets/hero.png"
 import StatCounter from "@/components/marketing/StatCounter"
@@ -31,87 +25,111 @@ import NfcShowcase from "@/components/marketing/NfcShowcase"
 import TestimonialCard from "@/components/marketing/TestimonialCard"
 import { cardClass } from "@/components/marketing/PremiumCard"
 import { cn } from "@/lib/utils"
-import { TESTIMONIALS, FAQS } from "@/data/constants"
-
-const CHECKLIST = [
-  "Digital Business Profile",
-  "NFC & QR Code",
-  "Real-time Analytics",
-  "Easy to Use",
-]
-
-const BRANDS = ["Google", "Microsoft", "Amazon", "Airtel", "Tata", "Flipkart"]
+import { resolveIcon } from "@/lib/icon-map"
+import { publicWebsiteApi } from "@/lib/contentApi"
+import type { Testimonial as PublicTestimonial } from "@/types/content"
+import type { Testimonial } from "@/types"
 
 const AVATAR_SEEDS = ["ananya-reddy", "rahul-menon", "priya-nair", "karthik-iyer"]
 const HERO_PROFILE_AVATAR = "https://api.dicebear.com/9.x/notionists/svg?seed=alex-morgan"
 
-const STATS = [
-  { value: "10K+", label: "Happy Customers" },
-  { value: "50K+", label: "Cards Delivered" },
-  { value: "1M+", label: "Taps Recorded" },
-  { value: "120+", label: "Countries Served" },
-]
+function toTestimonial(t: PublicTestimonial): Testimonial {
+  return {
+    id: String(t.id),
+    name: t.name,
+    role: t.designation,
+    company: t.company,
+    avatar: t.image_url || `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(t.name)}`,
+    rating: t.rating,
+    quote: t.review,
+  }
+}
 
-const VALUES = [
-  { icon: Sparkles, title: "Innovation", description: "Constantly evolving networking technology." },
-  { icon: Feather, title: "Simplicity", description: "Effortless setup, effortless sharing." },
-  { icon: ShieldCheck, title: "Trust", description: "Your data protected at every step." },
-  { icon: Trophy, title: "Excellence", description: "Premium materials, premium experience." },
-]
-
-const FEATURES = [
-  { icon: Share2, title: "Smart Networking", description: "Share your full profile instantly with a single tap on any smartphone." },
-  { icon: UserCog, title: "Customizable Profile", description: "Personalize your bio, photo, links, and branding anytime." },
-  { icon: BarChart3, title: "Analytics Dashboard", description: "Track taps, scans, and profile views in real time." },
-  { icon: Lock, title: "Secure & Reliable", description: "Encrypted data storage with full control over visibility." },
-]
-
-const FAQ_PREVIEW = FAQS.slice(0, 5)
+function ErrorMessage() {
+  return (
+    <p className="py-16 text-center text-muted-foreground">
+      Couldn&apos;t load this page&apos;s content. Please try again shortly.
+    </p>
+  )
+}
 
 export default function Home() {
   const navigate = useNavigate()
   const [demoOpen, setDemoOpen] = useState(false)
 
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["content", "public-home"],
+    queryFn: publicWebsiteApi.getHome,
+  })
+  const { data: features } = useQuery({
+    queryKey: ["content", "public-features"],
+    queryFn: publicWebsiteApi.getFeatures,
+  })
+
+  const hero = data?.hero ?? null
+
+  if (isError) {
+    return (
+      <div>
+        <ErrorMessage />
+      </div>
+    )
+  }
+
   return (
     <div>
       {/* Hero */}
-      <section className="relative overflow-hidden bg-white pb-20 pt-16 sm:pt-20">
+      <section className="relative overflow-hidden bg-background pb-20 pt-16 sm:pt-20">
         <div className="container-page grid items-center gap-12 lg:grid-cols-2">
           <div>
-            <span className="inline-flex items-center rounded-full bg-[#4F46E5]/10 px-3 py-1 text-xs font-semibold tracking-wide text-[#4F46E5]">
-              VR&apos;S NEXORA · DIGITAL IDENTITY PLATFORM
-            </span>
-            <h1 className="mt-5 text-4xl font-bold leading-tight tracking-tight text-foreground sm:text-5xl md:text-6xl">
-              One Tap.
-              <br />
-              <span className="bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#EC4899] bg-clip-text text-transparent">
-                Unlimited Connections.
-              </span>
-            </h1>
-            <p className="mt-6 max-w-lg text-lg text-muted-foreground">
-              Transform every introduction into a lasting digital connection using NFC-powered
-              smart identity cards.
-            </p>
-            <ul className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {CHECKLIST.map((item) => (
-                <li key={item} className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <CheckCircle2 className="size-5 shrink-0 text-[#4F46E5]" />
-                  {item}
-                </li>
-              ))}
-            </ul>
+            {isLoading ? (
+              <div className="space-y-4">
+                <Skeleton className="h-6 w-64" />
+                <Skeleton className="h-12 w-full max-w-md" />
+                <Skeleton className="h-20 w-full max-w-lg" />
+              </div>
+            ) : (
+              <>
+                {hero?.badge && (
+                  <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold tracking-wide text-primary">
+                    {hero.badge}
+                  </span>
+                )}
+                <h1 className="mt-5 text-gradient-brand text-4xl font-bold leading-tight tracking-tight sm:text-5xl md:text-6xl">
+                  {hero?.heading}
+                </h1>
+                <p className="mt-6 max-w-lg text-lg text-muted-foreground">{hero?.description}</p>
+              </>
+            )}
+            {data && data.hero_features.length > 0 && (
+              <ul className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {data.hero_features.map((item) => (
+                  <li key={item.id} className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <CheckCircle2 className="size-5 shrink-0 text-primary" />
+                    {item.label}
+                  </li>
+                ))}
+              </ul>
+            )}
             <div className="mt-10 flex flex-wrap gap-4">
-              <Button size="lg" variant="gradient" onClick={() => navigate("/shop")}>
-                Order Your Card
+              <Button
+                size="lg"
+                variant="gradient"
+                onClick={() => navigate(hero?.primary_cta_link || "/shop")}
+              >
+                {hero?.primary_cta_text || "Order Your Card"}
               </Button>
               <Button
                 size="lg"
                 variant="outline"
-                className="gap-2 border-[#4F46E5] text-[#4F46E5] transition-all duration-300 hover:bg-[#4F46E5]/5"
-                onClick={() => setDemoOpen(true)}
+                className="gap-2 border-primary text-primary transition-all duration-300 hover:bg-primary/5"
+                onClick={() => {
+                  if (hero?.secondary_cta_link) navigate(hero.secondary_cta_link)
+                  else setDemoOpen(true)
+                }}
               >
                 <PlayCircle className="size-4" />
-                Watch Demo
+                {hero?.secondary_cta_text || "Watch Demo"}
               </Button>
             </div>
             <div className="mt-8 flex flex-wrap items-center gap-4">
@@ -121,7 +139,7 @@ export default function Home() {
                     key={seed}
                     src={`https://api.dicebear.com/9.x/notionists/svg?seed=${seed}`}
                     alt=""
-                    className="size-10 rounded-full border-2 border-white bg-[#F8FAFC] shadow-sm"
+                    className="size-10 rounded-full border-2 border-white bg-secondary shadow-sm"
                   />
                 ))}
               </div>
@@ -181,21 +199,21 @@ export default function Home() {
             </div>
 
             {/* Floating analytics widgets */}
-            <div className="absolute -left-2 top-4 z-20 hidden animate-float-slow rounded-2xl border border-border/70 bg-white p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] sm:block">
+            <div className="absolute -left-2 top-4 z-20 hidden animate-float-slow rounded-2xl border border-border/70 bg-card p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:block">
               <p className="text-[11px] font-medium text-muted-foreground">Total Taps</p>
               <p className="text-lg font-bold text-foreground">12,458</p>
               <p className="flex items-center gap-0.5 text-[11px] font-semibold text-[#22C55E]">
                 <TrendingUp className="size-3" /> 24.5%
               </p>
             </div>
-            <div className="absolute -right-2 top-1/3 z-20 hidden animate-float-slower rounded-2xl border border-border/70 bg-white p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] sm:block">
+            <div className="absolute -right-2 top-1/3 z-20 hidden animate-float-slower rounded-2xl border border-border/70 bg-card p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:block">
               <p className="text-[11px] font-medium text-muted-foreground">Profile Views</p>
               <p className="text-lg font-bold text-foreground">8,920</p>
               <p className="flex items-center gap-0.5 text-[11px] font-semibold text-[#22C55E]">
                 <TrendingUp className="size-3" /> 18.6%
               </p>
             </div>
-            <div className="absolute -left-4 bottom-6 z-20 hidden animate-float-slow rounded-2xl border border-border/70 bg-white p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] sm:block">
+            <div className="absolute -left-4 bottom-6 z-20 hidden animate-float-slow rounded-2xl border border-border/70 bg-card p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:block">
               <p className="text-[11px] font-medium text-muted-foreground">QR Scans</p>
               <p className="text-lg font-bold text-foreground">3,538</p>
               <p className="flex items-center gap-0.5 text-[11px] font-semibold text-[#22C55E]">
@@ -216,35 +234,82 @@ export default function Home() {
       </Dialog>
 
       {/* NFC Showcase */}
-      <NfcShowcase />
+      {isLoading ? (
+        <section className="bg-background py-20">
+          <div className="container-page space-y-4">
+            <Skeleton className="h-8 w-64" />
+            <Skeleton className="h-24 w-full max-w-lg" />
+          </div>
+        </section>
+      ) : (
+        data?.how_it_feels && (
+          <NfcShowcase
+            badge={data.how_it_feels.badge}
+            heading={data.how_it_feels.heading}
+            description={data.how_it_feels.description}
+            points={data.how_it_feels.points}
+          />
+        )
+      )}
 
       {/* Trusted by */}
-      <section className="border-y border-[#E2E8F0] bg-[#F8FAFC] py-10">
-        <div className="container-page">
-          <p className="text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Trusted by professionals at
-          </p>
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
-            {BRANDS.map((brand) => (
-              <span key={brand} className="text-xl font-bold text-muted-foreground/50">
-                {brand}
-              </span>
-            ))}
+      {isLoading ? (
+        <section className="border-y border-border bg-secondary py-10">
+          <div className="container-page">
+            <Skeleton className="mx-auto h-4 w-48" />
           </div>
-        </div>
-      </section>
+        </section>
+      ) : (
+        data && data.companies.length > 0 && (
+          <section className="border-y border-border bg-secondary py-10">
+            <div className="container-page">
+              <p className="text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                Trusted by professionals at
+              </p>
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
+                {data.companies.map((brand) =>
+                  brand.logo_url ? (
+                    <img
+                      key={brand.id}
+                      src={brand.logo_url}
+                      alt={brand.name}
+                      className="h-6 w-auto object-contain opacity-60"
+                    />
+                  ) : (
+                    <span key={brand.id} className="text-xl font-bold text-muted-foreground/50">
+                      {brand.name}
+                    </span>
+                  ),
+                )}
+              </div>
+            </div>
+          </section>
+        )
+      )}
 
       {/* Stats */}
-      <section className="bg-white px-4 py-16">
-        <div className="mx-auto grid max-w-5xl grid-cols-2 gap-8 sm:grid-cols-4">
-          {STATS.map((s) => (
-            <StatCounter key={s.label} value={s.value} label={s.label} />
-          ))}
-        </div>
-      </section>
+      {isLoading ? (
+        <section className="bg-background px-4 py-16">
+          <div className="mx-auto grid max-w-5xl grid-cols-2 gap-8 sm:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))}
+          </div>
+        </section>
+      ) : (
+        data && data.statistics.length > 0 && (
+          <section className="bg-background px-4 py-16">
+            <div className="mx-auto grid max-w-5xl grid-cols-2 gap-8 sm:grid-cols-4">
+              {data.statistics.map((s) => (
+                <StatCounter key={s.id} value={s.value} label={s.label} />
+              ))}
+            </div>
+          </section>
+        )
+      )}
 
       {/* Our Story */}
-      <section className="bg-[#F8FAFC] py-20">
+      <section className="bg-secondary py-20">
         <div className="container-page">
           <div className="grid items-center gap-12 lg:grid-cols-2">
             <div>
@@ -265,118 +330,155 @@ export default function Home() {
               <img src={heroImg} alt="VR's NEXORA story" className="relative z-10 w-full max-w-sm" />
             </div>
           </div>
-          <div className="mt-16 grid grid-cols-2 gap-6 lg:grid-cols-4">
-            {VALUES.map((v) => (
-              <div key={v.title} className={`${cardClass} p-6 text-center`}>
-                <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-md">
-                  <v.icon className="size-6" />
-                </div>
-                <h3 className="mt-3 font-semibold text-foreground">{v.title}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">{v.description}</p>
+          {isLoading ? (
+            <div className="mt-16 grid grid-cols-2 gap-6 lg:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-32 w-full" />
+              ))}
+            </div>
+          ) : (
+            data && data.values.length > 0 && (
+              <div className="mt-16 grid grid-cols-2 gap-6 lg:grid-cols-4">
+                {data.values.map((v) => {
+                  const Icon = resolveIcon(v.icon)
+                  return (
+                    <div key={v.id} className={`${cardClass} p-6 text-center`}>
+                      <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-md">
+                        <Icon className="size-6" />
+                      </div>
+                      <h3 className="mt-3 font-semibold text-foreground">{v.title}</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">{v.description}</p>
+                    </div>
+                  )
+                })}
               </div>
-            ))}
-          </div>
+            )
+          )}
         </div>
       </section>
 
       {/* Why choose */}
-      <section className="bg-white py-20">
-        <div className="container-page">
-          <div className="mx-auto max-w-2xl text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-foreground">Why Choose VR's NEXORA?</h2>
-            <p className="mt-3 text-muted-foreground">
-              Everything you need to network smarter, in one tiny card.
-            </p>
+      {features && features.length > 0 && (
+        <section className="bg-background py-20">
+          <div className="container-page">
+            <div className="mx-auto max-w-2xl text-center">
+              <h2 className="text-3xl font-bold tracking-tight text-foreground">Why Choose VR's NEXORA?</h2>
+              <p className="mt-3 text-muted-foreground">
+                Everything you need to network smarter, in one tiny card.
+              </p>
+            </div>
+            <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {features.slice(0, 4).map((f) => (
+                <FeatureCard key={f.id} icon={resolveIcon(f.icon)} title={f.title} description={f.description} />
+              ))}
+            </div>
           </div>
-          <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {FEATURES.map((f) => (
-              <FeatureCard key={f.title} icon={f.icon} title={f.title} description={f.description} />
-            ))}
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* Testimonials */}
-      <section className="bg-[#F8FAFC] py-20">
-        <div className="container-page">
-          <div className="mx-auto max-w-2xl text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-foreground">
-              Loved by Professionals Everywhere
-            </h2>
-            <p className="mt-3 text-muted-foreground">
-              Real stories from people who upgraded the way they network.
-            </p>
-          </div>
-          <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {TESTIMONIALS.map((t) => (
-              <TestimonialCard key={t.id} testimonial={t} />
+      {isLoading ? (
+        <section className="bg-secondary py-20">
+          <div className="container-page grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-56 w-full" />
             ))}
           </div>
-        </div>
-      </section>
+        </section>
+      ) : (
+        data && data.testimonials.length > 0 && (
+          <section className="bg-secondary py-20">
+            <div className="container-page">
+              <div className="mx-auto max-w-2xl text-center">
+                <h2 className="text-3xl font-bold tracking-tight text-foreground">
+                  Loved by Professionals Everywhere
+                </h2>
+                <p className="mt-3 text-muted-foreground">
+                  Real stories from people who upgraded the way they network.
+                </p>
+              </div>
+              <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {data.testimonials.map((t) => (
+                  <TestimonialCard key={t.id} testimonial={toTestimonial(t)} />
+                ))}
+              </div>
+            </div>
+          </section>
+        )
+      )}
 
       {/* FAQ preview */}
-      <section className="bg-white px-4 py-20">
-        <div className="mx-auto max-w-3xl">
-          <div className="mx-auto max-w-2xl text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-foreground">
-              Frequently Asked Questions
-            </h2>
-            <p className="mt-3 text-muted-foreground">
-              Quick answers to the questions we hear most often.
-            </p>
+      {isLoading ? (
+        <section className="bg-background px-4 py-20">
+          <div className="mx-auto max-w-3xl space-y-3">
+            <Skeleton className="mx-auto h-8 w-72" />
+            <Skeleton className="h-64 w-full" />
           </div>
-          <Accordion
-            type="single"
-            collapsible
-            className={cn(cardClass, "mt-10 px-6 hover:translate-y-0 hover:shadow-[0_10px_30px_rgba(0,0,0,0.06)]")}
-          >
-            {FAQ_PREVIEW.map((faq, i) => (
-              <AccordionItem key={faq.q} value={`item-${i}`} className="border-[#E2E8F0]">
-                <AccordionTrigger className="text-base hover:no-underline">{faq.q}</AccordionTrigger>
-                <AccordionContent className="text-muted-foreground">{faq.a}</AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-          <div className="mt-8 text-center">
-            <Button
-              variant="ghost"
-              className="text-[#4F46E5] hover:bg-[#4F46E5]/5 hover:text-[#4F46E5]"
-              onClick={() => navigate("/faq")}
-            >
-              View all FAQs
-              <ArrowRight className="size-4" />
-            </Button>
-          </div>
-        </div>
-      </section>
+        </section>
+      ) : (
+        data && data.faqs_preview.length > 0 && (
+          <section className="bg-background px-4 py-20">
+            <div className="mx-auto max-w-3xl">
+              <div className="mx-auto max-w-2xl text-center">
+                <h2 className="text-3xl font-bold tracking-tight text-foreground">
+                  Frequently Asked Questions
+                </h2>
+                <p className="mt-3 text-muted-foreground">
+                  Quick answers to the questions we hear most often.
+                </p>
+              </div>
+              <Accordion
+                type="single"
+                collapsible
+                className={cn(cardClass, "mt-10 px-6 hover:translate-y-0 hover:shadow-[0_10px_30px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_10px_30px_rgba(0,0,0,0.5)]")}
+              >
+                {data.faqs_preview.map((faq) => (
+                  <AccordionItem key={faq.id} value={`item-${faq.id}`} className="border-border">
+                    <AccordionTrigger className="text-base hover:no-underline">{faq.question}</AccordionTrigger>
+                    <AccordionContent className="text-muted-foreground">{faq.answer}</AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+              <div className="mt-8 text-center">
+                <Button
+                  variant="ghost"
+                  className="text-primary hover:bg-primary/5 hover:text-primary"
+                  onClick={() => navigate("/faq")}
+                >
+                  View all FAQs
+                  <ArrowRight className="size-4" />
+                </Button>
+              </div>
+            </div>
+          </section>
+        )
+      )}
 
       {/* Contact CTA */}
-      <section className="bg-[#F8FAFC] px-4 py-20">
-        <div className="mx-auto max-w-4xl">
-          <div className="relative overflow-hidden rounded-[24px] border border-[#E2E8F0] bg-white p-10 text-center shadow-[0_10px_30px_rgba(0,0,0,0.06)] sm:p-14">
-            <div className="pointer-events-none absolute -left-16 -top-16 size-56 rounded-full bg-[#4F46E5]/10 blur-3xl" />
-            <div className="pointer-events-none absolute -bottom-16 -right-16 size-56 rounded-full bg-[#EC4899]/10 blur-3xl" />
-            <div className="relative mx-auto flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-[0_4px_14px_rgba(79,70,229,0.4)]">
-              <MessageCircle className="size-7" />
+      {data?.cta && (
+        <section className="bg-secondary px-4 py-20">
+          <div className="mx-auto max-w-4xl">
+            <div className="relative overflow-hidden rounded-[24px] border border-border bg-card p-10 text-center shadow-[0_10px_30px_rgba(0,0,0,0.06)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:p-14">
+              <div className="pointer-events-none absolute -left-16 -top-16 size-56 rounded-full bg-[#4F46E5]/10 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-16 -right-16 size-56 rounded-full bg-[#EC4899]/10 blur-3xl" />
+              <div className="relative mx-auto flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-[0_4px_14px_rgba(79,70,229,0.4)]">
+                <MessageCircle className="size-7" />
+              </div>
+              <h2 className="relative mt-6 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                {data.cta.heading}
+              </h2>
+              <p className="relative mx-auto mt-3 max-w-lg text-muted-foreground">{data.cta.description}</p>
+              <Button
+                size="lg"
+                className="relative mt-8 rounded-xl bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-[0_10px_30px_rgba(79,70,229,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_15px_35px_rgba(79,70,229,0.45)]"
+                onClick={() => navigate(data.cta?.button_link || "/contact")}
+              >
+                {data.cta.button_text}
+              </Button>
             </div>
-            <h2 className="relative mt-6 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-              Still have questions?
-            </h2>
-            <p className="relative mx-auto mt-3 max-w-lg text-muted-foreground">
-              Our team is happy to help you pick the right setup, answer questions about your
-              order, or troubleshoot your card.
-            </p>
-            <Button
-              size="lg"
-              className="relative mt-8 rounded-xl bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-[0_10px_30px_rgba(79,70,229,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_15px_35px_rgba(79,70,229,0.45)]"
-              onClick={() => navigate("/contact")}
-            >
-              Contact Us
-            </Button>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       <CtaBanner title="Ready to Experience the Power of VR's NEXORA?" />
     </div>

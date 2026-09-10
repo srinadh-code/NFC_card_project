@@ -28,7 +28,7 @@ export default function TestimonialCard({ testimonial }: TestimonialCardProps) {
         <img
           src={testimonial.avatar}
           alt={testimonial.name}
-          className="size-11 rounded-full bg-[#F8FAFC]"
+          className="size-11 rounded-full bg-secondary"
         />
         <div>
           <p className="text-sm font-semibold text-foreground">{testimonial.name}</p>

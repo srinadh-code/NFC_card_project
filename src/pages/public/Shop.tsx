@@ -13,6 +13,7 @@ import { useCartStore } from "@/store/cart-store"
 import { cn } from "@/lib/utils"
 import { cardClass, gradientClass } from "@/components/marketing/PremiumCard"
 import { NfcCardFace } from "@/components/marketing/NfcCardShowcase"
+import { usePublicSettings } from "@/hooks/usePublicSettings"
 
 const TRUST_BADGES = [
   { icon: Truck, label: "Free Shipping" },
@@ -34,6 +35,7 @@ export default function Shop() {
   const navigate = useNavigate()
   const addLine = useCartStore((s) => s.addLine)
   const [selectedId, setSelectedId] = useState<(typeof NEXORA_CARD_TYPES)[number]["id"]>("premium")
+  const { settings } = usePublicSettings()
   const [qty, setQty] = useState(1)
 
   // NEXORA_CARD_TYPES always has all 3 tiers, so this is never undefined —
@@ -94,13 +96,13 @@ export default function Shop() {
           <div className={cn(cardClass, "mt-8 flex flex-col divide-y divide-[#E2E8F0] p-0 hover:translate-y-0 hover:shadow-[0_10px_30px_rgba(15,23,42,0.06)] sm:flex-row sm:divide-x sm:divide-y-0")}>
             {NEXORA_CARD_TYPES.map((card) => (
               <div key={card.id} className="flex flex-1 items-center gap-3 p-5">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#4F46E5]/10 text-[#4F46E5]">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                   <LayoutTemplate className="size-5" />
                 </span>
                 <div>
                   <p className="text-sm font-semibold text-foreground">{card.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {formatCurrency(card.price)} · {card.templateCount}{" "}
+                    {formatCurrency(card.price, settings.currency)} · {card.templateCount}{" "}
                     {card.templateCount === 1 ? "Template" : "Templates"}
                   </p>
                 </div>
@@ -112,7 +114,7 @@ export default function Shop() {
 
       {/* 2. Selected card + detailed ordering — appears exactly once, at
           the end of the page. */}
-      <section className="bg-[#F8FAFC] px-4 py-16">
+      <section className="bg-secondary px-4 py-16">
         <div
           className={cn(
             cardClass,
@@ -125,13 +127,13 @@ export default function Shop() {
               <div className="flex flex-wrap items-center gap-3">
                 <h2 className="text-2xl font-bold text-foreground">{selectedCard.name}</h2>
                 {selectedCard.popular && (
-                  <span className="rounded-full bg-[#4F46E5]/10 px-3 py-1 text-xs font-semibold text-[#4F46E5]">
+                  <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                     Most Popular
                   </span>
                 )}
               </div>
               <p className={cn("mt-3 bg-gradient-to-r bg-clip-text text-3xl font-bold text-transparent", gradientClass)}>
-                {formatCurrency(selectedCard.price)}
+                {formatCurrency(selectedCard.price, settings.currency)}
               </p>
               <p className="mt-3 max-w-lg text-muted-foreground">{selectedCard.design}</p>
             </div>
@@ -146,7 +148,7 @@ export default function Shop() {
               </div>
               <div className="border-x border-[#E2E8F0]">
                 <p className="text-xs text-muted-foreground">Price</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{formatCurrency(selectedCard.price)}</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{formatCurrency(selectedCard.price, settings.currency)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Templates Included</p>
@@ -157,7 +159,7 @@ export default function Shop() {
             <ul className="space-y-3">
               {selectedCard.features.map((feature) => (
                 <li key={feature} className="flex items-start gap-3 text-sm font-medium text-foreground">
-                  <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-[#4F46E5]" />
+                  <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary" />
                   {feature}
                 </li>
               ))}
@@ -181,18 +183,18 @@ export default function Shop() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-4 rounded-[24px] border border-[#E2E8F0] bg-[#F8FAFC] p-5 shadow-[0_10px_30px_rgba(0,0,0,0.06)] sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-4 rounded-[24px] border border-border bg-card p-5 shadow-[0_10px_30px_rgba(0,0,0,0.06)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Price</p>
                 <p className={cn("bg-gradient-to-r bg-clip-text text-2xl font-bold text-transparent", gradientClass)}>
-                  {formatCurrency(selectedCard.price * qty)}
+                  {formatCurrency(selectedCard.price * qty, settings.currency)}
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">
                 <Button
                   size="lg"
                   variant="outline"
-                  className="border-[#4F46E5] text-[#4F46E5] transition-all duration-300 hover:bg-[#4F46E5]/5"
+                  className="border-primary text-primary transition-all duration-300 hover:bg-primary/5"
                   onClick={handleAddToCart}
                 >
                   Add To Cart
@@ -211,9 +213,9 @@ export default function Shop() {
               {TRUST_BADGES.map((b) => (
                 <div
                   key={b.label}
-                  className="flex flex-col items-center gap-2 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 text-center"
+                  className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 text-center"
                 >
-                  <b.icon className="size-5 text-[#4F46E5]" />
+                  <b.icon className="size-5 text-primary" />
                   <span className="text-xs font-medium text-muted-foreground">{b.label}</span>
                 </div>
               ))}

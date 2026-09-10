@@ -1,15 +1,13 @@
 ﻿import { create } from "zustand"
 import { persist } from "zustand/middleware"
 
+// NOTE: General (site name/email/phone/address/currency/timezone) used to
+// live here as local-only state. It's now backed by the real database —
+// see settingsApi in lib/contentApi.ts and the General tab in
+// pages/admin/Settings.tsx, which uses useSingletonSection directly instead
+// of this store. The database is the single source of truth; nothing here
+// should re-introduce a local copy of those values.
 export interface AdminSettings {
-  general: {
-    siteName: string
-    siteEmail: string
-    sitePhone: string
-    siteAddress: string
-    currency: string
-    timezone: string
-  }
   payment: {
     razorpayKeyId: string
     razorpaySecret: string
@@ -35,14 +33,6 @@ export interface AdminSettings {
 }
 
 const DEFAULT_SETTINGS: AdminSettings = {
-  general: {
-    siteName: "VR's NEXORA",
-    siteEmail: "support@vrsnexora.com",
-    sitePhone: "+91 90000 12345",
-    siteAddress: "Hyderabad, Telangana, India",
-    currency: "INR",
-    timezone: "Asia/Kolkata",
-  },
   payment: {
     razorpayKeyId: "rzp_test_XXXXXXXXXXXX",
     razorpaySecret: "••••••••••••••••",

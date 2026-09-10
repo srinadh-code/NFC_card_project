@@ -60,7 +60,7 @@ export class ApiError extends Error {
   }
 }
 
-export interface PaginationMeta {
+export interface Pagination {
   count: number
   page: number
   num_pages: number
@@ -74,7 +74,7 @@ interface Envelope<T> {
   message: string
   data?: T
   errors?: Record<string, unknown>
-  pagination?: PaginationMeta
+  pagination?: Pagination
 }
 
 let refreshInFlight: Promise<boolean> | null = null
@@ -163,15 +163,26 @@ async function rawRequest<T>(path: string, options: RequestOptions = {}, retried
   return json
 }
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+// Standard call path used by every existing call-site: unwraps and returns
+// only the envelope's `data` payload. Exported (not just used internally)
+// because src/lib/contentApi.ts imports it directly for the Website Content
+// module's generic CRUD/singleton API helpers.
+export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const json = await rawRequest<T>(path, options)
   return json.data as T
+}
+
+// Same request/auth/refresh handling as `request`, but resolves with the
+// full envelope (including the `pagination` sibling key some paginated
+// admin list endpoints return alongside `data`) instead of unwrapping it.
+export async function requestRaw<T>(path: string, options: RequestOptions = {}): Promise<Envelope<T>> {
+  return rawRequest<T>(path, options)
 }
 
 async function requestPaginated<T>(
   path: string,
   options: RequestOptions = {},
-): Promise<{ items: T[]; pagination: PaginationMeta | null }> {
+): Promise<{ items: T[]; pagination: Pagination | null }> {
   const json = await rawRequest<T[]>(path, options)
   return { items: (json.data as T[] | undefined) ?? [], pagination: json.pagination ?? null }
 }
@@ -192,6 +203,11 @@ export interface ApiUser {
 
 interface AuthPayload {
   user: ApiUser
+  // Server-computed convenience field ("/admin/dashboard" or "/dashboard")
+  // — the frontend still derives its own redirect from `user.role` via
+  // hasValidSession()/performLogin() in auth-store.ts, so this is
+  // informational only, not currently consumed for routing decisions.
+  dashboard_url: string
   access: string
   refresh: string
 }
@@ -1709,17 +1725,16 @@ export const analyticsApi = {
 
 // ---------------------------------------------------------------------
 // Orders — reads/writes the same `orders.Order` model admin_api.orders/
-// .dashboard/.transactions/.reports already use (NFC_BACKEND
-// orders/views.py CustomerOrderListCreateView), so an order placed here
-// is immediately visible to admin. The raw server response is shaped
-// differently (id/customer_name/amount/tracking/an address object) than
-// the ApiOrder type below — toApiOrder() adapts it to the field names
-// this page and MyCard.tsx already render (order_number/subtotal/
-// status_history/flat shipping_* strings), so neither page needed to
-// change to match the real backend contract.
+// .dashboard/.transactions/.reports already use (backend orders/views.py
+// CustomerOrderListCreateView), so an order placed here is immediately
+// visible to admin. Shape matches backend/orders/serializers.py's
+// OrderSerializer directly (no adapter layer) — there is no order_number
+// field on this model, `id` is the only identifier, and no discount field
+// either (a cart coupon still reduces what Checkout.tsx *displays*, but
+// isn't sent to or recorded by the backend — see Checkout.tsx).
 // ---------------------------------------------------------------------
 
-interface ApiOrderRawItem {
+export interface ApiOrderItem {
   product_id: string
   name: string
   card_type: string
@@ -1727,145 +1742,54 @@ interface ApiOrderRawItem {
   qty: number
   price: string
 }
-interface ApiOrderRaw {
-  id: number
-  customer_name: string
-  customer_phone: string
-  items: ApiOrderRawItem[]
-  amount: string
-  total: string
-  status: string
-  address: Address
-  tracking: { label: string; date: string | null; done: boolean }[]
-  placed_at: string
+export interface ApiOrderTrackingStep {
+  label: string
+  date: string | null
+  done: boolean
 }
-
-export interface ApiOrderItem {
-  id: number
-  card_type: string
-  color: string
-  quantity: number
-  unit_price: string
-  line_total: string
-}
-export interface ApiOrderStatusHistory {
-  status: string
-  note: string
-  created_at: string
+export interface ApiOrderAddress {
+  line1: string
+  city: string
+  state: string
+  pincode: string
+  country: string
 }
 export interface ApiOrder {
   id: number
-  order_number: string
-  status: string
-  shipping_full_name: string
-  shipping_phone: string
-  shipping_address: string
-  shipping_city: string
-  shipping_state: string
-  shipping_country: string
-  shipping_postal_code: string
-  subtotal: string
-  discount: string
-  total: string
-  tracking_number: string
-  notes: string
+  customer_id: number
+  customer_name: string
+  customer_email: string
+  customer_phone: string
   items: ApiOrderItem[]
-  status_history: ApiOrderStatusHistory[]
-  created_at: string
-  updated_at: string
+  amount: string
+  shipping: string
+  total: string
+  payment_method: string
+  payment_status: string
+  status: string
+  address: ApiOrderAddress
+  tracking: ApiOrderTrackingStep[]
+  assigned_card_id: number | null
+  placed_at: string
 }
 
-function toApiOrder(raw: ApiOrderRaw): ApiOrder {
-  return {
-    id: raw.id,
-    // The live backend has no order_number field — synthesize one in the
-    // same ORD###### shape customer_management.customer_orders used to
-    // generate, purely for display/invoice purposes.
-    order_number: `ORD${String(raw.id).padStart(6, "0")}`,
-    status: raw.status,
-    shipping_full_name: raw.customer_name,
-    shipping_phone: raw.customer_phone,
-    shipping_address: raw.address.line1,
-    shipping_city: raw.address.city,
-    shipping_state: raw.address.state,
-    shipping_country: raw.address.country,
-    shipping_postal_code: raw.address.pincode,
-    subtotal: raw.amount,
-    discount: "0.00",
-    total: raw.total,
-    tracking_number: "",
-    notes: "",
-    items: raw.items.map((it, index) => ({
-      id: index,
-      card_type: it.card_type,
-      color: it.color,
-      quantity: it.qty,
-      unit_price: it.price,
-      line_total: (it.qty * Number(it.price)).toFixed(2),
-    })),
-    // No separate status-history table on the live backend — derive one
-    // from the tracking timeline's completed steps instead.
-    status_history: raw.tracking
-      .filter((step) => step.done)
-      .map((step) => ({ status: step.label, note: "", created_at: step.date ?? raw.placed_at })),
-    created_at: raw.placed_at,
-    updated_at: raw.placed_at,
-  }
-}
-
+// Matches backend/orders/serializers.py's CustomerOrderCreateSerializer.
 export interface CreateOrderPayload {
-  items: { productId: string; name: string; cardType: NfcCard["cardType"]; color: string; qty: number; price: number }[]
-  shipping: number
-  paymentMethod: PaymentMethod
-  shippingLine1: string
-  shippingCity: string
-  shippingState: string
-  shippingPincode: string
-  shippingCountry: string
-  // One value per checkout *attempt*, resent unchanged on every retry of
-  // that same attempt (double-click, network retry) — the backend uses it
-  // to recognize and no-op a duplicate instead of creating a second order.
-  // See orders/views.py CustomerOrderListCreateView.post.
-  idempotencyKey: string
-}
-
-function toApiCreateOrderPayload(values: CreateOrderPayload): Record<string, unknown> {
-  return {
-    idempotency_key: values.idempotencyKey,
-    items: values.items.map((it) => ({
-      product_id: it.productId,
-      name: it.name,
-      card_type: CARD_TYPE_REVERSE_MAP[it.cardType],
-      color: it.color,
-      qty: it.qty,
-      price: it.price,
-    })),
-    shipping: values.shipping,
-    payment_method: PAYMENT_METHOD_REVERSE_MAP[values.paymentMethod],
-    shipping_line1: values.shippingLine1,
-    shipping_city: values.shippingCity,
-    shipping_state: values.shippingState,
-    shipping_pincode: values.shippingPincode,
-    shipping_country: values.shippingCountry,
-  }
+  idempotency_key?: string
+  items: { product_id: string; name: string; card_type: string; color: string; qty: number; price: number }[]
+  shipping?: number
+  payment_method: "UPI" | "CARD" | "NET_BANKING" | "RAZORPAY" | "COD"
+  shipping_line1: string
+  shipping_city: string
+  shipping_state?: string
+  shipping_pincode: string
+  shipping_country?: string
 }
 
 export const ordersApi = {
-  list: async (page = 1): Promise<{ items: ApiOrder[]; pagination: PaginationMeta | null }> => {
-    const { items, pagination } = await requestPaginated<ApiOrderRaw>(`/customer/orders/?page=${page}&page_size=100`)
-    return { items: items.map(toApiOrder), pagination }
-  },
-
-  getById: async (id: number | string): Promise<ApiOrder> =>
-    toApiOrder(await request<ApiOrderRaw>(`/customer/orders/${id}/`)),
-
-  create: async (payload: CreateOrderPayload): Promise<ApiOrder> =>
-    toApiOrder(
-      await request<ApiOrderRaw>("/customer/orders/", {
-        method: "POST",
-        body: toApiCreateOrderPayload(payload),
-      }),
-    ),
+  list: (page = 1) => requestPaginated<ApiOrder>(`/customer/orders/?page=${page}&page_size=100`),
+  create: (payload: CreateOrderPayload) => request<ApiOrder>("/customer/orders/", { method: "POST", body: payload }),
+  getById: (id: number | string) => request<ApiOrder>(`/customer/orders/${id}/`),
 }
 
 // ---------------------------------------------------------------------

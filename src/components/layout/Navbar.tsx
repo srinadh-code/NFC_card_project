@@ -14,7 +14,9 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useCartStore } from "@/store/cart-store"
 import { useCustomerAuthStore } from "@/store/auth-store"
+import { usePublicSettings } from "@/hooks/usePublicSettings"
 import { cn } from "@/lib/utils"
+import ThemeToggle from "@/components/layout/ThemeToggle"
 
 const NAV_LINKS = [
   { to: "/", label: "Home" },
@@ -24,9 +26,8 @@ const NAV_LINKS = [
   { to: "/how-it-works", label: "How It Works" },
 ]
 
-const ORDER_BUTTON_GRADIENT = "linear-gradient(135deg, #5B4DFF 0%, #7C3AED 50%, #EC4899 100%)"
-
 function Logo() {
+  const { settings } = usePublicSettings()
   return (
     <Link to="/" className="flex items-center gap-2.5">
       {/* Luxury coin emblem */}
@@ -35,7 +36,7 @@ function Logo() {
         <span className="relative font-serif text-lg font-bold text-[#D4AF37]">N</span>
       </span>
       <span className="flex flex-col leading-none">
-        <span className="text-lg font-bold tracking-tight text-foreground">VR's NEXORA</span>
+        <span className="text-lg font-bold tracking-tight text-foreground">{settings.site_name}</span>
         <span className="mt-1 text-[11px] font-medium text-muted-foreground">Digital Identity</span>
       </span>
     </Link>
@@ -78,19 +79,14 @@ export default function Navbar() {
       {/* Premium floating glass navbar */}
       <header
         className={cn(
-          "relative mx-auto max-w-[1440px] overflow-hidden rounded-[24px] transition-all duration-[350ms] ease-in-out",
-          scrolled ? "backdrop-blur-[16px] shadow-[0_14px_46px_rgba(124,58,237,0.12)]" : "backdrop-blur-[12px] shadow-[0_10px_40px_rgba(124,58,237,0.08)]",
+          "glass-panel relative mx-auto max-w-[1440px] overflow-hidden rounded-[24px] transition-all duration-[350ms] ease-in-out",
+          scrolled ? "backdrop-blur-[16px] shadow-[0_14px_46px_rgba(124,58,237,0.12)] dark:shadow-[0_14px_46px_rgba(139,92,246,0.18)]" : "backdrop-blur-[12px] shadow-[0_10px_40px_rgba(124,58,237,0.08)] dark:shadow-[0_10px_40px_rgba(139,92,246,0.12)]",
         )}
-        style={{
-          background: "rgba(255,255,255,0.95)",
-          border: "1px solid rgba(124,58,237,0.08)",
-        }}
       >
-        {/* Ambient purple glow */}
+        {/* Ambient brand glow */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 -z-10"
-          style={{ background: "radial-gradient(circle at center, rgba(124,58,237,0.08), transparent 70%)" }}
+          className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,rgba(124,58,237,0.08),transparent_70%)] dark:bg-[radial-gradient(circle_at_center,rgba(139,92,246,0.14),transparent_70%)]"
         />
 
         <div className="mx-auto flex h-20 max-w-[1440px] items-center justify-between px-5 sm:px-6 lg:px-10">
@@ -179,10 +175,10 @@ export default function Navbar() {
                 Login
               </Link>
             )}
+            <ThemeToggle />
             <Button
               variant="gradient"
-              className="rounded-full px-6 shadow-[0_8px_24px_rgba(124,58,237,0.28)] transition-all duration-300 hover:scale-[1.03] hover:shadow-[0_10px_32px_rgba(124,58,237,0.4)]"
-              style={{ background: ORDER_BUTTON_GRADIENT }}
+              className="rounded-full px-6 shadow-[0_8px_24px_rgba(124,58,237,0.28)] transition-all duration-300 hover:scale-[1.03] hover:shadow-[0_10px_32px_rgba(124,58,237,0.4)] dark:shadow-[0_8px_24px_rgba(139,92,246,0.35)] dark:hover:shadow-[0_10px_32px_rgba(139,92,246,0.5)]"
               onClick={() => navigate("/shop")}
             >
               Order Now →
@@ -204,13 +200,14 @@ export default function Navbar() {
                 </span>
               )}
             </Button>
+            <ThemeToggle />
             <Sheet open={open} onOpenChange={setOpen}>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" className="text-muted-foreground hover:bg-primary/10 hover:text-primary" aria-label="Menu">
                   <Menu className="size-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-72 border-l border-border bg-white">
+              <SheetContent side="right" className="w-72 border-l border-border bg-background">
                 <SheetHeader>
                   <SheetTitle>
                     <Logo />
@@ -272,7 +269,6 @@ export default function Navbar() {
                     <Button
                       variant="gradient"
                       className="w-full rounded-full transition-transform duration-300 hover:scale-[1.03]"
-                      style={{ background: ORDER_BUTTON_GRADIENT }}
                       onClick={() => navigate("/shop")}
                     >
                       Order Now

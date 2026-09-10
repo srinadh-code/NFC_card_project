@@ -110,7 +110,24 @@ async function performLogin(email: string, password: string, expectedRole: "ADMI
   try {
     const payload = await authApi.login({ email, password })
     if (payload.user.role !== expectedRole) {
-      return { success: false, error: `No ${expectedRole.toLowerCase()} account found with those credentials.` }
+      if (import.meta.env.DEV) {
+        // Temporary, dev-only — pairs with ProtectedRoute.tsx's and
+        // auth-store.ts's bootstrap() logs for tracing auth decisions.
+        // eslint-disable-next-line no-console
+        console.debug("[auth-store] performLogin role mismatch", {
+          expectedRole,
+          actualRole: payload.user.role,
+          userId: payload.user.id,
+        })
+      }
+      // Deliberately generic: naming the actual account type here would let
+      // an attacker use this form to probe which role a given email/password
+      // pair belongs to. Keep this identical to a genuine wrong-password
+      // error (see the catch block below and Login.tsx's top-of-file note).
+      return {
+        success: false,
+        error: "Invalid email or password.",
+      }
     }
     setTokens(payload.access, payload.refresh)
     useAuthStore.getState().setUser(payload.user)
