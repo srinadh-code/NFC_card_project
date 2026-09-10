@@ -1,9 +1,10 @@
 from django.utils import timezone
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from analytics.models import TapEvent
 from analytics.tracking import log_event
+from common.permissions import IsCustomerRole
 from common.response import error, success
 
 from .models import NfcCard
@@ -28,7 +29,7 @@ def _notify_card_activated(user, card):
 
 
 class MyCardsView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def get(self, request):
         cards = NfcCard.objects.filter(user=request.user)
@@ -38,7 +39,7 @@ class MyCardsView(APIView):
 class ActivateCardView(APIView):
     """Customer claims a physical card by entering/scanning its UID."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def post(self, request):
         serializer = ActivateCardSerializer(data=request.data)
@@ -72,7 +73,7 @@ class ActivateCardView(APIView):
 class ActivateAssignedCardView(APIView):
     """One-click activation for a card the admin already assigned to this customer."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def post(self, request, pk):
         card = NfcCard.objects.filter(pk=pk).first()
@@ -94,7 +95,7 @@ class ActivateAssignedCardView(APIView):
 class DeactivateCardView(APIView):
     """Customer takes their own card out of service (lets them re-activate later)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def post(self, request):
         serializer = DeactivateCardSerializer(data=request.data)

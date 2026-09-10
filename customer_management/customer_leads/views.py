@@ -1,7 +1,8 @@
 from django.http import HttpResponse
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
+from common.permissions import IsCustomerRole
 from common.response import success
 from common.throttling import OtpRequestThrottle
 from common.views import PaginatedAPIView
@@ -28,7 +29,7 @@ class CustomerLeadsView(PaginatedAPIView):
     def get_permissions(self):
         if self.request.method == "POST":
             return [AllowAny()]
-        return [IsAuthenticated()]
+        return [IsCustomerRole()]
 
     def get_throttles(self):
         if self.request.method == "POST":
@@ -48,7 +49,7 @@ class CustomerLeadsView(PaginatedAPIView):
 
 
 class CustomerLeadsExportView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def get(self, request):
         csv_content = services.leads_csv(request.user)

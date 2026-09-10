@@ -1,6 +1,6 @@
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from common.permissions import IsCustomerRole
 from common.response import success
 from profiles.serializers import SocialLinkSerializer
 
@@ -9,7 +9,7 @@ from .serializers import CustomerSocialLinksUpdateSerializer
 
 
 class CustomerSocialLinksView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCustomerRole]
 
     def get(self, request):
         links = services.get_social_links(request.user)

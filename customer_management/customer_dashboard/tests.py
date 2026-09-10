@@ -6,8 +6,8 @@ from customer_management.customer_analytics.models import AnalyticsEvent
 from customer_management.customer_analytics.services import record_event
 from customer_management.customer_leads.models import Lead
 from customer_management.customer_notifications.models import Notification
-from customer_management.customer_orders.models import Order, OrderItem
 from nfc_cards.models import NfcCard
+from orders.models import Order
 
 
 class CustomerDashboardViewTests(AuthenticatedAPITestCase):
@@ -17,21 +17,14 @@ class CustomerDashboardViewTests(AuthenticatedAPITestCase):
         record_event(self.user, AnalyticsEvent.EventType.QR_SCAN)
         Lead.objects.create(user=self.user, name="Lead One", email="lead@example.com")
 
-        order = Order.objects.create(
-            user=self.user,
-            order_number=Order.generate_order_number(),
-            shipping_full_name="Jane",
-            shipping_phone="123",
-            shipping_address="Addr",
+        Order.objects.create(
+            customer=self.user,
+            amount=100,
+            payment_method=Order.PaymentMethod.COD,
+            shipping_line1="Addr",
             shipping_city="City",
             shipping_state="State",
-            shipping_country="Country",
-            shipping_postal_code="000000",
-            subtotal=100,
-            total=100,
-        )
-        OrderItem.objects.create(
-            order=order, card_type="STANDARD", quantity=1, unit_price=100, line_total=100
+            shipping_pincode="000000",
         )
         NfcCard.objects.create(
             uid="04AABBCC0099",

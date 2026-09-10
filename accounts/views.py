@@ -1,3 +1,5 @@
+import logging
+
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
@@ -23,14 +25,31 @@ from .serializers import (
     VerifyEmailSerializer,
 )
 
+logger = logging.getLogger("accounts.auth")
+
 
 def _issue_tokens(user):
     refresh = RefreshToken.for_user(user)
     return {"access": str(refresh.access_token), "refresh": str(refresh)}
 
 
+def _dashboard_url_for(user):
+    """
+    Convenience field for API consumers that aren't the React frontend
+    (which derives this itself from `role` — see auth-store.ts). One
+    account model, one `role` field, one login endpoint for both portals
+    by design: this is what tells any client where a just-authenticated
+    user's dashboard actually is.
+    """
+    return "/admin/dashboard" if user.role == "ADMIN" else "/dashboard"
+
+
 def _auth_payload(user):
-    return {"user": UserSerializer(user).data, **_issue_tokens(user)}
+    return {
+        "user": UserSerializer(user).data,
+        "dashboard_url": _dashboard_url_for(user),
+        **_issue_tokens(user),
+    }
 
 
 class RegisterView(APIView):
@@ -119,13 +138,33 @@ class ResendOtpView(APIView):
 
 
 class LoginView(APIView):
+    """
+    Single login endpoint for both roles — see UserSerializer's `role`
+    field. This view never filters by role: any active account with a
+    matching email/password authenticates here, admin or customer. Role
+    separation (customer-only vs admin-only sign-in) is enforced entirely
+    on the frontend (auth-store.ts's performLogin), by design — this
+    endpoint is the one thing both /login and /admin/login call.
+    """
+
     permission_classes = [AllowAny]
 
     def post(self, request):
+        email = str(request.data.get("email", "")).strip().lower()
         serializer = LoginSerializer(data=request.data, context={"request": request})
-        serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data["user"]
+        try:
+            serializer.is_valid(raise_exception=True)
+        except Exception:
+            logger.info("auth.login.failed email=%s", email)
+            raise
 
+        user = serializer.validated_data["user"]
+        logger.info(
+            "auth.login.success user_id=%s role=%s dashboard_url=%s",
+            user.id,
+            user.role,
+            _dashboard_url_for(user),
+        )
         return success(_auth_payload(user), message="Login successful.")
 
 

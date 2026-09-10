@@ -1,8 +1,21 @@
-Django==6.1.1
-djangorestframework==3.18.0
+Django==6.0.1
+djangorestframework==3.16.1
 djangorestframework-simplejwt==5.5.1
 django-cors-headers==4.9.0
-Pillow==12.3.0
-python-dotenv==1.2.3
+Pillow==12.1.0
+python-dotenv==1.2.2
 dj-database-url==3.1.2
 qrcode==8.2
+cloudinary==1.44.2
+
+# Production server + Render-specific plumbing. Harmless locally — gunicorn
+# and whitenoise are simply never invoked by `manage.py runserver`, and
+# psycopg2-binary/cloudinary only activate when DATABASE_URL/CLOUDINARY_URL
+# are actually set (see config/settings.py).
+gunicorn==25.1.0
+whitenoise==6.12.0
+psycopg2-binary==2.9.11
+
+# Optional: persistent media storage on Render (see config/settings.py's
+# CLOUDINARY_URL handling). Unused, at zero cost, until that env var is set.
+django-cloudinary-storage==0.3.0
