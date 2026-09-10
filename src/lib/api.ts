@@ -270,6 +270,9 @@ interface ApiProfile {
   profile_public: boolean
   show_contact_info: boolean
   show_in_search: boolean
+  selected_template: string
+  plan: string
+  available_templates: string[]
   social_links: ApiSocialLink[]
   custom_links: ApiCustomLink[]
   custom_fields: ApiCustomField[]
@@ -325,6 +328,7 @@ interface ApiPublicProfile {
   bio: string
   avatar: string
   cover_image: string | null
+  selected_template: string
   social_links: ApiSocialLink[]
   custom_links: ApiCustomLink[]
   custom_fields: ApiCustomField[]
@@ -371,6 +375,9 @@ function toFrontendProfile(p: ApiProfile): Profile {
     coverImage: null,
     status: p.status === "ACTIVE" ? "Active" : "Suspended",
     createdOn: p.created_at,
+    selectedTemplate: p.selected_template,
+    plan: p.plan,
+    availableTemplates: p.available_templates,
     socialLinks: p.social_links
       .slice()
       .sort((a, b) => a.display_order - b.display_order)
@@ -459,6 +466,15 @@ export const profileApi = {
     return profileApi.getMine()
   },
 
+  // Selecting a profile template is handled separately from updateMine —
+  // it lives on the canonical profiles.Profile serializer (same one
+  // `website` already uses), is validated server-side against the
+  // customer's actual plan, and only ever needs this one field sent.
+  updateSelectedTemplate: async (templateId: string): Promise<Profile> => {
+    await request<ApiProfile>("/profiles/me/", { method: "PATCH", body: { selected_template: templateId } })
+    return profileApi.getMine()
+  },
+
   getPrivacySettings: async () => {
     const p = await request<ApiProfile>("/profiles/me/")
     return {
@@ -522,6 +538,7 @@ export const profileApi = {
         coverImage: p.cover_image,
         status: "Active",
         createdOn: "",
+        selectedTemplate: p.selected_template,
         socialLinks: p.social_links
           .slice()
           .sort((a, b) => a.display_order - b.display_order)
@@ -675,10 +692,10 @@ export interface ApiNfcCard {
 }
 
 const CARD_TYPE_MAP: Record<string, NfcCard["cardType"]> = {
-  STANDARD: "Standard",
+  CLASSIC: "Classic",
   PREMIUM: "Premium",
   WOODEN: "Wooden",
-  METAL: "Metal",
+  CUSTOM: "Custom",
 }
 const CARD_STATUS_MAP: Record<string, NfcCard["status"]> = {
   ACTIVE: "Active",
@@ -694,7 +711,7 @@ export function toFrontendCard(c: ApiNfcCard): NfcCard {
     id: String(c.id),
     uid: c.uid,
     serialNumber: c.serial_number,
-    cardType: CARD_TYPE_MAP[c.card_type] ?? "Standard",
+    cardType: CARD_TYPE_MAP[c.card_type] ?? "Classic",
     color: c.color,
     customerId: null,
     customerName: c.customer_name,
@@ -732,10 +749,10 @@ interface ApiAdminNfcCard extends ApiNfcCard {
 }
 
 const CARD_TYPE_REVERSE_MAP: Record<NfcCard["cardType"], string> = {
-  Standard: "STANDARD",
+  Classic: "CLASSIC",
   Premium: "PREMIUM",
   Wooden: "WOODEN",
-  Metal: "METAL",
+  Custom: "CUSTOM",
 }
 const CARD_STATUS_REVERSE_MAP: Record<NfcCard["status"], string> = {
   Active: "ACTIVE",
@@ -914,7 +931,7 @@ function toFrontendMiniCard(c: ApiNfcCardMini, customerId: string, customerName:
     id: String(c.id),
     uid: c.uid,
     serialNumber: c.serial_number,
-    cardType: CARD_TYPE_MAP[c.card_type] ?? "Standard",
+    cardType: CARD_TYPE_MAP[c.card_type] ?? "Classic",
     color: c.color,
     customerId,
     customerName,
@@ -1145,7 +1162,7 @@ function toFrontendOrder(o: ApiAdminOrder): Order {
     items: o.items.map((it) => ({
       productId: it.product_id,
       name: it.name,
-      cardType: CARD_TYPE_MAP[it.card_type] ?? "Standard",
+      cardType: CARD_TYPE_MAP[it.card_type] ?? "Classic",
       color: it.color,
       qty: it.qty,
       price: Number(it.price),
@@ -1560,6 +1577,9 @@ function toFrontendAdminProfile(p: ApiAdminProfile): Profile {
     coverImage: null,
     status: p.status === "ACTIVE" ? "Active" : "Suspended",
     createdOn: p.created_at,
+    // Admin's profile surface doesn't expose template selection (this
+    // feature is customer-facing only, in /qr-code) — default is safe here.
+    selectedTemplate: "classic",
     socialLinks: p.social_links
       .slice()
       .sort((a, b) => a.display_order - b.display_order)

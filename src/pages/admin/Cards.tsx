@@ -34,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { StatusBadge } from "@/components/admin/StatusBadge"
+import { PlanTypeBadge } from "@/components/admin/PlanTypeBadge"
 import { TablePagination } from "@/components/admin/TablePagination"
 import { CardFormDialog, type CardFormValues } from "@/components/admin/CardFormDialog"
 import { CustomerPicker } from "@/components/admin/CustomerPicker"
@@ -253,7 +254,9 @@ export default function AdminCards() {
                     <TableRow key={c.id}>
                       <TableCell className="font-medium">{c.id}</TableCell>
                       <TableCell className="text-muted-foreground">{c.uid}</TableCell>
-                      <TableCell>{c.cardType}</TableCell>
+                      <TableCell>
+                        <PlanTypeBadge cardType={c.cardType} />
+                      </TableCell>
                       <TableCell>{c.customerName ?? "Unassigned"}</TableCell>
                       <TableCell>
                         <StatusBadge status={c.status} />

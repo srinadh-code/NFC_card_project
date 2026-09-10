@@ -6,7 +6,7 @@ export type CustomerStatus = "Active" | "Inactive"
 // "Assigned" = admin has linked this card to a customer but they haven't
 // tapped "Activate" yet (card is physically with them, not yet live).
 export type CardStatus = "Active" | "Assigned" | "Inactive" | "Blocked" | "Lost" | "Unassigned"
-export type CardType = "Standard" | "Premium" | "Wooden" | "Metal"
+export type CardType = "Classic" | "Premium" | "Wooden" | "Custom"
 export type ProfileStatus = "Active" | "Suspended"
 
 export type OrderStatus =
@@ -73,7 +73,6 @@ export interface OrderItem {
   color: string
   qty: number
   price: number
-  customLogo?: string
 }
 
 export interface TrackingStep {
@@ -175,6 +174,13 @@ export interface Profile {
   coverImage: string | null
   status: ProfileStatus
   createdOn: string
+  // Which profile-card visual template this customer has chosen, the plan
+  // that entitlement is derived from, and the full set of template ids
+  // their plan allows picking from. Not present on a public-profile fetch
+  // except `selectedTemplate` (plan/entitlement are owner-only concerns).
+  selectedTemplate: string
+  plan?: string
+  availableTemplates?: string[]
   socialLinks: SocialLink[]
   customLinks: CustomLink[]
   customFields: CustomField[]
@@ -239,7 +245,6 @@ export interface CartLine {
   color: { name: string; hex: string }
   qty: number
   price: number
-  customLogo?: string | null
 }
 
 export interface AdminUser {

@@ -4,7 +4,7 @@ import { toast } from "sonner"
 import { Lock, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { DigitalCardPreview } from "@/components/customer/DigitalCardPreview"
+import { ThemedDigitalCardPreview } from "@/components/customer/profile-templates"
 import { profileApi } from "@/lib/api"
 
 function EmptyShell({ title, description }: { title: string; description: string }) {
@@ -91,7 +91,7 @@ export default function PublicProfile() {
           </Link>
         </div>
 
-        <DigitalCardPreview
+        <ThemedDigitalCardPreview
           profile={profile}
           onShare={handleShare}
           showContactInfo={Boolean(profile.email || profile.phone)}

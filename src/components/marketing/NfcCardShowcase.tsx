@@ -1,28 +1,22 @@
 ﻿import { Globe, Lock, Nfc } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-function ChipIcon() {
-  return (
-    <div className="relative h-6 w-8 rounded-[4px] bg-gradient-to-br from-yellow-200 via-yellow-400 to-yellow-600 shadow-inner">
-      <div className="absolute inset-0.5 rounded-[2px] border border-yellow-700/40" />
-      <div className="absolute inset-x-0.5 top-1/2 h-px -translate-y-1/2 bg-yellow-700/40" />
-      <div className="absolute inset-y-0.5 left-1/2 w-px -translate-x-1/2 bg-yellow-700/40" />
-    </div>
-  )
-}
-
-export type NfcCardTone = "front" | "back" | "gold"
+export type NfcCardTone = "front" | "back" | "gold" | "custom"
 
 const TONE_TRIM: Record<NfcCardTone, string> = {
   front: "bg-gradient-brand shadow-[0_25px_60px_rgba(124,58,237,0.45)]",
   back: "bg-gradient-to-br from-[#2563EB]/70 to-[#7C3AED]/70",
   gold: "bg-gradient-to-br from-[#F59E0B] via-[#FBBF24] to-[#F59E0B] shadow-[0_25px_60px_rgba(245,158,11,0.4)]",
+  // Shifting multi-hue trim signals "customizable" (color/logo/design all
+  // configurable), distinct from the fixed brand-gradient/gold finishes.
+  custom: "bg-gradient-to-br from-[#2563EB] via-[#7C3AED] to-[#EC4899] shadow-[0_25px_60px_rgba(236,72,153,0.4)]",
 }
 
 const TONE_BADGE: Record<NfcCardTone, string> = {
   front: "bg-gradient-brand shadow-glow-primary",
   back: "bg-gradient-brand shadow-glow-primary",
   gold: "bg-gradient-to-br from-[#F59E0B] to-[#FBBF24] shadow-[0_4px_14px_rgba(245,158,11,0.4)]",
+  custom: "bg-gradient-to-br from-[#2563EB] via-[#7C3AED] to-[#EC4899] shadow-[0_4px_14px_rgba(124,58,237,0.4)]",
 }
 
 export function NfcCardFace({ tone }: { tone: NfcCardTone }) {
@@ -37,8 +31,7 @@ export function NfcCardFace({ tone }: { tone: NfcCardTone }) {
         {/* neon reflection sweep */}
         <div className="pointer-events-none absolute -inset-x-1/2 -top-1/2 h-[200%] w-[80%] rotate-12 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
-        <div className="relative flex items-start justify-between">
-          <ChipIcon />
+        <div className="relative flex items-start justify-end">
           <div className="flex items-center gap-1 text-white/70">
             <span className="text-[10px] font-semibold tracking-wider">NFC</span>
             <Nfc className="size-4 -rotate-90" />

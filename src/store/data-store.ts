@@ -239,6 +239,7 @@ export const useDataStore = create<DataState>()(
             coverImage: null,
             status: "Active",
             createdOn: now,
+            selectedTemplate: "classic",
             services: [],
             socialLinks: DEFAULT_SOCIAL_PLATFORMS.map((platform, order) => ({
               platform,

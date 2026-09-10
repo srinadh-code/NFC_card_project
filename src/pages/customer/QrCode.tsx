@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { DigitalCardPreview } from "@/components/customer/DigitalCardPreview"
+import { ThemedDigitalCardPreview } from "@/components/customer/profile-templates"
+import { ProfileTemplatesSection } from "@/components/customer/ProfileTemplatesSection"
 import { ErrorState } from "@/components/customer/ErrorState"
 import { ProfileNotReady } from "@/components/customer/ProfileNotReady"
 import { useEnsuredProfile } from "@/hooks/use-ensured-profile"
@@ -149,6 +150,8 @@ export default function CustomerQrCode() {
         </p>
       </div>
 
+      <ProfileTemplatesSection profile={profile} />
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card className="rounded-2xl">
           <CardHeader>
@@ -206,7 +209,7 @@ export default function CustomerQrCode() {
             <CardDescription>What people see after scanning your code.</CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center py-6">
-            <DigitalCardPreview profile={profile} onShare={handleShare} />
+            <ThemedDigitalCardPreview profile={profile} onShare={handleShare} />
           </CardContent>
         </Card>
       </div>

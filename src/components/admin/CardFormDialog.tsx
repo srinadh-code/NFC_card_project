@@ -13,7 +13,17 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CustomerPicker } from "@/components/admin/CustomerPicker"
+import { PLAN_ACCENT, PLAN_BY_CARD_TYPE } from "@/components/admin/PlanTypeBadge"
+import { cn } from "@/lib/utils"
 import type { NfcCard, CardType, CardStatus } from "@/types"
+
+// The 3 NEXORA-plan-mapped Card Type values — the only ones offered here.
+// "Wooden" has no NEXORA plan and isn't presented as a choice (the backend
+// enum itself still allows it; this only changes what this form offers).
+// Label/description come straight from NEXORA_CARD_TYPES (via
+// PLAN_BY_CARD_TYPE) — the same data the public /shop page reads — rather
+// than a second, separately-worded copy.
+const CARD_TYPE_ORDER: CardType[] = ["Classic", "Premium", "Custom"]
 
 export interface CardFormValues {
   uid: string
@@ -30,7 +40,7 @@ function emptyValues(): CardFormValues {
   return {
     uid: "",
     serialNumber: "",
-    cardType: "Standard",
+    cardType: "Classic",
     color: "Black",
     customerEmail: "",
     status: "Unassigned",
@@ -39,7 +49,6 @@ function emptyValues(): CardFormValues {
   }
 }
 
-const CARD_TYPES: CardType[] = ["Standard", "Premium", "Wooden", "Metal"]
 const CARD_STATUSES: CardStatus[] = ["Unassigned", "Assigned", "Inactive", "Active", "Blocked", "Lost"]
 const COLORS = ["Black", "Blue", "Red", "White", "Green", "Silver", "Gold", "Natural"]
 
@@ -55,6 +64,7 @@ export function CardFormDialog({
   onSubmit: (values: CardFormValues) => void
 }) {
   const [values, setValues] = useState<CardFormValues>(emptyValues())
+  const [dragOverTarget, setDragOverTarget] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -108,20 +118,82 @@ export function CardFormDialog({
               onChange={(e) => set("serialNumber", e.target.value)}
             />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="nf-type">Card Type</Label>
-            <Select value={values.cardType} onValueChange={(v) => set("cardType", v as CardType)}>
-              <SelectTrigger id="nf-type" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CARD_TYPES.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <Label>Card Type</Label>
+            <p className="text-xs text-muted-foreground">
+              Drag a plan onto the box below to select it — or just click one.
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {CARD_TYPE_ORDER.map((cardType) => {
+                const plan = PLAN_BY_CARD_TYPE[cardType]
+                const selected = values.cardType === cardType
+                const accent = plan ? PLAN_ACCENT[plan.id] : undefined
+                return (
+                  <button
+                    key={cardType}
+                    type="button"
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/plain", cardType)
+                      e.dataTransfer.effectAllowed = "move"
+                    }}
+                    onClick={() => set("cardType", cardType)}
+                    className={cn(
+                      "flex cursor-grab flex-col items-start gap-1 rounded-xl border p-2.5 text-left transition-colors active:cursor-grabbing",
+                      selected ? "border-transparent" : "border-[#E2E8F0] hover:bg-accent/50",
+                    )}
+                    style={selected ? { boxShadow: `0 0 0 2px ${accent ?? "#94A3B8"}` } : undefined}
+                  >
+                    <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                      <span
+                        className="size-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: accent ?? "#94A3B8" }}
+                      />
+                      {plan ? plan.name.replace("NEXORA ", "") : cardType}
+                    </span>
+                    <span className="text-[11px] leading-tight text-muted-foreground">
+                      {plan ? plan.bestFor : cardType}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Drop target — dragging one of the chips above onto this box
+                selects it, same as clicking the chip directly. Always shows
+                whatever is currently selected (never truly empty, since
+                cardType always has a value). */}
+            <div
+              onDragOver={(e) => {
+                e.preventDefault()
+                setDragOverTarget(true)
+              }}
+              onDragLeave={() => setDragOverTarget(false)}
+              onDrop={(e) => {
+                e.preventDefault()
+                setDragOverTarget(false)
+                const dropped = e.dataTransfer.getData("text/plain") as CardType
+                if (CARD_TYPE_ORDER.includes(dropped)) set("cardType", dropped)
+              }}
+              className={cn(
+                "mt-1 flex items-center gap-2 rounded-xl border-2 border-dashed p-2.5 text-sm transition-colors",
+                dragOverTarget ? "border-[#4F46E5] bg-[#4F46E5]/5" : "border-[#CBD5E1]",
+              )}
+            >
+              {(() => {
+                const plan = PLAN_BY_CARD_TYPE[values.cardType]
+                const accent = plan ? PLAN_ACCENT[plan.id] : undefined
+                return (
+                  <>
+                    <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: accent ?? "#94A3B8" }} />
+                    <span className="font-semibold text-foreground">
+                      {plan ? plan.name.replace("NEXORA ", "") : values.cardType}
+                    </span>
+                    <span className="text-xs text-muted-foreground">selected</span>
+                  </>
+                )
+              })()}
+            </div>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="nf-color">Color</Label>
