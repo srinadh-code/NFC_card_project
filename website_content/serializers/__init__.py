@@ -1,6 +1,7 @@
 from .home import (
     HomeHeroSerializer,
     HomeHeroFeatureHighlightSerializer,
+    HomeBottomBarItemSerializer,
     HomeHowItFeelsSerializer,
     HomeHowItFeelsPointSerializer,
     HomeCTASerializer,
@@ -30,6 +31,7 @@ from .settings import GeneralSettingsSerializer, PublicGeneralSettingsSerializer
 __all__ = [
     "HomeHeroSerializer",
     "HomeHeroFeatureHighlightSerializer",
+    "HomeBottomBarItemSerializer",
     "HomeHowItFeelsSerializer",
     "HomeHowItFeelsPointSerializer",
     "HomeCTASerializer",

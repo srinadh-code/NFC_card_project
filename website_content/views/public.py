@@ -24,6 +24,7 @@ from website_content.models import (
     Faq,
     Feature,
     GeneralSettings,
+    HomeBottomBarItem,
     HomeCTA,
     HomeHero,
     HomeHeroFeatureHighlight,
@@ -44,6 +45,7 @@ from website_content.serializers import (
     ContactMessageCreateSerializer,
     FaqSerializer,
     FeatureSerializer,
+    HomeBottomBarItemSerializer,
     HomeCTASerializer,
     HomeHeroFeatureHighlightSerializer,
     HomeHeroSerializer,
@@ -73,6 +75,9 @@ class HomePublicView(APIView):
             "hero": HomeHeroSerializer(hero).data if hero else None,
             "hero_features": HomeHeroFeatureHighlightSerializer(
                 HomeHeroFeatureHighlight.objects.filter(is_active=True), many=True
+            ).data,
+            "bottom_bar": HomeBottomBarItemSerializer(
+                HomeBottomBarItem.objects.filter(is_active=True), many=True
             ).data,
             "how_it_feels": (
                 {

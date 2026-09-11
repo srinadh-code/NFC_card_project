@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from website_content.models import (
     HomeCTA,
+    HomeBottomBarItem,
     HomeHero,
     HomeHeroFeatureHighlight,
     HomeHowItFeels,
@@ -10,20 +11,23 @@ from website_content.models import (
 
 
 class HomeHeroSerializer(serializers.ModelSerializer):
-    hero_image_url = serializers.CharField(read_only=True)
+    phone_image_url = serializers.CharField(read_only=True)
+    nfc_card_image_url = serializers.CharField(read_only=True)
 
     class Meta:
         model = HomeHero
         fields = [
             "id",
             "badge",
-            "heading",
+            "heading_line1",
+            "heading_line2",
             "description",
             "primary_cta_text",
             "primary_cta_link",
             "secondary_cta_text",
             "secondary_cta_link",
-            "hero_image_url",
+            "phone_image_url",
+            "nfc_card_image_url",
             "is_active",
         ]
 
@@ -31,7 +35,13 @@ class HomeHeroSerializer(serializers.ModelSerializer):
 class HomeHeroFeatureHighlightSerializer(serializers.ModelSerializer):
     class Meta:
         model = HomeHeroFeatureHighlight
-        fields = ["id", "icon", "label", "display_order", "is_active"]
+        fields = ["id", "icon", "label", "description", "display_order", "is_active"]
+
+
+class HomeBottomBarItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HomeBottomBarItem
+        fields = ["id", "icon", "title", "description", "display_order", "is_active"]
 
 
 class HomeHowItFeelsSerializer(serializers.ModelSerializer):

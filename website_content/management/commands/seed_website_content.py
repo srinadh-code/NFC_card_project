@@ -21,6 +21,7 @@ from website_content.models import (
     Company,
     Faq,
     Feature,
+    HomeBottomBarItem,
     HomeCTA,
     HomeHero,
     HomeHeroFeatureHighlight,
@@ -53,11 +54,12 @@ class Command(BaseCommand):
     def _seed_home(self):
         HomeHero.objects.get_or_create(
             defaults=dict(
-                badge="VR'S NEXORA · DIGITAL IDENTITY PLATFORM",
-                heading="One Tap. Unlimited Connections.",
+                badge="SMARTER NETWORKING",
+                heading_line1="Share Your Identity",
+                heading_line2="with a Single Tap",
                 description=(
-                    "Transform every introduction into a lasting digital connection "
-                    "using NFC-powered smart identity cards."
+                    "Create your digital profile, share it via NFC or QR, and make a "
+                    "lasting impression."
                 ),
                 primary_cta_text="Order Your Card",
                 primary_cta_link="/shop",
@@ -67,14 +69,24 @@ class Command(BaseCommand):
         )
 
         highlights = [
-            ("UserCog", "Digital Business Profile"),
-            ("Nfc", "NFC & QR Code"),
-            ("BarChart3", "Real-time Analytics"),
-            ("Zap", "Easy to Use"),
+            ("Zap", "Instant Sharing", "NFC & QR Enabled"),
+            ("Smartphone", "Custom Profiles", "Personal or Business"),
+            ("ShieldCheck", "Secure & Flexible", "Update Anytime"),
+            ("Link2", "All Your Links", "In One Place"),
         ]
-        for order, (icon, label) in enumerate(highlights):
+        for order, (icon, label, description) in enumerate(highlights):
             HomeHeroFeatureHighlight.objects.get_or_create(
-                label=label, defaults=dict(icon=icon, display_order=order)
+                label=label, defaults=dict(icon=icon, description=description, display_order=order)
+            )
+
+        bottom_bar = [
+            ("", "Join thousands of professionals", "Building their digital identity"),
+            ("Handshake", "One Card", "Endless Opportunities"),
+            ("Leaf", "Sustainable", "Go Paperless"),
+        ]
+        for order, (icon, title, description) in enumerate(bottom_bar):
+            HomeBottomBarItem.objects.get_or_create(
+                title=title, defaults=dict(icon=icon, description=description, display_order=order)
             )
 
         HomeHowItFeels.objects.get_or_create(

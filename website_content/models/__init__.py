@@ -1,6 +1,7 @@
 from .home import (
     HomeHero,
     HomeHeroFeatureHighlight,
+    HomeBottomBarItem,
     HomeHowItFeels,
     HomeHowItFeelsPoint,
     HomeCTA,
@@ -25,6 +26,7 @@ from .settings import GeneralSettings
 __all__ = [
     "HomeHero",
     "HomeHeroFeatureHighlight",
+    "HomeBottomBarItem",
     "HomeHowItFeels",
     "HomeHowItFeelsPoint",
     "HomeCTA",

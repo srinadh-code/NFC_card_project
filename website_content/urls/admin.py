@@ -25,12 +25,16 @@ from website_content.views.admin import (
     FeatureAdminListView,
     FeatureAdminReorderView,
     GeneralSettingsAdminView,
+    HomeBottomBarItemAdminDetailView,
+    HomeBottomBarItemAdminListView,
+    HomeBottomBarItemAdminReorderView,
     HomeCTAAdminView,
     HomeHeroAdminView,
     HomeHeroFeatureHighlightAdminDetailView,
     HomeHeroFeatureHighlightAdminListView,
     HomeHeroFeatureHighlightAdminReorderView,
-    HomeHeroImageAdminView,
+    HomeHeroNfcCardImageAdminView,
+    HomeHeroPhoneImageAdminView,
     HomeHowItFeelsAdminView,
     HomeHowItFeelsPointAdminDetailView,
     HomeHowItFeelsPointAdminListView,
@@ -53,7 +57,16 @@ from website_content.views.admin import (
 urlpatterns = [
     # Home
     path("home/hero/", HomeHeroAdminView.as_view(), name="admin-home-hero"),
-    path("home/hero/image/", HomeHeroImageAdminView.as_view(), name="admin-home-hero-image"),
+    path(
+        "home/hero/phone-image/",
+        HomeHeroPhoneImageAdminView.as_view(),
+        name="admin-home-hero-phone-image",
+    ),
+    path(
+        "home/hero/nfc-card-image/",
+        HomeHeroNfcCardImageAdminView.as_view(),
+        name="admin-home-hero-nfc-card-image",
+    ),
     path(
         "home/hero-features/",
         HomeHeroFeatureHighlightAdminListView.as_view(),
@@ -68,6 +81,21 @@ urlpatterns = [
         "home/hero-features/<int:pk>/",
         HomeHeroFeatureHighlightAdminDetailView.as_view(),
         name="admin-home-hero-feature-detail",
+    ),
+    path(
+        "home/bottom-bar/",
+        HomeBottomBarItemAdminListView.as_view(),
+        name="admin-home-bottom-bar",
+    ),
+    path(
+        "home/bottom-bar/reorder/",
+        HomeBottomBarItemAdminReorderView.as_view(),
+        name="admin-home-bottom-bar-reorder",
+    ),
+    path(
+        "home/bottom-bar/<int:pk>/",
+        HomeBottomBarItemAdminDetailView.as_view(),
+        name="admin-home-bottom-bar-detail",
     ),
     path("home/how-it-feels/", HomeHowItFeelsAdminView.as_view(), name="admin-home-how-it-feels"),
     path(

@@ -23,6 +23,7 @@ from website_content.models import (
     Faq,
     Feature,
     GeneralSettings,
+    HomeBottomBarItem,
     HomeCTA,
     HomeHero,
     HomeHeroFeatureHighlight,
@@ -45,6 +46,7 @@ from website_content.serializers import (
     FaqSerializer,
     FeatureSerializer,
     GeneralSettingsSerializer,
+    HomeBottomBarItemSerializer,
     HomeCTASerializer,
     HomeHeroFeatureHighlightSerializer,
     HomeHeroSerializer,
@@ -75,11 +77,19 @@ class HomeHeroAdminView(AdminSingletonAPIView):
     serializer_class = HomeHeroSerializer
 
 
-class HomeHeroImageAdminView(AdminSingletonImageUploadAPIView):
+class HomeHeroPhoneImageAdminView(AdminSingletonImageUploadAPIView):
     model = HomeHero
     serializer_class = HomeHeroSerializer
-    url_field = "hero_image_url"
-    public_id_field = "hero_image_public_id"
+    url_field = "phone_image_url"
+    public_id_field = "phone_image_public_id"
+    folder = "website/home"
+
+
+class HomeHeroNfcCardImageAdminView(AdminSingletonImageUploadAPIView):
+    model = HomeHero
+    serializer_class = HomeHeroSerializer
+    url_field = "nfc_card_image_url"
+    public_id_field = "nfc_card_image_public_id"
     folder = "website/home"
 
 
@@ -95,6 +105,20 @@ class HomeHeroFeatureHighlightAdminDetailView(AdminDetailAPIView):
 
 class HomeHeroFeatureHighlightAdminReorderView(AdminReorderAPIView):
     model = HomeHeroFeatureHighlight
+
+
+class HomeBottomBarItemAdminListView(AdminListCreateAPIView):
+    model = HomeBottomBarItem
+    serializer_class = HomeBottomBarItemSerializer
+
+
+class HomeBottomBarItemAdminDetailView(AdminDetailAPIView):
+    model = HomeBottomBarItem
+    serializer_class = HomeBottomBarItemSerializer
+
+
+class HomeBottomBarItemAdminReorderView(AdminReorderAPIView):
+    model = HomeBottomBarItem
 
 
 class HomeHowItFeelsAdminView(AdminSingletonAPIView):
