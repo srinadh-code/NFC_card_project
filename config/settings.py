@@ -135,11 +135,23 @@ AUTH_USER_MODEL = "accounts.User"
 
 
 # Password validation
+#
+# One policy for every flow that sets a password (register, reset, change) —
+# they all run through validate_password() in accounts/serializers.py, so the
+# rules are declared here once rather than per endpoint. The signup form's
+# live checklist mirrors these rules for feedback only; this list is what
+# actually decides. Effective policy: 8-12 characters, with at least one
+# lowercase letter, one uppercase letter, one number and one special
+# character, and not a common or wholly numeric password.
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 8},
+    },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    {"NAME": "accounts.validators.PasswordComplexityValidator"},
 ]
 
 
@@ -254,6 +266,22 @@ CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(_csrf_trusted))  # de-dupe, keep order
 # Google OAuth integration point (Phase A stub — see accounts/views.py GoogleLoginView).
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
 GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
+
+# Brevo — sends the password-reset OTP by email via Brevo's HTTP API (see
+# accounts/emails.py's send_password_reset_otp_email). Leave BREVO_API_KEY
+# unset locally: that function logs a clear "not configured" warning and
+# returns False rather than faking a successful send — the forgot-password
+# response is identical either way, so this never affects account-
+# enumeration behavior.
+#
+# Provider-independent by design: accounts/emails.py never sees a personal
+# vs. company Brevo account, only these three settings. Swapping a
+# development API key for the company's later (or replacing Brevo with a
+# different provider's function entirely) is purely an environment/
+# deployment change — no application code needs to change either way.
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "").strip()
+BREVO_SENDER_EMAIL = os.environ.get("BREVO_SENDER_EMAIL", "").strip() or DEFAULT_FROM_EMAIL
+BREVO_SENDER_NAME = os.environ.get("BREVO_SENDER_NAME", "").strip()
 
 
 # Cloudinary — image storage for the Website Content module only. Credentials

@@ -7,6 +7,7 @@ python-dotenv==1.2.2
 dj-database-url==3.1.2
 qrcode==8.2
 cloudinary==1.44.2
+requests==2.32.3
 
 # Production server + Render-specific plumbing. Harmless locally — gunicorn
 # and whitenoise are simply never invoked by `manage.py runserver`, and
