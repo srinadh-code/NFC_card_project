@@ -60,6 +60,23 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Pulls a single field's message(s) out of an ApiError's `errors` (DRF's
+ * {"field_name": ["msg1", "msg2"]} shape, from common/response.py's error
+ * envelope) — for forms that show a backend validation error inline under
+ * the field it belongs to, instead of a generic toast. Returns null when
+ * that field has nothing to show, so callers can fall back to a toast for
+ * errors that aren't about a specific field (e.g. an expired token, a
+ * network failure).
+ */
+export function fieldErrorMessage(errors: Record<string, unknown> | undefined, field: string): string | null {
+  const value = errors?.[field]
+  if (value == null) return null
+  if (Array.isArray(value)) return value.length ? value.map(String).join(" ") : null
+  const text = String(value)
+  return text ? text : null
+}
+
 export interface Pagination {
   count: number
   page: number
@@ -219,21 +236,35 @@ export const authApi = {
   verifyEmail: (data: { email: string; otp: string }) =>
     request<AuthPayload>("/auth/verify-email/", { method: "POST", body: data, auth: false }),
 
+  // `expires_at` is only present for purpose: "RESET" (REGISTER resends
+  // have no frontend countdown UI today) — always present for RESET,
+  // real or not, so its presence never reveals whether the account exists.
   resendOtp: (data: { email: string; purpose?: "REGISTER" | "RESET" }) =>
-    request<null>("/auth/resend-otp/", { method: "POST", body: data, auth: false }),
+    request<{ expires_at?: string } | null>("/auth/resend-otp/", { method: "POST", body: data, auth: false }),
 
   login: (data: { email: string; password: string }) =>
     request<AuthPayload>("/auth/login/", { method: "POST", body: data, auth: false }),
 
   logout: (refresh: string) => request<null>("/auth/logout/", { method: "POST", body: { refresh } }),
 
+  // `expires_at` is when the just-issued OTP stops being valid (backend-
+  // authoritative — see accounts/views.py's ForgotPasswordView) — always
+  // present, real or synthetic, whether or not the account actually
+  // exists, so its value never reveals account existence either.
   forgotPassword: (data: { email: string }) =>
-    request<null>("/auth/forgot-password/", { method: "POST", body: data, auth: false }),
+    request<{ expires_at: string }>("/auth/forgot-password/", { method: "POST", body: data, auth: false }),
 
-  resetPassword: (data: { email: string; otp: string; new_password: string }) =>
+  // Verifies the emailed OTP and grants the short-lived, single-purpose
+  // reset_token that resetPassword below requires — the backend is
+  // authoritative here, this is not a "mark verified" flag the frontend
+  // can fake its way past.
+  verifyResetOtp: (data: { email: string; otp: string }) =>
+    request<{ reset_token: string }>("/auth/verify-reset-otp/", { method: "POST", body: data, auth: false }),
+
+  resetPassword: (data: { reset_token: string; new_password: string; confirm_password: string }) =>
     request<null>("/auth/reset-password/", { method: "POST", body: data, auth: false }),
 
-  changePassword: (data: { current_password: string; new_password: string }) =>
+  changePassword: (data: { current_password: string; new_password: string; confirm_password: string }) =>
     request<null>("/auth/change-password/", { method: "POST", body: data }),
 
   me: () => request<ApiUser>("/auth/me/"),
