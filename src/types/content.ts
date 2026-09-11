@@ -12,19 +12,30 @@ export interface WithId {
 
 export interface Hero extends WithId {
   badge: string
-  heading: string
+  heading_line1: string
+  heading_line2: string
   description: string
   primary_cta_text: string
   primary_cta_link: string
   secondary_cta_text: string
   secondary_cta_link: string
-  hero_image_url: string | null
+  phone_image_url: string | null
+  nfc_card_image_url: string | null
   is_active: boolean
 }
 
 export interface HeroFeature extends WithId {
   icon: string
   label: string
+  description: string
+  display_order: number
+  is_active: boolean
+}
+
+export interface BottomBarItem extends WithId {
+  icon: string
+  title: string
+  description: string
   display_order: number
   is_active: boolean
 }
@@ -192,6 +203,7 @@ export interface ContactMessage extends WithId {
 export interface PublicHomePayload {
   hero: Hero | null
   hero_features: HeroFeature[]
+  bottom_bar: BottomBarItem[]
   how_it_feels: (HowItFeels & { points: HowItFeelsPoint[] }) | null
   companies: Company[]
   statistics: Statistic[]

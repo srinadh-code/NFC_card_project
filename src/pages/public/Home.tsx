@@ -1,17 +1,6 @@
 import { useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import {
-  CheckCircle2,
-  ArrowRight,
-  MessageCircle,
-  PlayCircle,
-  Star,
-  Wifi,
-  Briefcase,
-  Camera,
-  AtSign,
-  TrendingUp,
-} from "lucide-react"
+import { ArrowRight, ArrowUpLeft, MessageCircle, PlayCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
@@ -31,7 +20,6 @@ import type { Testimonial as PublicTestimonial } from "@/types/content"
 import type { Testimonial } from "@/types"
 
 const AVATAR_SEEDS = ["ananya-reddy", "rahul-menon", "priya-nair", "karthik-iyer"]
-const HERO_PROFILE_AVATAR = "https://api.dicebear.com/9.x/notionists/svg?seed=alex-morgan"
 
 function toTestimonial(t: PublicTestimonial): Testimonial {
   return {
@@ -79,7 +67,7 @@ export default function Home() {
   return (
     <div>
       {/* Hero */}
-      <section className="relative overflow-hidden bg-background pb-20 pt-16 sm:pt-20">
+      <section className="relative overflow-hidden bg-background pb-16 pt-16 sm:pt-20">
         <div className="container-page grid items-center gap-12 lg:grid-cols-2">
           <div>
             {isLoading ? (
@@ -95,133 +83,136 @@ export default function Home() {
                     {hero.badge}
                   </span>
                 )}
-                <h1 className="mt-5 text-gradient-brand text-4xl font-bold leading-tight tracking-tight sm:text-5xl md:text-6xl">
-                  {hero?.heading}
+                <h1 className="mt-5 text-4xl font-bold leading-tight tracking-tight text-foreground sm:text-5xl md:text-6xl">
+                  {hero?.heading_line1}
+                  <br />
+                  <span className="text-gradient-brand">{hero?.heading_line2}</span>
                 </h1>
                 <p className="mt-6 max-w-lg text-lg text-muted-foreground">{hero?.description}</p>
               </>
-            )}
-            {data && data.hero_features.length > 0 && (
-              <ul className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {data.hero_features.map((item) => (
-                  <li key={item.id} className="flex items-center gap-2 text-sm font-medium text-foreground">
-                    <CheckCircle2 className="size-5 shrink-0 text-primary" />
-                    {item.label}
-                  </li>
-                ))}
-              </ul>
             )}
             <div className="mt-10 flex flex-wrap gap-4">
               <Button
                 size="lg"
                 variant="gradient"
+                className="gap-2 rounded-full"
                 onClick={() => navigate(hero?.primary_cta_link || "/shop")}
               >
                 {hero?.primary_cta_text || "Order Your Card"}
+                <ArrowRight className="size-4" />
               </Button>
               <Button
                 size="lg"
                 variant="outline"
-                className="gap-2 border-primary text-primary transition-all duration-300 hover:bg-primary/5"
+                className="gap-2 rounded-full border-border bg-card text-foreground shadow-sm hover:bg-secondary"
                 onClick={() => {
                   if (hero?.secondary_cta_link) navigate(hero.secondary_cta_link)
                   else setDemoOpen(true)
                 }}
               >
-                <PlayCircle className="size-4" />
+                <PlayCircle className="size-4 text-primary" />
                 {hero?.secondary_cta_text || "Watch Demo"}
               </Button>
             </div>
-            <div className="mt-8 flex flex-wrap items-center gap-4">
-              <div className="flex -space-x-3">
-                {AVATAR_SEEDS.map((seed) => (
-                  <img
-                    key={seed}
-                    src={`https://api.dicebear.com/9.x/notionists/svg?seed=${seed}`}
-                    alt=""
-                    className="size-10 rounded-full border-2 border-white bg-secondary shadow-sm"
-                  />
-                ))}
+            {data && data.hero_features.length > 0 && (
+              <div className="mt-12 grid grid-cols-2 gap-6 sm:grid-cols-4">
+                {data.hero_features.map((item) => {
+                  const Icon = resolveIcon(item.icon)
+                  return (
+                    <div key={item.id}>
+                      <span className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                        <Icon className="size-5" />
+                      </span>
+                      <p className="mt-3 text-sm font-semibold text-foreground">{item.label}</p>
+                      <p className="text-xs text-muted-foreground">{item.description}</p>
+                    </div>
+                  )
+                })}
               </div>
-              <div>
-                <div className="flex items-center gap-0.5">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star key={i} className="size-4 fill-[#F59E0B] text-[#F59E0B]" />
-                  ))}
-                </div>
-                <p className="text-sm font-medium text-foreground">10,000+ Happy Users</p>
-              </div>
-            </div>
+            )}
           </div>
 
-          <div className="relative flex items-center justify-center py-10">
+          <div className="relative flex items-center justify-center py-10 lg:justify-end">
+            {/* Decorative floating gesture caption */}
+            <div className="absolute -top-2 right-4 z-20 hidden -rotate-6 flex-col items-end gap-1 text-right sm:flex">
+              <ArrowUpLeft className="size-5 text-primary" />
+              <p className="font-serif text-base italic leading-tight text-muted-foreground">
+                Tap
+                <br />
+                Connect
+                <br />
+                Grow
+              </p>
+            </div>
+
             <div className="absolute size-80 rounded-full bg-gradient-to-br from-[#4F46E5]/25 via-[#7C3AED]/25 to-[#EC4899]/25 blur-3xl sm:size-96" />
 
-            {/* NFC card, tilted behind the phone */}
-            <div className="absolute left-1/2 top-1/2 z-0 h-52 w-80 -translate-x-[62%] -translate-y-1/2 -rotate-6 animate-float-slower rounded-[24px] bg-gradient-to-br from-[#0F172A] to-[#1E293B] p-6 shadow-2xl">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold tracking-tight text-white">VR's NEXORA</span>
-                <Wifi className="size-5 rotate-90 text-white/70" />
-              </div>
-              <p className="mt-16 text-lg font-semibold tracking-tight text-white/90">VR's NEXORA</p>
-            </div>
+            {/* NFC card image, tilted behind the phone — admin-managed, no fallback graphic */}
+            {hero?.nfc_card_image_url && (
+              <img
+                src={hero.nfc_card_image_url}
+                alt="VR's NEXORA NFC card"
+                className="absolute right-0 top-1/2 z-0 w-56 -translate-y-1/2 translate-x-10 rotate-6 animate-float-slower drop-shadow-2xl sm:w-64"
+              />
+            )}
 
-            {/* Phone mockup */}
-            <div className="relative z-10 flex h-[420px] w-[220px] items-center justify-center rounded-[2.5rem] border-[6px] border-[#0F172A] bg-[#0F172A] shadow-2xl sm:h-[460px] sm:w-[230px]">
-              <span className="absolute left-1/2 top-2.5 h-1.5 w-16 -translate-x-1/2 rounded-full bg-white/20" />
-              <div className="flex h-full w-full flex-col items-center gap-3 overflow-hidden rounded-[2rem] bg-gradient-brand-br px-5 pb-6 pt-10 text-center">
-                <img
-                  src={HERO_PROFILE_AVATAR}
-                  alt="Alex Morgan"
-                  className="size-16 rounded-full border-2 border-white/70 object-cover"
-                />
-                <div>
-                  <p className="text-sm font-bold text-white">Alex Morgan</p>
-                  <p className="text-xs text-white/75">Product Designer</p>
-                  <p className="text-[11px] text-white/60">VR's NEXORA</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {[Briefcase, Camera, AtSign, MessageCircle].map((Icon, i) => (
-                    <span key={i} className="flex size-6 items-center justify-center rounded-full bg-white/15 text-white">
-                      <Icon className="size-3.5" />
-                    </span>
-                  ))}
-                </div>
-                <div className="mt-auto flex w-full flex-col gap-2">
-                  <span className="rounded-xl bg-white/95 py-2 text-xs font-semibold text-[#4F46E5] shadow-sm">
-                    Save Contact
-                  </span>
-                  <span className="rounded-xl border border-white/40 py-2 text-xs font-semibold text-white">
-                    Share Profile
-                  </span>
-                </div>
+            {/* Phone mockup image — admin-managed */}
+            {hero?.phone_image_url ? (
+              <img
+                src={hero.phone_image_url}
+                alt="VR's NEXORA digital profile preview"
+                className="relative z-10 w-[260px] drop-shadow-2xl sm:w-[300px]"
+              />
+            ) : (
+              <div className="relative z-10 flex h-[420px] w-[220px] items-center justify-center rounded-[2.5rem] border-[6px] border-[#0F172A] bg-[#0F172A] p-6 text-center shadow-2xl sm:h-[460px] sm:w-[230px]">
+                <p className="text-xs text-white/60">
+                  Upload the phone preview image in Website Content → Home to show it here.
+                </p>
               </div>
-            </div>
-
-            {/* Floating analytics widgets */}
-            <div className="absolute -left-2 top-4 z-20 hidden animate-float-slow rounded-2xl border border-border/70 bg-card p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:block">
-              <p className="text-[11px] font-medium text-muted-foreground">Total Taps</p>
-              <p className="text-lg font-bold text-foreground">12,458</p>
-              <p className="flex items-center gap-0.5 text-[11px] font-semibold text-[#22C55E]">
-                <TrendingUp className="size-3" /> 24.5%
-              </p>
-            </div>
-            <div className="absolute -right-2 top-1/3 z-20 hidden animate-float-slower rounded-2xl border border-border/70 bg-card p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:block">
-              <p className="text-[11px] font-medium text-muted-foreground">Profile Views</p>
-              <p className="text-lg font-bold text-foreground">8,920</p>
-              <p className="flex items-center gap-0.5 text-[11px] font-semibold text-[#22C55E]">
-                <TrendingUp className="size-3" /> 18.6%
-              </p>
-            </div>
-            <div className="absolute -left-4 bottom-6 z-20 hidden animate-float-slow rounded-2xl border border-border/70 bg-card p-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.12)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:block">
-              <p className="text-[11px] font-medium text-muted-foreground">QR Scans</p>
-              <p className="text-lg font-bold text-foreground">3,538</p>
-              <p className="flex items-center gap-0.5 text-[11px] font-semibold text-[#22C55E]">
-                <TrendingUp className="size-3" /> 32.7%
-              </p>
-            </div>
+            )}
           </div>
         </div>
+
+        {/* Bottom info bar — glassmorphism strip */}
+        {data && data.bottom_bar.length > 0 && (
+          <div className="container-page mt-16">
+            <div className="glass-panel grid grid-cols-1 divide-y divide-border rounded-[24px] p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.5)] sm:grid-cols-3 sm:divide-x sm:divide-y-0 sm:p-8">
+              {data.bottom_bar.map((item) => {
+                const Icon = item.icon ? resolveIcon(item.icon) : null
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-4 py-3 first:pt-0 last:pb-0 sm:px-6 sm:py-0 sm:first:pl-0 sm:last:pr-0"
+                  >
+                    {Icon ? (
+                      <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                        <Icon className="size-5" />
+                      </span>
+                    ) : (
+                      <div className="flex shrink-0 -space-x-3">
+                        {AVATAR_SEEDS.slice(0, 3).map((seed) => (
+                          <img
+                            key={seed}
+                            src={`https://api.dicebear.com/9.x/notionists/svg?seed=${seed}`}
+                            alt=""
+                            className="size-10 rounded-full border-2 border-card bg-secondary"
+                          />
+                        ))}
+                        <span className="flex size-10 items-center justify-center rounded-full border-2 border-card bg-gradient-brand text-xs font-bold text-white">
+                          +
+                        </span>
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">{item.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">{item.description}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </section>
 
       <Dialog open={demoOpen} onOpenChange={setDemoOpen}>

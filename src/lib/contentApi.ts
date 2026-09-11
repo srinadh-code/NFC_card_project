@@ -8,6 +8,7 @@ import { request, requestRaw, type Pagination } from "./api"
 import type {
   AboutFeature,
   AboutPage,
+  BottomBarItem,
   BuiltFromExperience,
   Company,
   ContactMessage,
@@ -120,11 +121,18 @@ function makeSingletonImageApi<T>(basePath: string): SingletonImageApi<T> {
 // Home
 // ---------------------------------------------------------------------
 
+const heroPhoneImageApi = makeSingletonImageApi<Hero>(`${ADMIN}/home/hero/phone-image`)
+const heroNfcCardImageApi = makeSingletonImageApi<Hero>(`${ADMIN}/home/hero/nfc-card-image`)
+
 export const heroApi = {
   ...makeSingletonApi<Hero>(`${ADMIN}/home/hero`),
-  ...makeSingletonImageApi<Hero>(`${ADMIN}/home/hero`),
+  uploadPhoneImage: heroPhoneImageApi.uploadImage,
+  removePhoneImage: heroPhoneImageApi.removeImage,
+  uploadNfcCardImage: heroNfcCardImageApi.uploadImage,
+  removeNfcCardImage: heroNfcCardImageApi.removeImage,
 }
 export const heroFeaturesApi = makeCrudApi<HeroFeature>(`${ADMIN}/home/hero-features`)
+export const bottomBarApi = makeCrudApi<BottomBarItem>(`${ADMIN}/home/bottom-bar`)
 export const howItFeelsApi = makeSingletonApi<HowItFeels>(`${ADMIN}/home/how-it-feels`)
 export const howItFeelsPointsApi = makeCrudApi<HowItFeelsPoint>(`${ADMIN}/home/how-it-feels-points`)
 export const ctaApi = makeSingletonApi<Cta>(`${ADMIN}/home/cta`)

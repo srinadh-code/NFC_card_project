@@ -7,8 +7,8 @@ import { ImageUploadField } from "@/components/admin/content/ImageUploadField"
 import { IconPickerInput } from "@/components/admin/content/IconPickerInput"
 import { ResourceListPage } from "@/components/admin/content/ResourceListPage"
 import { useSingletonSection } from "@/components/admin/content/useSingletonSection"
-import { ctaApi, heroApi, heroFeaturesApi, howItFeelsApi, howItFeelsPointsApi } from "@/lib/contentApi"
-import type { Cta, Hero, HeroFeature, HowItFeels, HowItFeelsPoint } from "@/types/content"
+import { bottomBarApi, ctaApi, heroApi, heroFeaturesApi, howItFeelsApi, howItFeelsPointsApi } from "@/lib/contentApi"
+import type { BottomBarItem, Cta, Hero, HeroFeature, HowItFeels, HowItFeelsPoint } from "@/types/content"
 
 // Small uppercase divider that groups the fields below it under the actual
 // visual section of the public Home page they control — the Home tab
@@ -32,27 +32,48 @@ function HeroSection() {
   return (
     <SingletonSectionCard
       title="Hero Banner"
-      description="The very first thing visitors see at the top of the Home page: badge, big heading, description, the two buttons, and the hero image."
+      description="The very first thing visitors see at the top of the Home page: badge, two-line heading, description, the two buttons, and the two hero images (phone mockup + NFC card)."
       isLoading={hero.isLoading}
       isSaving={hero.isSaving}
       onSave={hero.save}
     >
-      <div className="flex flex-col gap-1.5 sm:col-span-2">
-        <Label>Hero Image</Label>
+      <div className="flex flex-col gap-1.5">
+        <Label>Phone Hero Image</Label>
         <ImageUploadField
-          currentUrl={hero.values.hero_image_url}
+          currentUrl={hero.values.phone_image_url}
           disabled={!hero.data}
-          onUpload={async (file) => hero.applyServerUpdate(await heroApi.uploadImage(file))}
-          onRemove={async () => hero.applyServerUpdate(await heroApi.removeImage())}
+          onUpload={async (file) => hero.applyServerUpdate(await heroApi.uploadPhoneImage(file))}
+          onRemove={async () => hero.applyServerUpdate(await heroApi.removePhoneImage())}
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label>NFC Card Hero Image</Label>
+        <ImageUploadField
+          currentUrl={hero.values.nfc_card_image_url}
+          disabled={!hero.data}
+          onUpload={async (file) => hero.applyServerUpdate(await heroApi.uploadNfcCardImage(file))}
+          onRemove={async () => hero.applyServerUpdate(await heroApi.removeNfcCardImage())}
         />
       </div>
       <div className="flex flex-col gap-1.5 sm:col-span-2">
         <Label htmlFor="hero-badge">Badge</Label>
         <Input id="hero-badge" value={hero.values.badge ?? ""} onChange={(e) => hero.setField("badge", e.target.value)} />
       </div>
-      <div className="flex flex-col gap-1.5 sm:col-span-2">
-        <Label htmlFor="hero-heading">Heading</Label>
-        <Input id="hero-heading" value={hero.values.heading ?? ""} onChange={(e) => hero.setField("heading", e.target.value)} />
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="hero-heading-1">Heading Line 1</Label>
+        <Input
+          id="hero-heading-1"
+          value={hero.values.heading_line1 ?? ""}
+          onChange={(e) => hero.setField("heading_line1", e.target.value)}
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="hero-heading-2">Heading Line 2 (rendered in the brand gradient)</Label>
+        <Input
+          id="hero-heading-2"
+          value={hero.values.heading_line2 ?? ""}
+          onChange={(e) => hero.setField("heading_line2", e.target.value)}
+        />
       </div>
       <div className="flex flex-col gap-1.5 sm:col-span-2">
         <Label htmlFor="hero-description">Description</Label>
@@ -89,13 +110,20 @@ function HeroFeaturesSection() {
     <ResourceListPage<HeroFeature>
       api={heroFeaturesApi}
       queryKey={["content", "home", "hero-features"]}
-      resourceLabel="Hero Highlight"
-      description='The small checkmark bullet list under the Hero description (e.g. "Instant Sharing", "Cloud Backup").'
+      resourceLabel="Hero Feature"
+      description='The 4 feature callouts under the Hero buttons (e.g. "Instant Sharing" / "NFC & QR Enabled").'
       getRowLabel={(item) => item.label}
-      createDefaults={(existing) => ({ icon: "Zap", label: "", display_order: existing.length, is_active: true })}
+      createDefaults={(existing) => ({
+        icon: "Zap",
+        label: "",
+        description: "",
+        display_order: existing.length,
+        is_active: true,
+      })}
       columns={[
         { key: "icon", label: "Icon", render: (item) => item.icon },
-        { key: "label", label: "Label", render: (item) => item.label },
+        { key: "label", label: "Title", render: (item) => item.label },
+        { key: "description", label: "Description", render: (item) => item.description },
       ]}
       renderForm={({ values, setField }) => (
         <>
@@ -104,8 +132,55 @@ function HeroFeaturesSection() {
             <IconPickerInput value={values.icon ?? ""} onChange={(v) => setField("icon", v)} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>Label</Label>
+            <Label>Title</Label>
             <Input value={values.label ?? ""} onChange={(e) => setField("label", e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <Label>Description</Label>
+            <Input value={values.description ?? ""} onChange={(e) => setField("description", e.target.value)} />
+          </div>
+        </>
+      )}
+    />
+  )
+}
+
+function BottomBarSection() {
+  return (
+    <ResourceListPage<BottomBarItem>
+      api={bottomBarApi}
+      queryKey={["content", "home", "bottom-bar"]}
+      resourceLabel="Bottom Bar Item"
+      description={
+        'The glassmorphism info strip beneath the Hero (e.g. "One Card" / "Endless Opportunities"). ' +
+        "Leave the first item's icon blank to show the customer avatar stack instead."
+      }
+      getRowLabel={(item) => item.title}
+      createDefaults={(existing) => ({
+        icon: "Sparkles",
+        title: "",
+        description: "",
+        display_order: existing.length,
+        is_active: true,
+      })}
+      columns={[
+        { key: "icon", label: "Icon", render: (item) => item.icon || "(avatar stack)" },
+        { key: "title", label: "Title", render: (item) => item.title },
+        { key: "description", label: "Description", render: (item) => item.description },
+      ]}
+      renderForm={({ values, setField }) => (
+        <>
+          <div className="flex flex-col gap-1.5">
+            <Label>Icon (blank = avatar stack)</Label>
+            <IconPickerInput value={values.icon ?? ""} onChange={(v) => setField("icon", v)} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Title</Label>
+            <Input value={values.title ?? ""} onChange={(e) => setField("title", e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <Label>Description</Label>
+            <Input value={values.description ?? ""} onChange={(e) => setField("description", e.target.value)} />
           </div>
         </>
       )}
@@ -257,6 +332,7 @@ export default function HomeTab() {
     <div className="flex flex-col gap-6">
       <HeroSection />
       <HeroFeaturesSection />
+      <BottomBarSection />
       <HowItFeelsSection />
       <HowItFeelsPointsSection />
       <CtaSection />
