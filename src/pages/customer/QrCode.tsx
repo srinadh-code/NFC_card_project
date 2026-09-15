@@ -76,6 +76,12 @@ export default function CustomerQrCode() {
   const hasGoogleReviewCard = (ordersQuery.data?.items ?? []).some(
     (order) => order.status !== "CANCELLED" && order.items.some((item) => item.card_type === "REVIEW"),
   )
+  // Same real-order check as above, for the NEXORA Custom NFC card instead
+  // — gates whether Profile Templates below can actually be selected (the
+  // templates themselves stay visible as a preview either way).
+  const hasCustomCard = (ordersQuery.data?.items ?? []).some(
+    (order) => order.status !== "CANCELLED" && order.items.some((item) => item.card_type === "CUSTOM"),
+  )
 
   const regenerateMutation = useMutation({
     mutationFn: qrApi.regenerate,
@@ -171,7 +177,7 @@ export default function CustomerQrCode() {
         </p>
       </div>
 
-      <ProfileTemplatesSection profile={profile} />
+      <ProfileTemplatesSection profile={profile} unlocked={hasCustomCard} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card className="rounded-2xl">

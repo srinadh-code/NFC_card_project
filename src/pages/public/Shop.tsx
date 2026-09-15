@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { CheckCircle2, LayoutTemplate, Minus, Plus, RotateCcw, ShieldCheck, Truck } from "lucide-react"
 import { toast } from "sonner"
 import PageHeader from "@/components/marketing/PageHeader"
@@ -9,7 +9,7 @@ import ProfileThemeShowcase from "@/components/marketing/ProfileThemeShowcase"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { formatCurrency } from "@/lib/mock-api"
-import { ApiError, profileApi } from "@/lib/api"
+import { ApiError, ordersApi, profileApi } from "@/lib/api"
 import { CARD_THEME_IDS, NEXORA_CARD_TYPES, PROFILE_THEMES } from "@/data/constants"
 import { useCartStore } from "@/store/cart-store"
 import { cn } from "@/lib/utils"
@@ -46,6 +46,17 @@ export default function Shop() {
   // template straight from this showcase, same as the picker in Customer
   // Dashboard → QR Code below.
   const { customer, profile } = useEnsuredProfile()
+  // Same real-order check the Customer Dashboard → QR Code page uses to
+  // gate template selection — shares its query key, so this is a cache hit
+  // whenever that page (or My Card) was already visited this session.
+  const ordersQuery = useQuery({
+    queryKey: ["customer-orders", 1],
+    queryFn: () => ordersApi.list(1),
+    enabled: Boolean(customer),
+  })
+  const hasCustomCard = (ordersQuery.data?.items ?? []).some(
+    (order) => order.status !== "CANCELLED" && order.items.some((item) => item.card_type === "CUSTOM"),
+  )
 
   // NEXORA_CARD_TYPES always has at least the Custom tier, so this is never
   // undefined — the single source of truth every section below reads from.
@@ -315,9 +326,15 @@ export default function Shop() {
               </span>
               <p className="mt-3 text-sm text-muted-foreground">{THEME_PLAN_COPY[selectedCard.id]}</p>
               {customer && profile ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Signed in — click a template below to set it on your profile.
-                </p>
+                hasCustomCard ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Signed in — click a template below to set it on your profile.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Purchase NEXORA Custom above to unlock template selection.
+                  </p>
+                )
               ) : (
                 <p className="mt-1 text-xs text-muted-foreground">
                   <Link to="/login" className="font-semibold text-primary hover:underline">
@@ -331,9 +348,11 @@ export default function Shop() {
             <div className="mt-10">
               <ProfileThemeShowcase
                 themes={availableThemes}
-                selectedId={customer && profile ? profile.selectedTemplate : undefined}
+                selectedId={customer && profile && hasCustomCard ? profile.selectedTemplate : undefined}
                 onSelect={
-                  customer && profile ? (id) => id !== profile.selectedTemplate && selectTemplateMutation.mutate(id) : undefined
+                  customer && profile && hasCustomCard
+                    ? (id) => id !== profile.selectedTemplate && selectTemplateMutation.mutate(id)
+                    : undefined
                 }
                 pendingId={selectTemplateMutation.isPending ? (selectTemplateMutation.variables ?? null) : null}
               />
