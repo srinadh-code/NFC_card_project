@@ -6,7 +6,12 @@ export type CustomerStatus = "Active" | "Inactive"
 // "Assigned" = admin has linked this card to a customer but they haven't
 // tapped "Activate" yet (card is physically with them, not yet live).
 export type CardStatus = "Active" | "Assigned" | "Inactive" | "Blocked" | "Lost" | "Unassigned"
-export type CardType = "Classic" | "Premium" | "Wooden" | "Custom"
+// Classic and Premium are retired — deleted from the backend enum and
+// purged from existing records, so they're no longer valid values here.
+// "Review" is the Google Review Card — a public-site-only product, not an
+// NfcCard inventory type (see orders.serializers.GOOGLE_REVIEW_CARD_TYPE on
+// the backend), used only on OrderItem/CartLine, never on NfcCard.
+export type CardType = "Wooden" | "Custom" | "Review"
 export type ProfileStatus = "Active" | "Suspended"
 
 export type OrderStatus =

@@ -743,11 +743,13 @@ export interface ApiNfcCard {
   notes: string
 }
 
+// Shared by NfcCard inventory responses (WOODEN/CUSTOM only — an NfcCard can
+// never actually be REVIEW) and by order-item responses (which can be
+// REVIEW — see Google Review Card in @/data/constants).
 const CARD_TYPE_MAP: Record<string, NfcCard["cardType"]> = {
-  CLASSIC: "Classic",
-  PREMIUM: "Premium",
   WOODEN: "Wooden",
   CUSTOM: "Custom",
+  REVIEW: "Review",
 }
 const CARD_STATUS_MAP: Record<string, NfcCard["status"]> = {
   ACTIVE: "Active",
@@ -763,7 +765,7 @@ export function toFrontendCard(c: ApiNfcCard): NfcCard {
     id: String(c.id),
     uid: c.uid,
     serialNumber: c.serial_number,
-    cardType: CARD_TYPE_MAP[c.card_type] ?? "Classic",
+    cardType: CARD_TYPE_MAP[c.card_type] ?? "Custom",
     color: c.color,
     customerId: null,
     customerName: c.customer_name,
@@ -801,10 +803,12 @@ interface ApiAdminNfcCard extends ApiNfcCard {
 }
 
 const CARD_TYPE_REVERSE_MAP: Record<NfcCard["cardType"], string> = {
-  Classic: "CLASSIC",
-  Premium: "PREMIUM",
   Wooden: "WOODEN",
   Custom: "CUSTOM",
+  // Present only so this Record is exhaustive over CardType — CardFormDialog
+  // never offers "Review" as an NFC inventory card type (Google Review Card
+  // isn't a piece of NFC inventory), so this entry is never actually sent.
+  Review: "REVIEW",
 }
 const CARD_STATUS_REVERSE_MAP: Record<NfcCard["status"], string> = {
   Active: "ACTIVE",
@@ -989,7 +993,7 @@ function toFrontendMiniCard(c: ApiNfcCardMini, customerId: string, customerName:
     id: String(c.id),
     uid: c.uid,
     serialNumber: c.serial_number,
-    cardType: CARD_TYPE_MAP[c.card_type] ?? "Classic",
+    cardType: CARD_TYPE_MAP[c.card_type] ?? "Custom",
     color: c.color,
     customerId,
     customerName,
@@ -1220,7 +1224,7 @@ function toFrontendOrder(o: ApiAdminOrder): Order {
     items: o.items.map((it) => ({
       productId: it.product_id,
       name: it.name,
-      cardType: CARD_TYPE_MAP[it.card_type] ?? "Classic",
+      cardType: CARD_TYPE_MAP[it.card_type] ?? "Custom",
       color: it.color,
       qty: it.qty,
       price: Number(it.price),

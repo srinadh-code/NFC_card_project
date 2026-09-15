@@ -17,13 +17,14 @@ import { PLAN_ACCENT, PLAN_BY_CARD_TYPE } from "@/components/admin/PlanTypeBadge
 import { cn } from "@/lib/utils"
 import type { NfcCard, CardType, CardStatus } from "@/types"
 
-// The 3 NEXORA-plan-mapped Card Type values — the only ones offered here.
-// "Wooden" has no NEXORA plan and isn't presented as a choice (the backend
-// enum itself still allows it; this only changes what this form offers).
-// Label/description come straight from NEXORA_CARD_TYPES (via
-// PLAN_BY_CARD_TYPE) — the same data the public /shop page reads — rather
-// than a second, separately-worded copy.
-const CARD_TYPE_ORDER: CardType[] = ["Classic", "Premium", "Custom"]
+// The NEXORA-plan-mapped Card Type values — the only ones offered here.
+// Classic and Premium are retired and no longer selectable; Custom is the
+// only remaining tier. "Wooden" has no NEXORA plan and isn't presented as a
+// choice either (the backend enum itself still allows it; this only changes
+// what this form offers). Label/description come straight from
+// NEXORA_CARD_TYPES (via PLAN_BY_CARD_TYPE) — the same data the public
+// /shop page reads — rather than a second, separately-worded copy.
+const CARD_TYPE_ORDER: CardType[] = ["Custom"]
 
 export interface CardFormValues {
   uid: string
@@ -40,7 +41,7 @@ function emptyValues(): CardFormValues {
   return {
     uid: "",
     serialNumber: "",
-    cardType: "Classic",
+    cardType: "Custom",
     color: "Black",
     customerEmail: "",
     status: "Unassigned",

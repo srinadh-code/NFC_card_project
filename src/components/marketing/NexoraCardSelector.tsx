@@ -12,7 +12,14 @@ interface NexoraCardSelectorProps {
 
 export default function NexoraCardSelector({ cardTypes, selectedId, onSelect }: NexoraCardSelectorProps) {
   return (
-    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+    // `lg:grid-cols-3` was sized for 3 NEXORA tiers (Classic/Premium/Custom).
+    // Only 2 products exist now (Custom + Google Review Card), so a fixed
+    // 3-column grid left a phantom empty column and pushed both cards to
+    // the left. `auto-fit` + `justify-center` sizes each column up to the
+    // same ~424px it had before (1320px container, 3 cols, 24px gaps) but
+    // collapses unused columns and centers the actual cards — and stays
+    // correct if a card is ever added or removed again.
+    <div className="grid grid-cols-1 justify-center gap-6 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(0,424px))]">
       {cardTypes.map((card) => {
         const selected = card.id === selectedId
         return (
@@ -60,12 +67,17 @@ export default function NexoraCardSelector({ cardTypes, selectedId, onSelect }: 
               <p className="text-sm font-medium text-foreground">{card.bestFor}</p>
             </div>
 
-            <div className="mt-4 space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Profile Templates</p>
-              <p className="text-sm font-medium text-foreground">
-                {card.templateCount} {card.templateCount === 1 ? "Template" : "Templates"} Included
-              </p>
-            </div>
+            {/* No profile-template entitlement (e.g. Google Review Card) means
+                there's nothing to show here — hide the row instead of a "0
+                Templates Included" line. */}
+            {!!card.templateCount && (
+              <div className="mt-4 space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Profile Templates</p>
+                <p className="text-sm font-medium text-foreground">
+                  {card.templateCount} {card.templateCount === 1 ? "Template" : "Templates"} Included
+                </p>
+              </div>
+            )}
 
             <ul className="mt-5 flex-1 space-y-2.5">
               {card.features.map((feature) => (

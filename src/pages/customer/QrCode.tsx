@@ -1,7 +1,7 @@
 ﻿import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Check, Copy, Download, FileText, ImageIcon, Printer, RefreshCw, Share2 } from "lucide-react"
+import { Check, Copy, Download, FileText, ImageIcon, Printer, RefreshCw, Share2, Star } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,7 +12,16 @@ import { ErrorState } from "@/components/customer/ErrorState"
 import { ProfileNotReady } from "@/components/customer/ProfileNotReady"
 import { useEnsuredProfile } from "@/hooks/use-ensured-profile"
 import { downloadQrPng, downloadQrSvg, downloadQrPdf, shareOrCopyLink } from "@/components/customer/qr-utils"
-import { qrApi } from "@/lib/api"
+import { qrApi, ordersApi } from "@/lib/api"
+import { NEXORA_CARD_TYPES } from "@/data/constants"
+
+// The Google Review Card is a separate purchasable product (see /shop), not
+// a profile template — its own section below is shown only once we can
+// tell, from the customer's real order history, that they actually bought
+// one. Reuses the same ["customer-orders", 1] query MyCard.tsx already
+// uses, so this is normally served from cache rather than firing a second
+// request. A cancelled order doesn't count as an active purchase.
+const GOOGLE_REVIEW_CARD = NEXORA_CARD_TYPES.find((c) => c.id === "google-review")
 
 function printQr(dataUrl: string, title: string) {
   const iframe = document.createElement("iframe")
@@ -55,6 +64,24 @@ export default function CustomerQrCode() {
     queryFn: qrApi.getOrCreate,
     enabled: Boolean(customer && profile),
   })
+
+  // Same query MyCard.tsx uses for its own order lookups — sharing the key
+  // means this is a cache hit (no extra request) whenever that page has
+  // already been visited this session.
+  const ordersQuery = useQuery({
+    queryKey: ["customer-orders", 1],
+    queryFn: () => ordersApi.list(1),
+    enabled: Boolean(customer),
+  })
+  const hasGoogleReviewCard = (ordersQuery.data?.items ?? []).some(
+    (order) => order.status !== "CANCELLED" && order.items.some((item) => item.card_type === "REVIEW"),
+  )
+  // Same real-order check as above, for the NEXORA Custom NFC card instead
+  // — gates whether Profile Templates below can actually be selected (the
+  // templates themselves stay visible as a preview either way).
+  const hasCustomCard = (ordersQuery.data?.items ?? []).some(
+    (order) => order.status !== "CANCELLED" && order.items.some((item) => item.card_type === "CUSTOM"),
+  )
 
   const regenerateMutation = useMutation({
     mutationFn: qrApi.regenerate,
@@ -150,7 +177,7 @@ export default function CustomerQrCode() {
         </p>
       </div>
 
-      <ProfileTemplatesSection profile={profile} />
+      <ProfileTemplatesSection profile={profile} unlocked={hasCustomCard} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card className="rounded-2xl">
@@ -213,6 +240,94 @@ export default function CustomerQrCode() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Separate from Profile Templates above — the Google Review Card is a
+          distinct purchased product, presented as its own premium product
+          showcase (large card visual + status + review-destination/QR
+          panel) rather than another template choice or a plain text row.
+          Shown only once the customer's real order history confirms they
+          own one (see `hasGoogleReviewCard`) — same ownership check as
+          before, unchanged. The review-destination/QR panel still
+          honestly reflects that no Google Review URL exists in any current
+          data source (see QrCode's report on this) rather than fabricating
+          one — Download/Share stay visible for the expected hierarchy but
+          disabled until that data exists. */}
+      {hasGoogleReviewCard && GOOGLE_REVIEW_CARD && (
+        <Card className="overflow-hidden rounded-2xl">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Star className="size-5 text-primary" /> Google Review Card
+            </CardTitle>
+            <CardDescription>Send customers directly to your Google Review page with one scan.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:items-center">
+              {/* Left: large physical-card showcase — the exact "card
+                  showcase" panel treatment /shop uses for this same image,
+                  reused here at dashboard scale so the card reads as a real
+                  premium product rather than an icon-sized thumbnail. */}
+              <div className="flex justify-center">
+                <div className="relative flex h-72 w-full max-w-sm items-center justify-center overflow-hidden rounded-[28px] bg-gradient-to-br from-[#0B0F1A] via-[#12142B] to-[#1A0F2E] p-8 shadow-2xl">
+                  <div className="pointer-events-none absolute left-1/4 top-1/5 size-48 rounded-full bg-[#7C3AED]/30 blur-[90px]" />
+                  <div className="pointer-events-none absolute bottom-1/5 right-1/4 size-48 rounded-full bg-[#2563EB]/30 blur-[90px]" />
+                  <div className="relative h-40 w-full max-w-xs animate-float-slow">
+                    <div className="h-full w-full -rotate-3 transition-transform duration-500 ease-out hover:-rotate-1 hover:scale-[1.05]">
+                      <img
+                        src={GOOGLE_REVIEW_CARD.image}
+                        alt={GOOGLE_REVIEW_CARD.name}
+                        className="h-full w-full object-contain drop-shadow-2xl"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: status + description + review destination + QR */}
+              <div className="space-y-5">
+                <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-xs font-semibold text-success">
+                  <span className="size-1.5 rounded-full bg-success" /> Google Review Card Active
+                </span>
+
+                <p className="text-sm text-muted-foreground">
+                  Make it easy for customers to leave a Google Review with one simple scan.
+                </p>
+
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Review Destination
+                  </p>
+                  <p className="rounded-lg border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                    Not set up yet — contact support to add your business's Google Review link.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Google Review QR
+                  </p>
+                  <div className="flex min-h-[120px] items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center text-xs text-muted-foreground">
+                    Your Google Review QR code will appear here once your Google Review link is set up.
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap gap-3">
+                    <Button size="sm" disabled className="disabled:opacity-60">
+                      <Download className="size-4" /> Download
+                    </Button>
+                    <Button size="sm" variant="outline" disabled className="disabled:opacity-60">
+                      <Share2 className="size-4" /> Share
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Download and share unlock once your Google Review link is set up.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
