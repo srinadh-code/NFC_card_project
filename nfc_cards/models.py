@@ -4,8 +4,10 @@ from django.db import models
 
 class NfcCard(models.Model):
     class CardType(models.TextChoices):
-        CLASSIC = "CLASSIC", "Classic"
-        PREMIUM = "PREMIUM", "Premium"
+        # CLASSIC and PREMIUM are fully retired (removed from this enum by
+        # migration nfc_cards.0005_delete_retired_card_types, which also
+        # deletes any existing rows with those values) — Wooden and Custom
+        # are the only card types left, sellable or not.
         WOODEN = "WOODEN", "Wooden"
         CUSTOM = "CUSTOM", "Custom"
 
@@ -19,7 +21,7 @@ class NfcCard(models.Model):
 
     uid = models.CharField(max_length=32, unique=True, db_index=True)
     serial_number = models.CharField(max_length=20, unique=True, db_index=True)
-    card_type = models.CharField(max_length=10, choices=CardType.choices, default=CardType.CLASSIC)
+    card_type = models.CharField(max_length=10, choices=CardType.choices, default=CardType.CUSTOM)
     color = models.CharField(max_length=30, default="Black")
 
     user = models.ForeignKey(

@@ -14,6 +14,7 @@ def send_otp_email(user, otp, purpose):
     else:
         subject = "Reset your VR's NEXORA password"
         body = (
+
             f"Hi {user.full_name or user.email},\n\n"
             f"Your password reset code is: {otp.code}\n"
             f"This code expires in 10 minutes.\n\n"

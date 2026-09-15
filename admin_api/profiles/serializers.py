@@ -29,6 +29,7 @@ class AdminProfileSerializer(serializers.ModelSerializer):
             "bio",
             "avatar",
             "profile_link",
+            "google_review_url",
             "status",
             "social_links",
             "created_at",
@@ -53,6 +54,12 @@ class AdminProfileUpdateSerializer(serializers.Serializer):
     company = serializers.CharField(max_length=150, required=False, allow_blank=True)
     phone = serializers.CharField(source="user.phone", max_length=20, required=False, allow_blank=True)
     bio = serializers.CharField(required=False, allow_blank=True)
+    # Lets admin configure a customer's Google Review Card destination on
+    # their behalf — there's no customer-facing settings field for this yet
+    # (see the QR Code page's Google Review Card section, which currently
+    # reports it as "not set up"), so this is the one place it can actually
+    # be set today.
+    google_review_url = serializers.URLField(required=False, allow_blank=True)
 
     def save(self, profile):
         data = self.validated_data
@@ -68,7 +75,7 @@ class AdminProfileUpdateSerializer(serializers.Serializer):
             profile.user.save(update_fields=changed)
 
         profile_fields = []
-        for field in ("designation", "company", "bio"):
+        for field in ("designation", "company", "bio", "google_review_url"):
             if field in data:
                 setattr(profile, field, data[field])
                 profile_fields.append(field)

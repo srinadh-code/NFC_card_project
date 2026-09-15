@@ -51,6 +51,14 @@ class Profile(models.Model):
     state = models.CharField(max_length=100, blank=True)
     country = models.CharField(max_length=100, blank=True)
     google_maps_url = models.URLField(blank=True, validators=[validate_google_maps_url])
+    # Where this customer's Google Review Card should send customers to
+    # leave a review (e.g. a "g.page/r/.../review" or Maps "write a review"
+    # link). Independent of `google_maps_url` above (that's a location/
+    # directions link) and of `selected_template` (the Google Review Card
+    # is a separate product from the NEXORA digital-profile card and never
+    # participates in profile-template selection). Blank until set — no
+    # review destination is invented when this is empty.
+    google_review_url = models.URLField(blank=True)
     bio = models.TextField(blank=True)
     avatar = models.ImageField(upload_to="profile_avatars/", null=True, blank=True)
     cover_image = models.ImageField(upload_to="profile_covers/", null=True, blank=True)

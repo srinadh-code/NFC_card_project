@@ -1,12 +1,10 @@
 from django.http import HttpResponse
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
-
 from common.permissions import IsCustomerRole
 from common.response import success
 from common.throttling import OtpRequestThrottle
 from common.views import PaginatedAPIView
-
 from . import services
 from .serializers import LeadSerializer, SubmitLeadSerializer
 
