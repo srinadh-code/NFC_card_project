@@ -4,6 +4,7 @@
 # (its own id space, profile link, activate/suspend action).
 from rest_framework import serializers
 
+from accounts.models import User
 from profiles.models import Profile
 from profiles.serializers import SocialLinkSerializer
 
@@ -49,10 +50,20 @@ class AdminProfileUpdateSerializer(serializers.Serializer):
     customer's own ProfileSerializer, just not scoped to request.user."""
 
     full_name = serializers.CharField(source="user.full_name", max_length=150, required=False)
+    email = serializers.EmailField(source="user.email", required=False)
     designation = serializers.CharField(max_length=150, required=False, allow_blank=True)
     company = serializers.CharField(max_length=150, required=False, allow_blank=True)
     phone = serializers.CharField(source="user.phone", max_length=20, required=False, allow_blank=True)
     bio = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_email(self, value):
+        qs = User.objects.filter(email__iexact=value)
+        profile = self.context.get("profile")
+        if profile is not None:
+            qs = qs.exclude(pk=profile.user_id)
+        if qs.exists():
+            raise serializers.ValidationError("This email is already in use by another account.")
+        return value
 
     def save(self, profile):
         data = self.validated_data
@@ -61,6 +72,9 @@ class AdminProfileUpdateSerializer(serializers.Serializer):
         if "full_name" in user_data:
             profile.user.full_name = user_data["full_name"]
             changed.append("full_name")
+        if "email" in user_data:
+            profile.user.email = user_data["email"]
+            changed.append("email")
         if "phone" in user_data:
             profile.user.phone = user_data["phone"]
             changed.append("phone")

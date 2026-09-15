@@ -20,6 +20,7 @@ from website_content.models import (
     Company,
     ContactMessage,
     ContactMessageReply,
+    EmailSettings,
     Faq,
     Feature,
     GeneralSettings,
@@ -30,6 +31,9 @@ from website_content.models import (
     HomeHowItFeels,
     HomeHowItFeelsPoint,
     HowItWorksStep,
+    PaymentSettings,
+    SecuritySettings,
+    ShippingSettings,
     Statistic,
     Testimonial,
     Value,
@@ -43,6 +47,7 @@ from website_content.serializers import (
     CompanySerializer,
     ContactMessageReplyCreateSerializer,
     ContactMessageSerializer,
+    EmailSettingsSerializer,
     FaqSerializer,
     FeatureSerializer,
     GeneralSettingsSerializer,
@@ -53,6 +58,9 @@ from website_content.serializers import (
     HomeHowItFeelsPointSerializer,
     HomeHowItFeelsSerializer,
     HowItWorksStepSerializer,
+    PaymentSettingsSerializer,
+    SecuritySettingsSerializer,
+    ShippingSettingsSerializer,
     StatisticSerializer,
     TestimonialSerializer,
     ValueSerializer,
@@ -153,6 +161,14 @@ class HomeCTAAdminView(AdminSingletonAPIView):
 class AboutPageAdminView(AdminSingletonAPIView):
     model = AboutPage
     serializer_class = AboutPageSerializer
+
+
+class AboutPageStoryImageAdminView(AdminSingletonImageUploadAPIView):
+    model = AboutPage
+    serializer_class = AboutPageSerializer
+    url_field = "story_image_url"
+    public_id_field = "story_image_public_id"
+    folder = "website/about"
 
 
 class AboutFeatureHighlightAdminListView(AdminListCreateAPIView):
@@ -399,3 +415,23 @@ class ContactMessageReplyAdminView(APIView):
 class GeneralSettingsAdminView(AdminSingletonAPIView):
     model = GeneralSettings
     serializer_class = GeneralSettingsSerializer
+
+
+class PaymentSettingsAdminView(AdminSingletonAPIView):
+    model = PaymentSettings
+    serializer_class = PaymentSettingsSerializer
+
+
+class ShippingSettingsAdminView(AdminSingletonAPIView):
+    model = ShippingSettings
+    serializer_class = ShippingSettingsSerializer
+
+
+class EmailSettingsAdminView(AdminSingletonAPIView):
+    model = EmailSettings
+    serializer_class = EmailSettingsSerializer
+
+
+class SecuritySettingsAdminView(AdminSingletonAPIView):
+    model = SecuritySettings
+    serializer_class = SecuritySettingsSerializer

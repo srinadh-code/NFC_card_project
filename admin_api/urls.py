@@ -31,6 +31,7 @@ from .profiles.views import (
 from .reports.views import (
     AdminCustomerReportView,
     AdminOrderReportView,
+    AdminReportHistoryView,
     AdminSalesReportView,
     AdminTapAnalyticsReportView,
 )
@@ -41,7 +42,11 @@ from .support.views import (
     AdminTicketPriorityView,
     AdminTicketStatusView,
 )
-from .transactions.views import AdminTransactionDetailView, AdminTransactionListCreateView
+from .transactions.views import (
+    AdminTransactionDetailView,
+    AdminTransactionListCreateView,
+    AdminTransactionSummaryView,
+)
 
 urlpatterns = [
     path("dashboard/", AdminDashboardView.as_view(), name="admin-dashboard"),
@@ -67,6 +72,7 @@ urlpatterns = [
     path("orders/<int:pk>/assign-card/", AdminOrderAssignCardView.as_view(), name="admin-order-assign-card"),
     # Transactions
     path("transactions/", AdminTransactionListCreateView.as_view(), name="admin-transactions"),
+    path("transactions/summary/", AdminTransactionSummaryView.as_view(), name="admin-transaction-summary"),
     path("transactions/<int:pk>/", AdminTransactionDetailView.as_view(), name="admin-transaction-detail"),
     # Support
     path("support/", AdminSupportTicketListCreateView.as_view(), name="admin-support-tickets"),
@@ -81,4 +87,5 @@ urlpatterns = [
     path("reports/tap-analytics/", AdminTapAnalyticsReportView.as_view(), name="admin-report-tap-analytics"),
     path("reports/customers/", AdminCustomerReportView.as_view(), name="admin-report-customers"),
     path("reports/orders/", AdminOrderReportView.as_view(), name="admin-report-orders"),
+    path("reports/history/", AdminReportHistoryView.as_view(), name="admin-report-history"),
 ]

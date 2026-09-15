@@ -8,6 +8,7 @@ from website_content.views.admin import (
     AboutFeatureHighlightAdminReorderView,
     AboutMissionAdminView,
     AboutPageAdminView,
+    AboutPageStoryImageAdminView,
     AboutWhyChooseAdminDetailView,
     AboutWhyChooseAdminListView,
     AboutWhyChooseAdminReorderView,
@@ -18,6 +19,7 @@ from website_content.views.admin import (
     ContactMessageAdminDetailView,
     ContactMessageAdminListView,
     ContactMessageReplyAdminView,
+    EmailSettingsAdminView,
     FaqAdminDetailView,
     FaqAdminListView,
     FaqAdminReorderView,
@@ -42,6 +44,9 @@ from website_content.views.admin import (
     HowItWorksStepAdminDetailView,
     HowItWorksStepAdminListView,
     HowItWorksStepAdminReorderView,
+    PaymentSettingsAdminView,
+    SecuritySettingsAdminView,
+    ShippingSettingsAdminView,
     StatisticAdminDetailView,
     StatisticAdminListView,
     StatisticAdminReorderView,
@@ -116,6 +121,11 @@ urlpatterns = [
     path("home/cta/", HomeCTAAdminView.as_view(), name="admin-home-cta"),
     # About
     path("about/page/", AboutPageAdminView.as_view(), name="admin-about-page"),
+    path(
+        "about/page/story-image/",
+        AboutPageStoryImageAdminView.as_view(),
+        name="admin-about-page-story-image",
+    ),
     path(
         "about/features/",
         AboutFeatureHighlightAdminListView.as_view(),
@@ -223,4 +233,8 @@ urlpatterns = [
     ),
     # Settings
     path("settings/", GeneralSettingsAdminView.as_view(), name="admin-settings"),
+    path("payment-settings/", PaymentSettingsAdminView.as_view(), name="admin-payment-settings"),
+    path("shipping-settings/", ShippingSettingsAdminView.as_view(), name="admin-shipping-settings"),
+    path("email-settings/", EmailSettingsAdminView.as_view(), name="admin-email-settings"),
+    path("security-settings/", SecuritySettingsAdminView.as_view(), name="admin-security-settings"),
 ]

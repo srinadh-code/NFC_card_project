@@ -3,6 +3,7 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
 from .models import User
+from .security import enforce_password_policy
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -40,6 +41,7 @@ class RegisterSerializer(serializers.Serializer):
 
     def validate_password(self, value):
         validate_password(value)
+        enforce_password_policy(value)
         return value
 
 
@@ -85,7 +87,16 @@ class ResetPasswordSerializer(serializers.Serializer):
 
     def validate_new_password(self, value):
         validate_password(value)
+        enforce_password_policy(value)
         return value
+
+
+class GoogleLoginSerializer(serializers.Serializer):
+    """The raw ID token string from the frontend's Google Identity Services
+    button (`credentialResponse.credential` in @react-oauth/google) —
+    verified for real in accounts/google_oauth.py, not trusted here."""
+
+    credential = serializers.CharField()
 
 
 class ChangePasswordSerializer(serializers.Serializer):
@@ -94,4 +105,5 @@ class ChangePasswordSerializer(serializers.Serializer):
 
     def validate_new_password(self, value):
         validate_password(value)
+        enforce_password_policy(value)
         return value

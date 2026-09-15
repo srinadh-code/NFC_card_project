@@ -71,7 +71,7 @@ class AdminProfileDetailView(APIView):
         if profile is None:
             return error("Profile not found.", status=404)
 
-        serializer = AdminProfileUpdateSerializer(data=request.data, partial=True)
+        serializer = AdminProfileUpdateSerializer(data=request.data, partial=True, context={"profile": profile})
         serializer.is_valid(raise_exception=True)
         serializer.save(profile)
         profile.refresh_from_db()

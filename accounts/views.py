@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
@@ -12,10 +13,13 @@ from common.response import error, success
 from common.throttling import OtpRequestThrottle
 
 from .emails import send_otp_email
+from .google_oauth import GoogleTokenError, verify_google_id_token
 from .models import EmailOTP, User
+from .security import access_token_minutes
 from .serializers import (
     ChangePasswordSerializer,
     ForgotPasswordSerializer,
+    GoogleLoginSerializer,
     LoginSerializer,
     LogoutSerializer,
     RegisterSerializer,
@@ -30,6 +34,12 @@ logger = logging.getLogger("accounts.auth")
 
 def _issue_tokens(user):
     refresh = RefreshToken.for_user(user)
+    # Admin-configured session timeout (Settings > Security) overrides the
+    # server's env-configured default at the moment each token is minted —
+    # real enforcement, not a stored-but-ignored preference.
+    minutes = access_token_minutes()
+    if minutes:
+        refresh.access_token.set_exp(lifetime=timedelta(minutes=minutes))
     return {"access": str(refresh.access_token), "refresh": str(refresh)}
 
 
@@ -256,14 +266,20 @@ class ChangePasswordView(APIView):
 
 class GoogleLoginView(APIView):
     """
-    Integration point for Google OAuth2 login.
+    Google Sign-In. The frontend's Google Identity Services button
+    authenticates the user directly with Google (no redirect through this
+    server) and hands back a signed ID token ("credential"); this view
+    verifies that token for real (accounts/google_oauth.py — signature,
+    audience, issuer, expiry) and then get-or-creates a User from its
+    verified claims, returning the same {user, access, refresh} payload as
+    LoginView/RegisterView so the frontend's existing session handling
+    (setTokens + setUser) needs no special-casing for this login path.
 
-    Not implemented in this pass — no OAuth credentials are configured.
-    Once GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET are set in the
-    environment, this view should: verify the id_token/auth code Google
-    returns to the frontend, get-or-create a User from the verified email,
-    mark email_verified=True, and return the same {user, access, refresh}
-    payload as LoginView.
+    Matching/linking logic (see below): match by `google_id` first (an
+    account that has already signed in with Google before), then by
+    `email` (an existing email/password account using Google for the first
+    time gets linked, not duplicated), and only create a new User if
+    neither matches — this is what "prevent duplicate accounts" means here.
     """
 
     permission_classes = [AllowAny]
@@ -275,7 +291,72 @@ class GoogleLoginView(APIView):
                 errors={"code": "google_oauth_not_configured"},
                 status=501,
             )
-        return error("Google sign-in is not implemented yet.", status=501)
+
+        serializer = GoogleLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            claims = verify_google_id_token(serializer.validated_data["credential"])
+        except GoogleTokenError as exc:
+            logger.info("auth.google.failed reason=%s", exc)
+            return error("Invalid or expired Google credential. Please try again.", status=400)
+
+        google_id = claims["sub"]
+        email = claims["email"].strip().lower()
+        full_name = claims.get("name", "").strip()
+        picture = claims.get("picture", "")
+
+        from profiles.models import Profile
+
+        with transaction.atomic():
+            user = User.objects.filter(google_id=google_id).first()
+            if user is None:
+                user = User.objects.filter(email=email).first()
+
+            created = user is None
+            if created:
+                # password=None -> Django's make_password(None) stores an
+                # unusable hash, same as User.set_unusable_password() would
+                # — this account can only ever sign in via Google unless the
+                # customer later sets a real password through a "forgot
+                # password" reset.
+                user = User.objects.create_user(
+                    email=email,
+                    password=None,
+                    full_name=full_name,
+                    is_active=True,
+                    email_verified=True,
+                )
+
+            update_fields = []
+            if user.google_id != google_id:
+                user.google_id = google_id
+                update_fields.append("google_id")
+            if not user.email_verified:
+                user.email_verified = True
+                update_fields.append("email_verified")
+            if picture and user.google_avatar_url != picture:
+                user.google_avatar_url = picture
+                update_fields.append("google_avatar_url")
+            if not user.full_name and full_name:
+                user.full_name = full_name
+                update_fields.append("full_name")
+            if update_fields:
+                user.save(update_fields=update_fields)
+
+            Profile.ensure_for_user(user)
+
+        logger.info(
+            "auth.google.success user_id=%s created=%s role=%s",
+            user.id,
+            created,
+            user.role,
+        )
+        return success(
+            _auth_payload(user),
+            message="Signed in with Google.",
+            status=201 if created else 200,
+        )
 
 
 class MeView(APIView):

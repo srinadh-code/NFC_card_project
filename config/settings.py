@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     "orders",
     "support",
     "analytics",
+    "reports",
     "admin_api",
     "customer_management.customer_profiles",
     "customer_management.customer_social_links",

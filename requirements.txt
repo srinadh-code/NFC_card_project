@@ -8,6 +8,14 @@ dj-database-url==3.1.2
 qrcode==8.2
 cloudinary==1.44.2
 
+# Google Sign-In (accounts/google_oauth.py): PyJWT verifies the ID token's
+# signature against Google's rotating public keys (fetched over `requests`,
+# cached in-process — see PyJWKClient). Both already installed transitively
+# (via djangorestframework-simplejwt and cloudinary respectively); pinned
+# explicitly here now that accounts/ imports them directly.
+PyJWT==2.12.1
+requests==2.33.1
+
 # Production server + Render-specific plumbing. Harmless locally — gunicorn
 # and whitenoise are simply never invoked by `manage.py runserver`, and
 # psycopg2-binary/cloudinary only activate when DATABASE_URL/CLOUDINARY_URL

@@ -21,7 +21,13 @@ from .testimonials import Testimonial
 from .companies import Company
 from .statistics import Statistic
 from .contact import ContactMessage, ContactMessageReply
-from .settings import GeneralSettings
+from .settings import (
+    EmailSettings,
+    GeneralSettings,
+    PaymentSettings,
+    SecuritySettings,
+    ShippingSettings,
+)
 
 __all__ = [
     "HomeHero",
@@ -45,4 +51,8 @@ __all__ = [
     "ContactMessage",
     "ContactMessageReply",
     "GeneralSettings",
+    "PaymentSettings",
+    "ShippingSettings",
+    "EmailSettings",
+    "SecuritySettings",
 ]

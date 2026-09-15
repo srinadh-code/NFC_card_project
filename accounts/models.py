@@ -51,6 +51,15 @@ class User(AbstractBaseUser, PermissionsMixin):
     role = models.CharField(max_length=10, choices=Role.choices, default=Role.CUSTOMER)
     avatar = models.ImageField(upload_to="avatars/", null=True, blank=True)
 
+    # Google Sign-In linkage (see accounts/google_oauth.py, GoogleLoginView).
+    # `google_id` is the token's stable `sub` claim — unique but nullable
+    # since most accounts still sign up with email/password and never link
+    # Google. `google_avatar_url` is the profile picture Google returned;
+    # kept separate from `avatar` (a real uploaded ImageField) so linking a
+    # Google account never overwrites a photo the user uploaded themselves.
+    google_id = models.CharField(max_length=255, unique=True, null=True, blank=True)
+    google_avatar_url = models.URLField(max_length=500, blank=True, default="")
+
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     email_verified = models.BooleanField(default=False)
@@ -73,6 +82,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     def avatar_url(self):
         if self.avatar:
             return self.avatar.url
+        if self.google_avatar_url:
+            return self.google_avatar_url
         seed = self.full_name or self.email
         return f"https://api.dicebear.com/7.x/initials/svg?seed={seed}"
 

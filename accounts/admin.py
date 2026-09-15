@@ -7,14 +7,19 @@ from .models import EmailOTP, User
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
     ordering = ["-created_at"]
-    list_display = ["email", "full_name", "role", "is_active", "email_verified", "created_at"]
+    list_display = ["email", "full_name", "role", "is_active", "email_verified", "google_linked", "created_at"]
     list_filter = ["role", "is_active", "email_verified", "is_staff"]
-    search_fields = ["email", "full_name", "phone"]
-    readonly_fields = ["created_at", "updated_at", "last_login"]
+    search_fields = ["email", "full_name", "phone", "google_id"]
+    readonly_fields = ["created_at", "updated_at", "last_login", "google_id", "google_avatar_url"]
+
+    @admin.display(boolean=True, description="Google")
+    def google_linked(self, obj):
+        return bool(obj.google_id)
 
     fieldsets = (
         (None, {"fields": ("email", "password")}),
         ("Personal info", {"fields": ("full_name", "phone", "avatar")}),
+        ("Google Sign-In", {"fields": ("google_id", "google_avatar_url")}),
         (
             "Permissions",
             {

@@ -10,6 +10,8 @@ from website_content.models import (
 
 
 class AboutPageSerializer(serializers.ModelSerializer):
+    story_image_url = serializers.CharField(read_only=True)
+
     class Meta:
         model = AboutPage
         fields = [
@@ -20,6 +22,7 @@ class AboutPageSerializer(serializers.ModelSerializer):
             "story_title",
             "story_paragraph_1",
             "story_paragraph_2",
+            "story_image_url",
             "is_active",
         ]
 
