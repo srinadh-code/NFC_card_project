@@ -163,7 +163,7 @@ export interface Company extends WithId {
   is_active: boolean
 }
 
-export type StatisticPage = "home" | "about"
+export type StatisticPage = "home" | "about" | "features"
 
 export interface Statistic extends WithId {
   page: StatisticPage
@@ -172,6 +172,80 @@ export interface Statistic extends WithId {
   icon: string
   display_order: number
   is_active: boolean
+}
+
+// ---------------------------------------------------------------------
+// Features page — fully CMS-driven, separate from the shared `Feature`
+// model above (which is Home's "Why Choose" cards only). Statistics for
+// this page reuse the shared Statistic model with page="features".
+// ---------------------------------------------------------------------
+
+export interface FeaturesPageSettings extends WithId {
+  page_title: string
+  page_subtitle: string
+  hero_badge: string
+  hero_heading_line1: string
+  hero_heading_line2: string
+  hero_description: string
+  hero_image_url: string
+  primary_cta_text: string
+  primary_cta_url: string
+  secondary_cta_text: string
+  secondary_cta_url: string
+  trust_badge_text: string
+  trusted_users_count: string
+  features_grid_heading: string
+  features_grid_subtitle: string
+  is_active: boolean
+}
+
+export interface FeaturesPageCard extends WithId {
+  title: string
+  description: string
+  icon: string
+  image_url: string
+  gradient: string
+  cta_text: string
+  cta_url: string
+  display_order: number
+  is_active: boolean
+}
+
+export interface FeaturesAnalyticsSection extends WithId {
+  badge: string
+  heading: string
+  description: string
+  dashboard_image_url: string
+  cta_text: string
+  cta_url: string
+  is_active: boolean
+}
+
+export interface FeaturesShowcaseSection extends WithId {
+  badge: string
+  heading: string
+  description: string
+  main_image_url: string
+  card_image_url: string
+  is_active: boolean
+}
+
+export interface FeaturesCTA extends WithId {
+  heading: string
+  description: string
+  button_text: string
+  button_url: string
+  background_image_url: string
+  is_active: boolean
+}
+
+export interface PublicFeaturesPagePayload {
+  page: FeaturesPageSettings
+  cards: FeaturesPageCard[]
+  analytics: FeaturesAnalyticsSection | null
+  showcase: FeaturesShowcaseSection | null
+  statistics: Statistic[]
+  cta: FeaturesCTA | null
 }
 
 // ---------------------------------------------------------------------

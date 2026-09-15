@@ -7,8 +7,16 @@ import { ImageUploadField } from "@/components/admin/content/ImageUploadField"
 import { IconPickerInput } from "@/components/admin/content/IconPickerInput"
 import { ResourceListPage } from "@/components/admin/content/ResourceListPage"
 import { useSingletonSection } from "@/components/admin/content/useSingletonSection"
-import { bottomBarApi, ctaApi, heroApi, heroFeaturesApi, howItFeelsApi, howItFeelsPointsApi } from "@/lib/contentApi"
-import type { BottomBarItem, Cta, Hero, HeroFeature, HowItFeels, HowItFeelsPoint } from "@/types/content"
+import {
+  bottomBarApi,
+  ctaApi,
+  featuresApi,
+  heroApi,
+  heroFeaturesApi,
+  howItFeelsApi,
+  howItFeelsPointsApi,
+} from "@/lib/contentApi"
+import type { BottomBarItem, Cta, Feature, Hero, HeroFeature, HowItFeels, HowItFeelsPoint } from "@/types/content"
 
 // Small uppercase divider that groups the fields below it under the actual
 // visual section of the public Home page they control — the Home tab
@@ -285,6 +293,45 @@ function CtaSection() {
   )
 }
 
+function WhyChooseHighlightsSection() {
+  return (
+    <ResourceListPage<Feature>
+      api={featuresApi}
+      queryKey={["content", "features"]}
+      resourceLabel="Feature"
+      description={`The "Why Choose VR's NEXORA?" cards on the Home page. (The Features page has its own, separate set of cards — see the Features tab.)`}
+      getRowLabel={(item) => item.title}
+      searchPredicate={(item, q) => item.title.toLowerCase().includes(q) || item.description.toLowerCase().includes(q)}
+      createDefaults={(existing) => ({ icon: "Zap", title: "", description: "", display_order: existing.length, is_active: true })}
+      columns={[
+        { key: "icon", label: "Icon", render: (item) => item.icon },
+        { key: "title", label: "Title", render: (item) => item.title },
+        {
+          key: "description",
+          label: "Description",
+          render: (item) => <span className="line-clamp-2 text-muted-foreground">{item.description}</span>,
+        },
+      ]}
+      renderForm={({ values, setField }) => (
+        <>
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <Label>Icon</Label>
+            <IconPickerInput value={values.icon ?? ""} onChange={(v) => setField("icon", v)} />
+          </div>
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <Label>Title</Label>
+            <Input value={values.title ?? ""} onChange={(e) => setField("title", e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <Label>Description</Label>
+            <Textarea value={values.description ?? ""} onChange={(e) => setField("description", e.target.value)} />
+          </div>
+        </>
+      )}
+    />
+  )
+}
+
 // Not editable here, but real sections of the Home page all the same — this
 // is the map an admin needs so "Home" doesn't feel like it's missing content
 // that's visibly on the page. Kept read-only/static: pointing this at the
@@ -294,7 +341,6 @@ function OtherHomeSectionsNote() {
     { section: '"Trusted by" company logos', managedIn: "Companies tab" },
     { section: "Stats row (e.g. taps, users)", managedIn: 'Statistics tab, filtered to "Home"' },
     { section: '"Our Story" values grid', managedIn: "Values tab" },
-    { section: '"Why Choose" feature cards', managedIn: "Features tab" },
     { section: "Testimonials", managedIn: "Testimonials tab" },
     { section: "FAQ preview (shares data with the full FAQ page)", managedIn: "FAQs tab" },
   ]
@@ -335,6 +381,7 @@ export default function HomeTab() {
       <BottomBarSection />
       <HowItFeelsSection />
       <HowItFeelsPointsSection />
+      <WhyChooseHighlightsSection />
       <CtaSection />
       <OtherHomeSectionsNote />
     </div>

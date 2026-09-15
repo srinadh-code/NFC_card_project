@@ -16,6 +16,11 @@ import type {
   EmailSettings,
   Faq,
   Feature,
+  FeaturesAnalyticsSection,
+  FeaturesCTA,
+  FeaturesPageCard,
+  FeaturesPageSettings,
+  FeaturesShowcaseSection,
   GeneralSettings,
   Hero,
   HeroFeature,
@@ -25,6 +30,7 @@ import type {
   Mission,
   PaymentSettings,
   PublicAboutPayload,
+  PublicFeaturesPagePayload,
   PublicGeneralSettings,
   PublicHomePayload,
   SecuritySettings,
@@ -176,6 +182,54 @@ export const builtFromExperienceApi = {
 }
 
 // ---------------------------------------------------------------------
+// Features page — fully CMS-driven, separate from the shared `featuresApi`
+// below (Home's "Why Choose" cards). Statistics for this page reuse
+// `statisticsApi` with `page: "features"` — no dedicated API needed there.
+// ---------------------------------------------------------------------
+
+const featuresPageHeroImageApi = makeExactImageApi<FeaturesPageSettings>(`${ADMIN}/features/page/hero-image/`)
+export const featuresPageApi = {
+  ...makeSingletonApi<FeaturesPageSettings>(`${ADMIN}/features/page`),
+  uploadHeroImage: featuresPageHeroImageApi.uploadImage,
+  removeHeroImage: featuresPageHeroImageApi.removeImage,
+}
+
+export const featuresCardsApi = {
+  ...makeCrudApi<FeaturesPageCard>(`${ADMIN}/features/cards`),
+  ...makeImageApi<FeaturesPageCard>(`${ADMIN}/features/cards`),
+}
+
+const featuresAnalyticsImageApi = makeExactImageApi<FeaturesAnalyticsSection>(
+  `${ADMIN}/features/analytics/image/`,
+)
+export const featuresAnalyticsApi = {
+  ...makeSingletonApi<FeaturesAnalyticsSection>(`${ADMIN}/features/analytics`),
+  uploadImage: featuresAnalyticsImageApi.uploadImage,
+  removeImage: featuresAnalyticsImageApi.removeImage,
+}
+
+const featuresShowcaseMainImageApi = makeExactImageApi<FeaturesShowcaseSection>(
+  `${ADMIN}/features/showcase/main-image/`,
+)
+const featuresShowcaseCardImageApi = makeExactImageApi<FeaturesShowcaseSection>(
+  `${ADMIN}/features/showcase/card-image/`,
+)
+export const featuresShowcaseApi = {
+  ...makeSingletonApi<FeaturesShowcaseSection>(`${ADMIN}/features/showcase`),
+  uploadMainImage: featuresShowcaseMainImageApi.uploadImage,
+  removeMainImage: featuresShowcaseMainImageApi.removeImage,
+  uploadCardImage: featuresShowcaseCardImageApi.uploadImage,
+  removeCardImage: featuresShowcaseCardImageApi.removeImage,
+}
+
+const featuresCTAImageApi = makeExactImageApi<FeaturesCTA>(`${ADMIN}/features/cta/background-image/`)
+export const featuresCTAApi = {
+  ...makeSingletonApi<FeaturesCTA>(`${ADMIN}/features/cta`),
+  uploadImage: featuresCTAImageApi.uploadImage,
+  removeImage: featuresCTAImageApi.removeImage,
+}
+
+// ---------------------------------------------------------------------
 // Shared resources
 // ---------------------------------------------------------------------
 
@@ -249,7 +303,11 @@ export const contactMessagesApi = {
 export const publicWebsiteApi = {
   getHome: () => request<PublicHomePayload>(`${PUBLIC}/home/`, { auth: false }),
   getAbout: () => request<PublicAboutPayload>(`${PUBLIC}/about/`, { auth: false }),
+  // Home's "Why Choose" cards (the shared Feature model) — NOT the
+  // Features page's own content, see getFeaturesPage below.
   getFeatures: () => request<Feature[]>(`${PUBLIC}/features/`, { auth: false }),
+  getFeaturesPage: () =>
+    request<PublicFeaturesPagePayload>(`${PUBLIC}/features/page/`, { auth: false }),
   getHowItWorks: () => request<HowItWorksStep[]>(`${PUBLIC}/how-it-works/`, { auth: false }),
   getFaqs: () => request<Faq[]>(`${PUBLIC}/faqs/`, { auth: false }),
   getValues: () => request<Value[]>(`${PUBLIC}/values/`, { auth: false }),

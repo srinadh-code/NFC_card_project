@@ -6,7 +6,11 @@ import { ResourceListPage } from "@/components/admin/content/ResourceListPage"
 import { statisticsApi } from "@/lib/contentApi"
 import type { Statistic, StatisticPage } from "@/types/content"
 
-function StatisticsForPage({ page }: { page: StatisticPage }) {
+// Exported so page-specific tabs (e.g. AboutTab) can embed the "about"
+// slice directly instead of only pointing at this tab — same component,
+// same API calls, same query key, so editing from either place is always
+// looking at the exact same rows, never a stale duplicate.
+export function StatisticsForPage({ page }: { page: StatisticPage }) {
   return (
     <ResourceListPage<Statistic>
       api={statisticsApi}

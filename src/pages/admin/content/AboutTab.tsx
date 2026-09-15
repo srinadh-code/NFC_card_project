@@ -1,11 +1,13 @@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Card, CardContent } from "@/components/ui/card"
 import { SingletonSectionCard } from "@/components/admin/content/SingletonSectionCard"
 import { ImageUploadField } from "@/components/admin/content/ImageUploadField"
 import { IconPickerInput } from "@/components/admin/content/IconPickerInput"
 import { ResourceListPage } from "@/components/admin/content/ResourceListPage"
 import { useSingletonSection } from "@/components/admin/content/useSingletonSection"
+import { StatisticsForPage } from "./StatisticsTab"
 import {
   aboutFeaturesApi,
   aboutPageApi,
@@ -223,14 +225,53 @@ function BuiltFromExperienceSection() {
   )
 }
 
+// Not editable here, but a real section of the About page all the same —
+// same pattern as HomeTab's OtherHomeSectionsNote: the values grid is real,
+// database-backed content, just managed in its own shared tab rather than
+// duplicated here, since it's the same rows the Home page also uses. Kept
+// read-only/static so it can never point at a stale tab name.
+function OtherAboutSectionsNote() {
+  const rows: { section: string; managedIn: string }[] = [
+    { section: "Values grid (shown under Built From Experience)", managedIn: "Values tab" },
+  ]
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-3">
+        <div>
+          <h3 className="text-base font-semibold tracking-tight">Other Sections on This Page</h3>
+          <p className="text-sm text-muted-foreground">
+            These also appear on the public About page but are shared with other pages, so they're
+            managed in their own tabs rather than duplicated here.
+          </p>
+        </div>
+        <ul className="flex flex-col gap-1.5 text-sm">
+          {rows.map((row) => (
+            <li key={row.section} className="flex flex-wrap justify-between gap-x-4 gap-y-0.5 border-b py-1.5 last:border-b-0">
+              <span className="text-foreground">{row.section}</span>
+              <span className="text-muted-foreground">{row.managedIn}</span>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function AboutTab() {
   return (
     <div className="flex flex-col gap-6">
       <AboutPageSection />
       <AboutFeaturesSection />
       <MissionSection />
+      {/* Same live rows as Website Content → Statistics → "About Page" —
+          embedded directly here (not just referenced) since this is the
+          stats card right under Mission on the public About page, and
+          editing it should be as direct as editing Mission itself. */}
+      <StatisticsForPage page="about" />
       <WhyChooseSection />
       <BuiltFromExperienceSection />
+      <OtherAboutSectionsNote />
     </div>
   )
 }

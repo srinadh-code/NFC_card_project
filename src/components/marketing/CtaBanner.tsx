@@ -6,6 +6,10 @@ interface CtaBannerProps {
   subtitle?: string
   buttonLabel?: string
   to?: string
+  // Optional — admin-uploaded background image (see Features page's CTA
+  // section). Renders under the existing gradient at reduced opacity so
+  // the white heading/button always stay readable regardless of image.
+  backgroundImageUrl?: string | null
 }
 
 export default function CtaBanner({
@@ -13,10 +17,19 @@ export default function CtaBanner({
   subtitle = "Join thousands of professionals who've upgraded the way they network.",
   buttonLabel = "Order Your Card Now",
   to = "/shop",
+  backgroundImageUrl,
 }: CtaBannerProps) {
   const navigate = useNavigate()
   return (
     <section className="relative overflow-hidden bg-gradient-brand px-4 py-16 sm:py-20">
+      {backgroundImageUrl && (
+        <img
+          src={backgroundImageUrl}
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 size-full object-cover opacity-25 mix-blend-overlay"
+        />
+      )}
       <div className="pointer-events-none absolute -top-24 left-1/4 size-64 rounded-full bg-white/10 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-24 right-1/4 size-64 rounded-full bg-white/10 blur-3xl" />
       <div className="relative mx-auto max-w-3xl text-center">
