@@ -1,8 +1,8 @@
 from rest_framework import serializers
 
 from accounts.models import User
-from nfc_cards.models import NfcCard
 from orders.models import Order, OrderItem
+from orders.serializers import ORDER_ITEM_CARD_TYPE_CHOICES
 
 from .services import STEP_FIELDS
 
@@ -75,7 +75,11 @@ class AdminOrderSerializer(serializers.ModelSerializer):
 class OrderItemWriteSerializer(serializers.Serializer):
     product_id = serializers.CharField(max_length=40)
     name = serializers.CharField(max_length=150)
-    card_type = serializers.ChoiceField(choices=NfcCard.CardType.choices)
+    # Same choice list the customer-facing checkout accepts (NfcCard types
+    # plus the Google Review Card's order-item-only "REVIEW" type) — an
+    # admin manually entering an offline order needs to be able to record
+    # either product, not just NFC cards.
+    card_type = serializers.ChoiceField(choices=ORDER_ITEM_CARD_TYPE_CHOICES)
     color = serializers.CharField(max_length=30)
     qty = serializers.IntegerField(min_value=1)
     price = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0)

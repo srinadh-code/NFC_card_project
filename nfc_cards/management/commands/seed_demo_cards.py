@@ -22,7 +22,7 @@ class Command(BaseCommand):
             NfcCard.objects.create(
                 uid=uid,
                 serial_number=NfcCard.generate_serial_number(),
-                card_type=NfcCard.CardType.CLASSIC,
+                card_type=NfcCard.CardType.CUSTOM,
                 color="Black",
                 status=NfcCard.Status.UNASSIGNED,
             )

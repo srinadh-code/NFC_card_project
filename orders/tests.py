@@ -8,7 +8,7 @@ from .models import Order
 
 def _valid_payload(**overrides):
     payload = {
-        "items": [{"product_id": "p1", "name": "Classic Card", "card_type": "CLASSIC", "color": "Black", "qty": 2, "price": "499.00"}],
+        "items": [{"product_id": "p1", "name": "Custom Card", "card_type": "CUSTOM", "color": "Black", "qty": 2, "price": "499.00"}],
         "shipping": "49.00",
         "payment_method": "UPI",
         "shipping_line1": "123 Main St",
@@ -40,6 +40,32 @@ class CustomerOrderCreateViewTests(AuthenticatedAPITestCase):
 
     def test_rejects_order_with_no_items(self):
         response = self.client.post(reverse("my-orders"), _valid_payload(items=[]), format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_creates_order_for_google_review_card(self):
+        payload = _valid_payload(
+            items=[{"product_id": "PRD-NEXORA-GOOGLE-REVIEW", "name": "Google Review Card", "card_type": "REVIEW", "color": "Black", "qty": 1, "price": "499.00"}]
+        )
+        response = self.client.post(reverse("my-orders"), payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        data = response.data["data"]
+        self.assertEqual(str(data["amount"]), "499.00")
+        self.assertEqual(data["items"][0]["card_type"], "REVIEW")
+        self.assertEqual(data["items"][0]["name"], "Google Review Card")
+
+    def test_rejects_retired_classic_card_type(self):
+        payload = _valid_payload(
+            items=[{"product_id": "p1", "name": "Classic Card", "card_type": "CLASSIC", "color": "Black", "qty": 1, "price": "499.00"}]
+        )
+        response = self.client.post(reverse("my-orders"), payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_rejects_retired_premium_card_type(self):
+        payload = _valid_payload(
+            items=[{"product_id": "p1", "name": "Premium Card", "card_type": "PREMIUM", "color": "Black", "qty": 1, "price": "799.00"}]
+        )
+        response = self.client.post(reverse("my-orders"), payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_requires_authentication(self):

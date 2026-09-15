@@ -7,6 +7,17 @@ from .models import Order, OrderItem
 TRACKING_LABELS = ["Order Placed", "Order Confirmed", "Shipped", "Out for Delivery", "Delivered"]
 STEP_FIELDS = ["placed_at", "confirmed_at", "shipped_at", "out_for_delivery_at", "delivered_at"]
 
+# Google Review Card is a separate public-site product, not an NFC business
+# card — it isn't part of nfc_cards.NfcCard.CardType (which models the
+# physical business-card inventory admin manages/assigns), so it's added
+# here as an order-item-only card type instead of touching that enum.
+# OrderItem.card_type is a plain CharField with no model-level choices (see
+# orders.models.OrderItem), so this only affects what new order items this
+# serializer accepts.
+GOOGLE_REVIEW_CARD_TYPE = "REVIEW"
+
+ORDER_ITEM_CARD_TYPE_CHOICES = [*NfcCard.CardType.choices, (GOOGLE_REVIEW_CARD_TYPE, "Google Review Card")]
+
 
 class OrderItemSerializer(serializers.ModelSerializer):
     class Meta:
@@ -78,7 +89,7 @@ class OrderSerializer(serializers.ModelSerializer):
 class OrderItemInputSerializer(serializers.Serializer):
     product_id = serializers.CharField(max_length=40)
     name = serializers.CharField(max_length=150)
-    card_type = serializers.ChoiceField(choices=NfcCard.CardType.choices)
+    card_type = serializers.ChoiceField(choices=ORDER_ITEM_CARD_TYPE_CHOICES)
     color = serializers.CharField(max_length=30)
     qty = serializers.IntegerField(min_value=1)
     price = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0)

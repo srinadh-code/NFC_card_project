@@ -33,6 +33,7 @@ class CustomerProfileSerializer(serializers.ModelSerializer):
             "state",
             "country",
             "google_maps_url",
+            "google_review_url",
             "profile_image",
             "cover_image",
             "profile_url",

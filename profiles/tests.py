@@ -6,7 +6,7 @@ from PIL import Image
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from common.test_utils import make_user
+from common.test_utils import AuthenticatedAPITestCase, make_user
 from customer_management.customer_analytics.models import AnalyticsEvent
 from customer_management.customer_services.models import CustomerService
 
@@ -132,3 +132,46 @@ class PublicProfileViewTests(APITestCase):
         response = self.client.get(reverse("profile-public", args=[self.profile.username]))
 
         self.assertEqual(response.data["data"]["services"], [])
+
+
+class MyProfileTemplateSelectionTests(AuthenticatedAPITestCase):
+    """Profile-template selection is no longer gated by which plan a
+    customer's paid orders resolve to (NEXORA Classic/Premium are retired,
+    and the frontend now offers all 5 of these templates to every customer)
+    — see orders.services.get_allowed_templates. This customer has placed
+    no paid orders at all (resolves to the base "classic" plan), yet must
+    still be able to pick any of the 5 templates that used to be
+    Custom-plan-exclusive."""
+
+    def setUp(self):
+        super().setUp()
+        self.profile = Profile.ensure_for_user(self.user)
+
+    def test_customer_with_no_paid_orders_can_select_any_of_the_5_templates(self):
+        for template_id in ["luxury", "future", "nature", "glass", "impact"]:
+            response = self.client.patch(
+                reverse("profile-me"), {"selected_template": template_id}, format="json"
+            )
+            self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+            self.assertEqual(response.data["data"]["selected_template"], template_id)
+
+    def test_selection_persists_across_requests(self):
+        self.client.patch(reverse("profile-me"), {"selected_template": "future"}, format="json")
+
+        response = self.client.get(reverse("profile-me"))
+
+        self.assertEqual(response.data["data"]["selected_template"], "future")
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.selected_template, "future")
+
+    def test_available_templates_always_lists_the_same_5_ids(self):
+        response = self.client.get(reverse("profile-me"))
+
+        self.assertEqual(
+            set(response.data["data"]["available_templates"]),
+            {"luxury", "future", "nature", "glass", "impact"},
+        )
+
+    def test_rejects_a_template_id_that_does_not_exist(self):
+        response = self.client.patch(reverse("profile-me"), {"selected_template": "not-a-real-template"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
