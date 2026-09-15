@@ -13,6 +13,7 @@ import type {
   Company,
   ContactMessage,
   Cta,
+  EmailSettings,
   Faq,
   Feature,
   GeneralSettings,
@@ -22,9 +23,12 @@ import type {
   HowItFeelsPoint,
   HowItWorksStep,
   Mission,
+  PaymentSettings,
   PublicAboutPayload,
   PublicGeneralSettings,
   PublicHomePayload,
+  SecuritySettings,
+  ShippingSettings,
   Statistic,
   StatisticPage,
   Testimonial,
@@ -121,8 +125,23 @@ function makeSingletonImageApi<T>(basePath: string): SingletonImageApi<T> {
 // Home
 // ---------------------------------------------------------------------
 
-const heroPhoneImageApi = makeSingletonImageApi<Hero>(`${ADMIN}/home/hero/phone-image`)
-const heroNfcCardImageApi = makeSingletonImageApi<Hero>(`${ADMIN}/home/hero/nfc-card-image`)
+// Unlike makeSingletonImageApi's other callers, these two endpoints are
+// already complete, self-descriptive paths on the backend (.../phone-image/,
+// .../nfc-card-image/) rather than a base path needing an "/image/" suffix
+// appended — so they're built directly instead of reusing that helper.
+function makeExactImageApi<T>(path: string): SingletonImageApi<T> {
+  return {
+    uploadImage: (file) => {
+      const formData = new FormData()
+      formData.append("image", file)
+      return request<T>(path, { method: "POST", body: formData, isFormData: true })
+    },
+    removeImage: () => request<T>(path, { method: "DELETE" }),
+  }
+}
+
+const heroPhoneImageApi = makeExactImageApi<Hero>(`${ADMIN}/home/hero/phone-image/`)
+const heroNfcCardImageApi = makeExactImageApi<Hero>(`${ADMIN}/home/hero/nfc-card-image/`)
 
 export const heroApi = {
   ...makeSingletonApi<Hero>(`${ADMIN}/home/hero`),
@@ -141,7 +160,13 @@ export const ctaApi = makeSingletonApi<Cta>(`${ADMIN}/home/cta`)
 // About
 // ---------------------------------------------------------------------
 
-export const aboutPageApi = makeSingletonApi<AboutPage>(`${ADMIN}/about/page`)
+const aboutPageStoryImageApi = makeExactImageApi<AboutPage>(`${ADMIN}/about/page/story-image/`)
+
+export const aboutPageApi = {
+  ...makeSingletonApi<AboutPage>(`${ADMIN}/about/page`),
+  uploadStoryImage: aboutPageStoryImageApi.uploadImage,
+  removeStoryImage: aboutPageStoryImageApi.removeImage,
+}
 export const aboutFeaturesApi = makeCrudApi<AboutFeature>(`${ADMIN}/about/features`)
 export const missionApi = makeSingletonApi<Mission>(`${ADMIN}/about/mission`)
 export const whyChooseApi = makeCrudApi<WhyChoose>(`${ADMIN}/about/why-choose`)
@@ -173,6 +198,10 @@ export const statisticsApi = makeCrudApi<Statistic>(`${ADMIN}/statistics`)
 // ---------------------------------------------------------------------
 
 export const settingsApi = makeSingletonApi<GeneralSettings>(`${ADMIN}/settings`)
+export const paymentSettingsApi = makeSingletonApi<PaymentSettings>(`${ADMIN}/payment-settings`)
+export const shippingSettingsApi = makeSingletonApi<ShippingSettings>(`${ADMIN}/shipping-settings`)
+export const emailSettingsApi = makeSingletonApi<EmailSettings>(`${ADMIN}/email-settings`)
+export const securitySettingsApi = makeSingletonApi<SecuritySettings>(`${ADMIN}/security-settings`)
 
 export function listStatisticsByPage(page: StatisticPage) {
   return statisticsApi.list({ page })

@@ -73,6 +73,7 @@ export interface AboutPage extends WithId {
   story_title: string
   story_paragraph_1: string
   story_paragraph_2: string
+  story_image_url: string
   is_active: boolean
 }
 
@@ -240,3 +241,38 @@ export interface GeneralSettings extends WithId {
 
 // What the public website is allowed to read — no id/timestamps.
 export type PublicGeneralSettings = Omit<GeneralSettings, "id" | "updated_at">
+
+// ---------------------------------------------------------------------
+// Payment / Shipping / Email / Security Settings — Admin Settings tabs.
+// Real, database-backed singletons (see website_content.models.settings on
+// the backend); `PaymentSettings.razorpay_secret` is write-only and never
+// comes back from a GET — `has_secret` reports whether one is configured.
+// ---------------------------------------------------------------------
+
+export interface PaymentSettings extends WithId {
+  razorpay_key_id: string
+  razorpay_secret?: string
+  has_secret: boolean
+  cod_enabled: boolean
+  updated_at: string
+}
+
+export interface ShippingSettings extends WithId {
+  flat_rate: string
+  free_shipping_threshold: string
+  updated_at: string
+}
+
+export interface EmailSettings extends WithId {
+  smtp_host: string
+  smtp_port: number | null
+  from_address: string
+  updated_at: string
+}
+
+export interface SecuritySettings extends WithId {
+  access_token_minutes: number
+  min_password_length: number
+  require_special_char: boolean
+  updated_at: string
+}

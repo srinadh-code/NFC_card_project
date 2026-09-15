@@ -1,6 +1,5 @@
-import { CheckCircle2, ChevronRight } from "lucide-react"
+import { CheckCircle2, ChevronRight, ImageIcon } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
-import heroImg from "@/assets/hero.png"
 import PageHeader from "@/components/marketing/PageHeader"
 import NfcCardShowcase from "@/components/marketing/NfcCardShowcase"
 import MissionShowcase from "@/components/marketing/MissionShowcase"
@@ -77,7 +76,22 @@ export default function About() {
           </div>
 
           <div>
-            <NfcCardShowcase />
+            {/* Admin-managed hero-style image (Website Content → About →
+                Page Header & Story) — falls back to the built-in NFC card
+                showcase graphic when no image has been uploaded. */}
+            {isLoading ? (
+              <Skeleton className="mx-auto aspect-[4/3] w-full max-w-md rounded-[32px] sm:max-w-lg" />
+            ) : data?.page.story_image_url ? (
+              <div className="relative mx-auto aspect-[4/3] w-full max-w-md overflow-hidden rounded-[32px] shadow-[0_20px_60px_rgba(15,23,42,0.12)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.5)] sm:max-w-lg">
+                <img
+                  src={data.page.story_image_url}
+                  alt="VR's NEXORA — our story"
+                  className="size-full object-cover"
+                />
+              </div>
+            ) : (
+              <NfcCardShowcase />
+            )}
           </div>
         </div>
       </section>
@@ -166,11 +180,27 @@ export default function About() {
           <div className="mt-12 grid items-center gap-12 lg:grid-cols-2">
             <div className="relative flex items-center justify-center">
               <div className="absolute size-64 rounded-full bg-gradient-to-br from-[#4F46E5]/10 via-[#7C3AED]/10 to-[#EC4899]/10 blur-3xl" />
-              <img
-                src={data?.built_from_experience?.image_url || heroImg}
-                alt="VR's NEXORA story"
-                className="relative z-10 mx-auto w-full max-w-sm"
-              />
+              {/* Admin-managed hero-style image (Website Content → About →
+                  Built From Experience) — no fallback graphic; a clean
+                  placeholder renders until one is uploaded. */}
+              {isLoading ? (
+                <Skeleton className="relative z-10 aspect-[4/3] w-full max-w-xl rounded-[24px]" />
+              ) : data?.built_from_experience?.image_url ? (
+                <div className="relative z-10 aspect-[4/3] w-full max-w-xl overflow-hidden rounded-[24px] shadow-[0_20px_60px_rgba(15,23,42,0.12)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+                  <img
+                    src={data.built_from_experience.image_url}
+                    alt="VR's NEXORA story"
+                    className="size-full object-cover"
+                  />
+                </div>
+              ) : (
+                <div className="relative z-10 flex aspect-[4/3] w-full max-w-xl flex-col items-center justify-center gap-2 rounded-[24px] border border-dashed border-border bg-card/60 px-6 text-center">
+                  <ImageIcon className="size-8 text-muted-foreground/50" />
+                  <p className="text-xs text-muted-foreground">
+                    Upload an image in Website Content → About → Built From Experience to show it here.
+                  </p>
+                </div>
+              )}
             </div>
             <div>
               {isLoading ? (

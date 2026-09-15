@@ -1,15 +1,17 @@
 import { useState } from "react"
 import { Navigate, Link, useNavigate, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
+import { GoogleLogin, type CredentialResponse } from "@react-oauth/google"
 import { Fingerprint, Sparkles, Zap } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ForgotPasswordDialog } from "@/components/auth/ForgotPasswordDialog"
 import { useCustomerAuthStore } from "@/store/auth-store"
-import { ApiError, authApi } from "@/lib/api"
 import { sanitizeRedirect } from "@/lib/utils"
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
 
 /**
  * Customer-only login for the public storefront and customer portal. Never
@@ -25,6 +27,7 @@ export default function Login() {
 
   const customer = useCustomerAuthStore((s) => s.customer)
   const customerLogin = useCustomerAuthStore((s) => s.login)
+  const customerGoogleLogin = useCustomerAuthStore((s) => s.googleLogin)
 
   // Arriving via "?redirect=/checkout" (see Checkout.tsx / CustomerLayout.tsx)
   // sends the visitor back to whatever they were trying to reach instead of
@@ -62,12 +65,24 @@ export default function Login() {
     }
   }
 
-  async function handleGoogleLogin() {
+  async function handleGoogleSuccess(credentialResponse: CredentialResponse) {
+    if (!credentialResponse.credential) {
+      toast.error("Google didn't return a credential. Please try again.")
+      return
+    }
+    setSubmitting(true)
+    setError(null)
     try {
-      await authApi.google()
-    } catch (err) {
-      const message = err instanceof ApiError ? err.message : "Google sign-in isn't available right now."
-      toast.error(message)
+      const result = await customerGoogleLogin(credentialResponse.credential)
+      if (result.success) {
+        toast.success("Logged in successfully. Welcome back!")
+        navigate(redirectTo)
+        return
+      }
+      setError(result.error)
+      toast.error(result.error)
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -186,27 +201,23 @@ export default function Login() {
             <div className="h-px flex-1 bg-border" />
           </div>
 
-          <Button variant="outline" size="lg" className="w-full" onClick={handleGoogleLogin}>
-            <svg viewBox="0 0 24 24" className="size-4">
-              <path
-                fill="#4285F4"
-                d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"
+          {GOOGLE_CLIENT_ID ? (
+            <div className="flex justify-center">
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() => toast.error("Google sign-in failed. Please try again.")}
+                text="signin_with"
+                shape="rectangular"
+                width="320"
               />
-              <path
-                fill="#34A853"
-                d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24z"
-              />
-              <path
-                fill="#FBBC05"
-                d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29A11.96 11.96 0 000 12c0 1.93.46 3.76 1.29 5.38l3.98-3.09z"
-              />
-              <path
-                fill="#EA4335"
-                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.94 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.98 3.09C6.22 6.86 8.87 4.75 12 4.75z"
-              />
-            </svg>
-            Login with Google
-          </Button>
+            </div>
+          ) : (
+            // Mirrors GoogleLoginView's own 501 "not configured" response —
+            // no dead/broken button rendered when the client ID is unset.
+            <p className="text-center text-xs text-muted-foreground">
+              Google sign-in isn't configured on this deployment yet.
+            </p>
+          )}
 
           <p className="text-center text-sm text-muted-foreground">
             Don&apos;t have an account?{" "}

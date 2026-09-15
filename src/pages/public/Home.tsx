@@ -132,7 +132,7 @@ export default function Home() {
             )}
           </div>
 
-          <div className="relative flex items-center justify-center py-10 lg:justify-end">
+          <div className="relative flex items-center justify-center py-10 lg:min-h-[560px] lg:justify-end lg:py-6">
             {/* Decorative floating gesture caption */}
             <div className="absolute -top-2 right-4 z-20 hidden -rotate-6 flex-col items-end gap-1 text-right sm:flex">
               <ArrowUpLeft className="size-5 text-primary" />
@@ -152,7 +152,7 @@ export default function Home() {
               <img
                 src={hero.nfc_card_image_url}
                 alt="VR's NEXORA NFC card"
-                className="absolute right-0 top-1/2 z-0 w-56 -translate-y-1/2 translate-x-10 rotate-6 animate-float-slower drop-shadow-2xl sm:w-64"
+                className="absolute right-0 top-1/2 z-0 w-64 max-h-[380px] -translate-y-1/2 translate-x-12 rotate-6 animate-float-slower object-contain drop-shadow-2xl sm:w-80 sm:max-h-[420px] lg:w-96 lg:translate-x-16"
               />
             )}
 
@@ -161,10 +161,10 @@ export default function Home() {
               <img
                 src={hero.phone_image_url}
                 alt="VR's NEXORA digital profile preview"
-                className="relative z-10 w-[260px] drop-shadow-2xl sm:w-[300px]"
+                className="relative z-10 w-[320px] max-h-[560px] object-contain drop-shadow-2xl sm:w-[400px] sm:max-h-[620px] lg:w-[440px] xl:w-[480px]"
               />
             ) : (
-              <div className="relative z-10 flex h-[420px] w-[220px] items-center justify-center rounded-[2.5rem] border-[6px] border-[#0F172A] bg-[#0F172A] p-6 text-center shadow-2xl sm:h-[460px] sm:w-[230px]">
+              <div className="relative z-10 flex h-[500px] w-[300px] items-center justify-center rounded-[2.5rem] border-[6px] border-[#0F172A] bg-[#0F172A] p-6 text-center shadow-2xl sm:h-[560px] sm:w-[340px] lg:h-[620px] lg:w-[380px]">
                 <p className="text-xs text-white/60">
                   Upload the phone preview image in Website Content → Home to show it here.
                 </p>
