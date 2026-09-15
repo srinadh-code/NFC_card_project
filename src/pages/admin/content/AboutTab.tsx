@@ -26,6 +26,19 @@ function AboutPageSection() {
   return (
     <SingletonSectionCard title="Page Header & Story" description="The top of the About page and the story section." isLoading={page.isLoading} isSaving={page.isSaving} onSave={page.save}>
       <div className="flex flex-col gap-1.5 sm:col-span-2">
+        <Label>Story Section Image</Label>
+        <ImageUploadField
+          currentUrl={page.values.story_image_url}
+          disabled={!page.data}
+          onUpload={async (file) => page.applyServerUpdate(await aboutPageApi.uploadStoryImage(file))}
+          onRemove={async () => page.applyServerUpdate(await aboutPageApi.removeStoryImage())}
+        />
+        <p className="text-xs text-muted-foreground">
+          Shown beside the "Our Story" copy near the top of the About page. JPEG, PNG, WEBP or SVG, up to
+          5MB. Leave empty to show the default NFC card showcase graphic instead.
+        </p>
+      </div>
+      <div className="flex flex-col gap-1.5 sm:col-span-2">
         <Label htmlFor="ap-title">Page Title</Label>
         <Input id="ap-title" value={page.values.page_title ?? ""} onChange={(e) => page.setField("page_title", e.target.value)} />
       </div>
@@ -169,15 +182,26 @@ function BuiltFromExperienceSection() {
   })
 
   return (
-    <SingletonSectionCard title="Built From Experience" isLoading={experience.isLoading} isSaving={experience.isSaving} onSave={experience.save}>
+    <SingletonSectionCard
+      title="Built From Experience"
+      description="Includes the About page's hero-style story image — shown at full width beside this text on the public site."
+      isLoading={experience.isLoading}
+      isSaving={experience.isSaving}
+      onSave={experience.save}
+    >
       <div className="flex flex-col gap-1.5 sm:col-span-2">
-        <Label>Image</Label>
+        <Label>About Section Image</Label>
         <ImageUploadField
           currentUrl={experience.values.image_url}
           disabled={!experience.data}
           onUpload={async (file) => experience.applyServerUpdate(await builtFromExperienceApi.uploadImage(file))}
           onRemove={async () => experience.applyServerUpdate(await builtFromExperienceApi.removeImage())}
         />
+        <p className="text-xs text-muted-foreground">
+          JPEG, PNG, WEBP or SVG, up to 5MB. Displayed at a 4:3 hero size and cropped to fill — upload a
+          high-resolution landscape image for the sharpest result. Removing the image shows a placeholder
+          on the public site instead of a fallback graphic.
+        </p>
       </div>
       <div className="flex flex-col gap-1.5 sm:col-span-2">
         <Label htmlFor="bfe-heading">Heading</Label>

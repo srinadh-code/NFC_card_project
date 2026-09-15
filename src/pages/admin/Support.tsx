@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Search, Plus, Eye, CheckCircle2, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -55,10 +55,14 @@ export default function AdminSupport() {
   })
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-tickets", search, statusFilter, priorityFilter],
-    queryFn: () => adminSupportApi.list({ search: search || undefined, status: statusFilter, priority: priorityFilter }),
+    queryKey: ["admin-tickets", page, search, statusFilter, priorityFilter],
+    queryFn: () =>
+      adminSupportApi.list({ page, search: search || undefined, status: statusFilter, priority: priorityFilter }),
+    placeholderData: keepPreviousData,
   })
   const tickets = data?.data ?? []
+  const totalItems = data?.count ?? 0
+  const totalPages = Math.max(1, data?.numPages ?? 1)
 
   // "New Ticket" dialog needs a customer to log the ticket on behalf of —
   // a single large page is enough for a picker, same pattern as the
@@ -118,17 +122,12 @@ export default function AdminSupport() {
     onError: () => toast.error("Couldn't send the reply. Please try again."),
   })
 
-  const filtered = tickets
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Support</h1>
-          <p className="text-sm text-muted-foreground">{tickets.length} tickets total</p>
+          <p className="text-sm text-muted-foreground">{totalItems} tickets total</p>
         </div>
         <Button onClick={() => setNewOpen(true)}>
           <Plus /> New Ticket
@@ -209,7 +208,7 @@ export default function AdminSupport() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pageItems.map((t) => (
+                  {tickets.map((t) => (
                     <TableRow key={t.id}>
                       <TableCell className="font-medium">{t.id}</TableCell>
                       <TableCell>{t.customerName}</TableCell>
@@ -250,7 +249,7 @@ export default function AdminSupport() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {pageItems.length === 0 && (
+                  {tickets.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                         No tickets found.
@@ -266,7 +265,7 @@ export default function AdminSupport() {
             page={page}
             totalPages={totalPages}
             onPageChange={setPage}
-            totalItems={filtered.length}
+            totalItems={totalItems}
             pageSize={PAGE_SIZE}
           />
         </CardContent>

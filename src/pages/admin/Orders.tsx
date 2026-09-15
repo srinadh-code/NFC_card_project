@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Search, Download, Eye, CheckCircle2, Circle, PackageCheck, Nfc } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -27,8 +27,7 @@ import {
 import { StatusBadge } from "@/components/admin/StatusBadge"
 import { TablePagination } from "@/components/admin/TablePagination"
 import { downloadCsv } from "@/components/admin/export-csv"
-import { useDataStore } from "@/store/data-store"
-import { adminOrderApi } from "@/lib/api"
+import { adminOrderApi, adminNfcApi, ApiError } from "@/lib/api"
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/mock-api"
 import type { Order, OrderStatus } from "@/types"
 import { cn } from "@/lib/utils"
@@ -53,7 +52,6 @@ function productSummary(order: Order) {
 
 export default function AdminOrders() {
   const queryClient = useQueryClient()
-  const cards = useDataStore((s) => s.cards)
 
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "All">("All")
@@ -65,12 +63,24 @@ export default function AdminOrders() {
   const [viewingId, setViewingId] = useState<string | null>(null)
   const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null)
   const [cardChoice, setCardChoice] = useState<string>("")
+  const [exporting, setExporting] = useState(false)
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-orders", search, statusFilter],
-    queryFn: () => adminOrderApi.list({ search: search || undefined, status: statusFilter }),
+    queryKey: ["admin-orders", page, search, statusFilter],
+    queryFn: () => adminOrderApi.list({ page, search: search || undefined, status: statusFilter }),
+    placeholderData: keepPreviousData,
   })
   const orders = data?.data ?? []
+  const totalItems = data?.count ?? 0
+  const totalPages = Math.max(1, data?.numPages ?? 1)
+
+  // Real, currently-unassigned card inventory for the Assign/Reassign dialog
+  // — sourced from the actual NFC cards API, not a local mock.
+  const { data: unassignedCardsPage } = useQuery({
+    queryKey: ["admin-cards-unassigned"],
+    queryFn: () => adminNfcApi.list({ status: "Unassigned", pageSize: 100 }),
+  })
+  const availableCards = unassignedCardsPage?.data ?? []
 
   const viewing = orders.find((o) => o.id === viewingId) ?? null
   const assigningOrder = orders.find((o) => o.id === assigningOrderId) ?? null
@@ -100,6 +110,7 @@ export default function AdminOrders() {
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ["admin-orders"] })
       queryClient.invalidateQueries({ queryKey: ["admin-cards"] })
+      queryClient.invalidateQueries({ queryKey: ["admin-cards-unassigned"] })
       toast.success(`Card ${vars.cardId} assigned to order ${vars.orderId}.`)
       setAssigningOrderId(null)
       setCardChoice("")
@@ -107,39 +118,44 @@ export default function AdminOrders() {
     onError: () => toast.error("Couldn't assign the card. Please try again."),
   })
 
-  // Cards eligible to fulfill an order: unassigned stock, or a card already
-  // tied to this exact customer/order (so re-opening the dialog still shows
-  // the current pick).
-  const availableCardsFor = (order: Order | null) =>
-    order
-      ? cards.filter((c) => c.status === "Unassigned" || c.id === order.assignedCardId)
-      : []
+  async function handleExport() {
+    setExporting(true)
+    try {
+      const rows: Order[] = []
+      let currentPage = 1
+      let numPages = 1
+      do {
+        const result = await adminOrderApi.list({
+          page: currentPage,
+          search: search || undefined,
+          status: statusFilter,
+        })
+        rows.push(...result.data)
+        numPages = result.numPages
+        currentPage += 1
+      } while (currentPage <= numPages)
 
-  // Status is now filtered server-side; only free-text search across the
-  // already-fetched page needs a client-side pass (search is also sent to
-  // the server, this just keeps typing responsive within the fetched page).
-  const filtered = orders
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-
-  function handleExport() {
-    downloadCsv(
-      `orders-${new Date().toISOString().slice(0, 10)}.csv`,
-      filtered.map((o) => ({
-        OrderID: o.id,
-        Customer: o.customerName,
-        Phone: o.customerPhone,
-        Email: o.customerEmail,
-        Product: productSummary(o),
-        Amount: o.total,
-        PaymentMethod: o.paymentMethod,
-        PaymentStatus: o.paymentStatus,
-        Status: o.status,
-        Date: formatDate(o.date),
-      })),
-    )
-    toast.success("Orders exported to CSV.")
+      downloadCsv(
+        `orders-${new Date().toISOString().slice(0, 10)}.csv`,
+        rows.map((o) => ({
+          OrderID: o.id,
+          Customer: o.customerName,
+          Phone: o.customerPhone,
+          Email: o.customerEmail,
+          Product: productSummary(o),
+          Amount: o.total,
+          PaymentMethod: o.paymentMethod,
+          PaymentStatus: o.paymentStatus,
+          Status: o.status,
+          Date: formatDate(o.date),
+        })),
+      )
+      toast.success("Orders exported to CSV.")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not export orders.")
+    } finally {
+      setExporting(false)
+    }
   }
 
   return (
@@ -147,10 +163,10 @@ export default function AdminOrders() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Orders</h1>
-          <p className="text-sm text-muted-foreground">{orders.length} orders placed</p>
+          <p className="text-sm text-muted-foreground">{totalItems} orders placed</p>
         </div>
-        <Button variant="outline" onClick={handleExport}>
-          <Download /> Export
+        <Button variant="outline" onClick={handleExport} disabled={exporting}>
+          <Download /> {exporting ? "Exporting..." : "Export"}
         </Button>
       </div>
 
@@ -212,7 +228,7 @@ export default function AdminOrders() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pageItems.map((o) => (
+                  {orders.map((o) => (
                     <TableRow key={o.id}>
                       <TableCell className="font-medium">{o.id}</TableCell>
                       <TableCell>{o.customerName}</TableCell>
@@ -234,7 +250,10 @@ export default function AdminOrders() {
                             size="sm"
                             onClick={() => {
                               setAssigningOrderId(o.id)
-                              setCardChoice(o.assignedCardId ?? "")
+                              // Reset to blank rather than prefilling the current card: the
+                              // dialog only lists real unassigned inventory, which by
+                              // definition won't include a card already on this order.
+                              setCardChoice("")
                             }}
                           >
                             <Nfc /> {o.assignedCardId ? "Reassign" : "Assign Card"}
@@ -253,7 +272,7 @@ export default function AdminOrders() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {pageItems.length === 0 && (
+                  {orders.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
                         No orders found.
@@ -269,7 +288,7 @@ export default function AdminOrders() {
             page={page}
             totalPages={totalPages}
             onPageChange={setPage}
-            totalItems={filtered.length}
+            totalItems={totalItems}
             pageSize={PAGE_SIZE}
           />
         </CardContent>
@@ -416,12 +435,12 @@ export default function AdminOrders() {
               <SelectValue placeholder="Select an unassigned card" />
             </SelectTrigger>
             <SelectContent>
-              {availableCardsFor(assigningOrder).map((c) => (
+              {availableCards.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.id} · {c.uid} ({c.cardType})
                 </SelectItem>
               ))}
-              {availableCardsFor(assigningOrder).length === 0 && (
+              {availableCards.length === 0 && (
                 <div className="px-2 py-1.5 text-sm text-muted-foreground">No unassigned cards in stock.</div>
               )}
             </SelectContent>

@@ -12,19 +12,30 @@ export interface WithId {
 
 export interface Hero extends WithId {
   badge: string
-  heading: string
+  heading_line1: string
+  heading_line2: string
   description: string
   primary_cta_text: string
   primary_cta_link: string
   secondary_cta_text: string
   secondary_cta_link: string
-  hero_image_url: string | null
+  phone_image_url: string | null
+  nfc_card_image_url: string | null
   is_active: boolean
 }
 
 export interface HeroFeature extends WithId {
   icon: string
   label: string
+  description: string
+  display_order: number
+  is_active: boolean
+}
+
+export interface BottomBarItem extends WithId {
+  icon: string
+  title: string
+  description: string
   display_order: number
   is_active: boolean
 }
@@ -62,6 +73,7 @@ export interface AboutPage extends WithId {
   story_title: string
   story_paragraph_1: string
   story_paragraph_2: string
+  story_image_url: string
   is_active: boolean
 }
 
@@ -192,6 +204,7 @@ export interface ContactMessage extends WithId {
 export interface PublicHomePayload {
   hero: Hero | null
   hero_features: HeroFeature[]
+  bottom_bar: BottomBarItem[]
   how_it_feels: (HowItFeels & { points: HowItFeelsPoint[] }) | null
   companies: Company[]
   statistics: Statistic[]
@@ -228,3 +241,38 @@ export interface GeneralSettings extends WithId {
 
 // What the public website is allowed to read — no id/timestamps.
 export type PublicGeneralSettings = Omit<GeneralSettings, "id" | "updated_at">
+
+// ---------------------------------------------------------------------
+// Payment / Shipping / Email / Security Settings — Admin Settings tabs.
+// Real, database-backed singletons (see website_content.models.settings on
+// the backend); `PaymentSettings.razorpay_secret` is write-only and never
+// comes back from a GET — `has_secret` reports whether one is configured.
+// ---------------------------------------------------------------------
+
+export interface PaymentSettings extends WithId {
+  razorpay_key_id: string
+  razorpay_secret?: string
+  has_secret: boolean
+  cod_enabled: boolean
+  updated_at: string
+}
+
+export interface ShippingSettings extends WithId {
+  flat_rate: string
+  free_shipping_threshold: string
+  updated_at: string
+}
+
+export interface EmailSettings extends WithId {
+  smtp_host: string
+  smtp_port: number | null
+  from_address: string
+  updated_at: string
+}
+
+export interface SecuritySettings extends WithId {
+  access_token_minutes: number
+  min_password_length: number
+  require_special_char: boolean
+  updated_at: string
+}

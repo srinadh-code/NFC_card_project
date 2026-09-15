@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useState } from "react"
+import { useQuery, keepPreviousData } from "@tanstack/react-query"
 import { Search, IndianRupee, RotateCcw, CheckCircle2, XCircle } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -24,29 +24,35 @@ export default function AdminTransactions() {
   const [page, setPage] = useState(1)
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-transactions", search, methodFilter, statusFilter],
-    queryFn: () => adminTransactionApi.list({ search: search || undefined, method: methodFilter, status: statusFilter }),
+    queryKey: ["admin-transactions", page, search, methodFilter, statusFilter],
+    queryFn: () =>
+      adminTransactionApi.list({ page, search: search || undefined, method: methodFilter, status: statusFilter }),
+    placeholderData: keepPreviousData,
   })
   const transactions = data?.data ?? []
+  const totalItems = data?.count ?? 0
+  const totalPages = Math.max(1, data?.numPages ?? 1)
 
-  const stats = useMemo(() => {
-    const totalRevenue = transactions.filter((t) => t.status === "Paid").reduce((s, t) => s + t.amount, 0)
-    const totalRefunded = transactions.filter((t) => t.status === "Refunded").reduce((s, t) => s + t.amount, 0)
-    const successCount = transactions.filter((t) => t.status === "Paid").length
-    const failedCount = transactions.filter((t) => t.status === "Failed").length
-    return { totalRevenue, totalRefunded, successCount, failedCount }
-  }, [transactions])
-
-  const filtered = transactions
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  // True platform-wide totals (every matching row, not just this page) —
+  // computed server-side so they never understate once there's more than
+  // one page of results.
+  const { data: summary } = useQuery({
+    queryKey: ["admin-transactions-summary", search, methodFilter, statusFilter],
+    queryFn: () => adminTransactionApi.summary({ search: search || undefined, method: methodFilter, status: statusFilter }),
+    placeholderData: keepPreviousData,
+  })
+  const stats = {
+    totalRevenue: summary?.totalRevenue ?? 0,
+    totalRefunded: summary?.totalRefunded ?? 0,
+    successCount: summary?.successfulCount ?? 0,
+    failedCount: summary?.failedCount ?? 0,
+  }
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Transactions</h1>
-        <p className="text-sm text-muted-foreground">{transactions.length} total transactions</p>
+        <p className="text-sm text-muted-foreground">{totalItems} total transactions</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -130,7 +136,7 @@ export default function AdminTransactions() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pageItems.map((t) => (
+                  {transactions.map((t) => (
                     <TableRow key={t.id}>
                       <TableCell className="font-medium">{t.id}</TableCell>
                       <TableCell className="text-muted-foreground">{t.orderId}</TableCell>
@@ -143,7 +149,7 @@ export default function AdminTransactions() {
                       <TableCell className="text-muted-foreground">{formatDate(t.date)}</TableCell>
                     </TableRow>
                   ))}
-                  {pageItems.length === 0 && (
+                  {transactions.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                         No transactions found.
@@ -159,7 +165,7 @@ export default function AdminTransactions() {
             page={page}
             totalPages={totalPages}
             onPageChange={setPage}
-            totalItems={filtered.length}
+            totalItems={totalItems}
             pageSize={PAGE_SIZE}
           />
         </CardContent>

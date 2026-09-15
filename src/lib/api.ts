@@ -60,6 +60,23 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Pulls a single field's message(s) out of an ApiError's `errors` (DRF's
+ * {"field_name": ["msg1", "msg2"]} shape, from common/response.py's error
+ * envelope) — for forms that show a backend validation error inline under
+ * the field it belongs to, instead of a generic toast. Returns null when
+ * that field has nothing to show, so callers can fall back to a toast for
+ * errors that aren't about a specific field (e.g. an expired token, a
+ * network failure).
+ */
+export function fieldErrorMessage(errors: Record<string, unknown> | undefined, field: string): string | null {
+  const value = errors?.[field]
+  if (value == null) return null
+  if (Array.isArray(value)) return value.length ? value.map(String).join(" ") : null
+  const text = String(value)
+  return text ? text : null
+}
+
 export interface Pagination {
   count: number
   page: number
@@ -219,26 +236,45 @@ export const authApi = {
   verifyEmail: (data: { email: string; otp: string }) =>
     request<AuthPayload>("/auth/verify-email/", { method: "POST", body: data, auth: false }),
 
+  // `expires_at` is only present for purpose: "RESET" (REGISTER resends
+  // have no frontend countdown UI today) — always present for RESET,
+  // real or not, so its presence never reveals whether the account exists.
   resendOtp: (data: { email: string; purpose?: "REGISTER" | "RESET" }) =>
-    request<null>("/auth/resend-otp/", { method: "POST", body: data, auth: false }),
+    request<{ expires_at?: string } | null>("/auth/resend-otp/", { method: "POST", body: data, auth: false }),
 
   login: (data: { email: string; password: string }) =>
     request<AuthPayload>("/auth/login/", { method: "POST", body: data, auth: false }),
 
   logout: (refresh: string) => request<null>("/auth/logout/", { method: "POST", body: { refresh } }),
 
+  // `expires_at` is when the just-issued OTP stops being valid (backend-
+  // authoritative — see accounts/views.py's ForgotPasswordView) — always
+  // present, real or synthetic, whether or not the account actually
+  // exists, so its value never reveals account existence either.
   forgotPassword: (data: { email: string }) =>
-    request<null>("/auth/forgot-password/", { method: "POST", body: data, auth: false }),
+    request<{ expires_at: string }>("/auth/forgot-password/", { method: "POST", body: data, auth: false }),
 
-  resetPassword: (data: { email: string; otp: string; new_password: string }) =>
+  // Verifies the emailed OTP and grants the short-lived, single-purpose
+  // reset_token that resetPassword below requires — the backend is
+  // authoritative here, this is not a "mark verified" flag the frontend
+  // can fake its way past.
+  verifyResetOtp: (data: { email: string; otp: string }) =>
+    request<{ reset_token: string }>("/auth/verify-reset-otp/", { method: "POST", body: data, auth: false }),
+
+  resetPassword: (data: { reset_token: string; new_password: string; confirm_password: string }) =>
     request<null>("/auth/reset-password/", { method: "POST", body: data, auth: false }),
 
-  changePassword: (data: { current_password: string; new_password: string }) =>
+  changePassword: (data: { current_password: string; new_password: string; confirm_password: string }) =>
     request<null>("/auth/change-password/", { method: "POST", body: data }),
 
   me: () => request<ApiUser>("/auth/me/"),
 
-  google: () => request<null>("/auth/google/", { method: "POST", body: {}, auth: false }),
+  // `credential` is the raw Google ID token from the frontend's Google
+  // Identity Services button (@react-oauth/google's GoogleLogin
+  // onSuccess callback) — verified for real on the backend, never trusted
+  // client-side. Returns the same shape as login/register.
+  google: (data: { credential: string }) =>
+    request<AuthPayload>("/auth/google/", { method: "POST", body: data, auth: false }),
 }
 
 // ---------------------------------------------------------------------
@@ -823,9 +859,15 @@ export interface AdminCardPage {
 }
 
 export const adminNfcApi = {
-  list: async (params: { page?: number; search?: string; status?: NfcCard["status"] | "All" }): Promise<AdminCardPage> => {
+  list: async (params: {
+    page?: number
+    pageSize?: number
+    search?: string
+    status?: NfcCard["status"] | "All"
+  }): Promise<AdminCardPage> => {
     const qs = new URLSearchParams()
     if (params.page) qs.set("page", String(params.page))
+    if (params.pageSize) qs.set("page_size", String(params.pageSize))
     if (params.search) qs.set("search", params.search)
     if (params.status && params.status !== "All") qs.set("status", CARD_STATUS_REVERSE_MAP[params.status])
     const query = qs.toString()
@@ -1213,7 +1255,6 @@ export const adminOrderApi = {
     if (params.page) qs.set("page", String(params.page))
     if (params.search) qs.set("search", params.search)
     if (params.status && params.status !== "All") qs.set("status", ORDER_STATUS_REVERSE_MAP[params.status])
-    qs.set("page_size", "100")
     const envelope = await rawRequest<ApiAdminOrder[]>(`/admin/orders/?${qs.toString()}`)
     return {
       data: (envelope.data ?? []).map(toFrontendOrder),
@@ -1304,7 +1345,6 @@ export const adminSupportApi = {
     if (params.search) qs.set("search", params.search)
     if (params.status && params.status !== "All") qs.set("status", TICKET_STATUS_REVERSE_MAP[params.status])
     if (params.priority && params.priority !== "All") qs.set("priority", TICKET_PRIORITY_REVERSE_MAP[params.priority])
-    qs.set("page_size", "100")
     const envelope = await rawRequest<ApiAdminTicket[]>(`/admin/support/?${qs.toString()}`)
     return {
       data: (envelope.data ?? []).map(toFrontendTicket),
@@ -1376,6 +1416,32 @@ export interface AdminTransactionPage {
   numPages: number
 }
 
+export interface AdminTransactionSummary {
+  totalRevenue: number
+  totalRefunded: number
+  successfulCount: number
+  failedCount: number
+}
+
+interface ApiAdminTransactionSummary {
+  total_revenue: number
+  total_refunded: number
+  successful_count: number
+  failed_count: number
+}
+
+function transactionListParams(params: {
+  search?: string
+  method?: PaymentMethod | "All"
+  status?: PaymentStatus | "All"
+}): URLSearchParams {
+  const qs = new URLSearchParams()
+  if (params.search) qs.set("search", params.search)
+  if (params.method && params.method !== "All") qs.set("method", PAYMENT_METHOD_REVERSE_MAP[params.method])
+  if (params.status && params.status !== "All") qs.set("status", PAYMENT_STATUS_REVERSE_MAP[params.status])
+  return qs
+}
+
 export const adminTransactionApi = {
   list: async (params: {
     page?: number
@@ -1383,18 +1449,33 @@ export const adminTransactionApi = {
     method?: PaymentMethod | "All"
     status?: PaymentStatus | "All"
   }): Promise<AdminTransactionPage> => {
-    const qs = new URLSearchParams()
+    const qs = transactionListParams(params)
     if (params.page) qs.set("page", String(params.page))
-    if (params.search) qs.set("search", params.search)
-    if (params.method && params.method !== "All") qs.set("method", PAYMENT_METHOD_REVERSE_MAP[params.method])
-    if (params.status && params.status !== "All") qs.set("status", PAYMENT_STATUS_REVERSE_MAP[params.status])
-    qs.set("page_size", "100")
     const envelope = await rawRequest<ApiAdminTransaction[]>(`/admin/transactions/?${qs.toString()}`)
     return {
       data: (envelope.data ?? []).map(toFrontendTransaction),
       count: envelope.pagination?.count ?? 0,
       page: envelope.pagination?.page ?? 1,
       numPages: envelope.pagination?.num_pages ?? 1,
+    }
+  },
+
+  // True platform-wide (or filtered) aggregate — unlike `list`, which only
+  // ever returns one page of rows, this reflects every matching transaction
+  // in the database, computed server-side.
+  summary: async (params: {
+    search?: string
+    method?: PaymentMethod | "All"
+    status?: PaymentStatus | "All"
+  }): Promise<AdminTransactionSummary> => {
+    const qs = transactionListParams(params)
+    const query = qs.toString()
+    const d = await request<ApiAdminTransactionSummary>(`/admin/transactions/summary/${query ? `?${query}` : ""}`)
+    return {
+      totalRevenue: Number(d.total_revenue),
+      totalRefunded: Number(d.total_refunded),
+      successfulCount: d.successful_count,
+      failedCount: d.failed_count,
     }
   },
 }
@@ -1502,6 +1583,66 @@ export const adminReportApi = {
       date: r.date,
     }))
   },
+}
+
+// ---------------------------------------------------------------------
+// Report generation history — real, persisted "Recent Reports" list.
+// ---------------------------------------------------------------------
+
+export type ReportType = "Sales Report" | "Tap Analytics" | "Customer Report" | "Order Report"
+
+const REPORT_TYPE_REVERSE_MAP: Record<ReportType, string> = {
+  "Sales Report": "SALES",
+  "Tap Analytics": "TAP_ANALYTICS",
+  "Customer Report": "CUSTOMERS",
+  "Order Report": "ORDERS",
+}
+const REPORT_TYPE_MAP: Record<string, ReportType> = {
+  SALES: "Sales Report",
+  TAP_ANALYTICS: "Tap Analytics",
+  CUSTOMERS: "Customer Report",
+  ORDERS: "Order Report",
+}
+
+export interface GeneratedReportEntry {
+  id: string
+  type: ReportType
+  generatedByName: string
+  rowCount: number
+  generatedOn: string
+}
+
+interface ApiGeneratedReport {
+  id: number
+  report_type: string
+  generated_by_name: string
+  row_count: number
+  created_at: string
+}
+
+function toFrontendGeneratedReport(r: ApiGeneratedReport): GeneratedReportEntry {
+  return {
+    id: String(r.id),
+    type: REPORT_TYPE_MAP[r.report_type] ?? "Sales Report",
+    generatedByName: r.generated_by_name,
+    rowCount: r.row_count,
+    generatedOn: r.created_at,
+  }
+}
+
+export const adminReportHistoryApi = {
+  list: async (): Promise<GeneratedReportEntry[]> => {
+    const envelope = await rawRequest<ApiGeneratedReport[]>("/admin/reports/history/?page_size=20")
+    return (envelope.data ?? []).map(toFrontendGeneratedReport)
+  },
+
+  record: async (type: ReportType, rowCount: number): Promise<GeneratedReportEntry> =>
+    toFrontendGeneratedReport(
+      await request<ApiGeneratedReport>("/admin/reports/history/", {
+        method: "POST",
+        body: { report_type: REPORT_TYPE_REVERSE_MAP[type], row_count: rowCount },
+      }),
+    ),
 }
 
 // ---------------------------------------------------------------------
@@ -1637,10 +1778,11 @@ export const adminProfileApi = {
 
   update: async (
     id: string,
-    patch: { fullName?: string; designation?: string; company?: string; phone?: string; bio?: string },
+    patch: { fullName?: string; email?: string; designation?: string; company?: string; phone?: string; bio?: string },
   ): Promise<Profile> => {
     const body: Record<string, unknown> = {}
     if (patch.fullName !== undefined) body.full_name = patch.fullName
+    if (patch.email !== undefined) body.email = patch.email
     if (patch.designation !== undefined) body.designation = patch.designation
     if (patch.company !== undefined) body.company = patch.company
     if (patch.phone !== undefined) body.phone = patch.phone

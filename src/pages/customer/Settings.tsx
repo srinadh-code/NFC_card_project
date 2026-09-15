@@ -5,6 +5,7 @@ import { Globe2, KeyRound, Mail, Moon, Search, Sun, Monitor, Users } from "lucid
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
@@ -240,7 +241,8 @@ export default function CustomerSettings() {
   })
 
   const changePasswordMutation = useMutation({
-    mutationFn: () => authApi.changePassword({ current_password: currentPw, new_password: newPw }),
+    mutationFn: () =>
+      authApi.changePassword({ current_password: currentPw, new_password: newPw, confirm_password: confirmPw }),
     onSuccess: () => {
       toast.success("Password changed successfully.")
       setCurrentPw("")
@@ -373,11 +375,11 @@ export default function CustomerSettings() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="new-pw">New Password</Label>
-              <Input id="new-pw" type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} />
+              <PasswordInput id="new-pw" value={newPw} onChange={(e) => setNewPw(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="confirm-pw">Confirm New Password</Label>
-              <Input id="confirm-pw" type="password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} />
+              <PasswordInput id="confirm-pw" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} />
             </div>
           </div>
           <DialogFooter>

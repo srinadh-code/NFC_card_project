@@ -1,13 +1,21 @@
 import { useState } from "react"
 import { Navigate, Link, useNavigate, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
-import { Check, Sparkles, Zap } from "lucide-react"
+import { Check, Sparkles, X, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { PasswordInput, PasswordRequirements } from "@/components/ui/password-input"
 import { useCustomerAuthStore, useAuthStore } from "@/store/auth-store"
-import { ApiError, authApi, setTokens } from "@/lib/api"
-import { sanitizeRedirect } from "@/lib/utils"
+import { ApiError, authApi, fieldErrorMessage, setTokens } from "@/lib/api"
+import {
+  PASSWORD_MAX_LENGTH,
+  PHONE_DIGITS,
+  cn,
+  isPasswordValid,
+  isTenDigitPhone,
+  sanitizeRedirect,
+} from "@/lib/utils"
 
 const CHECKLIST = [
   "Digital Business Profile",
@@ -28,16 +36,46 @@ export default function CustomerRegister() {
     ? `?redirect=${encodeURIComponent(searchParams.get("redirect")!)}`
     : ""
 
-  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" })
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    password: "",
+    confirmPassword: "",
+  })
+  const [phoneError, setPhoneError] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  // Recomputed on every keystroke — these drive the live checklist, the
+  // "Passwords match" line and the submit guard from one shared helper.
+  const passwordOk = isPasswordValid(form.password)
+  const passwordsMatch = form.confirmPassword.length > 0 && form.confirmPassword === form.password
 
   if (customer) return <Navigate to={redirectTo} replace />
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.name.trim() || !form.email.trim() || !form.phone.trim() || !form.password.trim()) {
+    if (!form.name.trim() || !form.email.trim() || !form.phone.trim() || !form.password) {
       setFormError("Please fill in all fields to continue.")
+      return
+    }
+    setPhoneError(null)
+    // Inline, below the field — not a toast/popup. The backend independently
+    // re-validates this (RegisterSerializer.validate_phone) and is the final
+    // authority; this only gives faster feedback before the request is sent.
+    if (!isTenDigitPhone(form.phone)) {
+      setPhoneError(`Phone number must be exactly ${PHONE_DIGITS} digits.`)
+      return
+    }
+    // Blocked before the request is ever made; the backend enforces the same
+    // rules again (accounts/validators.py) and is the final authority.
+    if (!passwordOk) {
+      setFormError("Your password doesn't meet all the requirements shown under the Password field.")
+      return
+    }
+    if (!passwordsMatch) {
+      setFormError("Password and confirmation do not match.")
       return
     }
     setFormError(null)
@@ -54,9 +92,18 @@ export default function CustomerRegister() {
       toast.success(`Welcome to VR's NEXORA, ${form.name.split(" ")[0]}!`)
       navigate(redirectTo)
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : "Something went wrong. Please try again."
-      setFormError(message)
-      toast.error(message)
+      // A backend-side phone rejection (its own independent check) is shown
+      // under the Phone field, same as the client-side check above — only a
+      // non-field failure (duplicate email, network error, etc.) still goes
+      // to the generic banner + toast.
+      const phoneMessage = err instanceof ApiError ? fieldErrorMessage(err.errors, "phone") : null
+      if (phoneMessage) {
+        setPhoneError(phoneMessage)
+      } else {
+        const message = err instanceof ApiError ? err.message : "Something went wrong. Please try again."
+        setFormError(message)
+        toast.error(message)
+      }
     } finally {
       setSubmitting(false)
     }
@@ -146,32 +193,90 @@ export default function CustomerRegister() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="phone">Phone Number</Label>
-              <div className="flex items-center rounded-md border shadow-xs focus-within:ring-[3px] focus-within:ring-ring/50">
+              <div
+                className={cn(
+                  "flex items-center rounded-md border shadow-xs focus-within:ring-[3px] focus-within:ring-ring/50",
+                  phoneError && "border-destructive focus-within:ring-destructive/20"
+                )}
+              >
                 <span className="border-r px-3 py-2 text-sm text-muted-foreground">+91</span>
                 <Input
                   id="phone"
                   type="tel"
+                  inputMode="numeric"
                   placeholder="98765 43210"
                   className="border-0 shadow-none focus-visible:ring-0"
                   value={form.phone}
-                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                  onChange={(e) => {
+                    setForm((f) => ({ ...f, phone: e.target.value.replace(/\D/g, "").slice(0, PHONE_DIGITS) }))
+                    setPhoneError(null)
+                  }}
+                  maxLength={PHONE_DIGITS}
+                  aria-invalid={!!phoneError}
+                  aria-describedby={phoneError ? "phone-error" : undefined}
                   required
                 />
               </div>
+              {phoneError && (
+                <p id="phone-error" role="alert" className="text-sm text-destructive">
+                  {phoneError}
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="reg-password">Password</Label>
-              <Input
+              <PasswordInput
                 id="reg-password"
-                type="password"
                 placeholder="••••••••"
                 value={form.password}
                 onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                maxLength={PASSWORD_MAX_LENGTH}
+                autoComplete="new-password"
+                aria-describedby="reg-password-requirements"
+                aria-invalid={form.password.length > 0 && !passwordOk}
                 required
               />
+              <PasswordRequirements id="reg-password-requirements" password={form.password} />
             </div>
 
-            {formError && <p className="text-sm text-destructive">{formError}</p>}
+            <div className="space-y-1.5">
+              <Label htmlFor="reg-confirm-password">Confirm Password</Label>
+              <PasswordInput
+                id="reg-confirm-password"
+                placeholder="••••••••"
+                value={form.confirmPassword}
+                onChange={(e) => setForm((f) => ({ ...f, confirmPassword: e.target.value }))}
+                maxLength={PASSWORD_MAX_LENGTH}
+                autoComplete="new-password"
+                aria-describedby="reg-confirm-password-status"
+                aria-invalid={form.confirmPassword.length > 0 && !passwordsMatch}
+                required
+              />
+              {form.confirmPassword.length > 0 && (
+                <p
+                  id="reg-confirm-password-status"
+                  role="status"
+                  aria-live="polite"
+                  className={cn(
+                    "flex items-center gap-1.5 text-xs",
+                    passwordsMatch ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
+                  )}
+                >
+                  {passwordsMatch ? (
+                    <Check className="size-3.5 shrink-0" aria-hidden="true" />
+                  ) : (
+                    <X className="size-3.5 shrink-0" aria-hidden="true" />
+                  )}
+                  Passwords match
+                </p>
+              )}
+            </div>
+
+            {formError && (
+              <p className="text-sm text-destructive" role="alert">
+                {formError}
+              </p>
+            )}
 
             <Button type="submit" className="w-full" size="lg" disabled={submitting}>
               {submitting ? "Signing up..." : "Sign Up"}

@@ -141,9 +141,37 @@ async function performLogin(email: string, password: string, expectedRole: "ADMI
   }
 }
 
+// Same role-gated shape as performLogin above, but for the Google Sign-In
+// flow: `credential` is the ID token the frontend's Google Identity
+// Services button already got directly from Google (@react-oauth/google's
+// GoogleLogin component) — this just hands it to the backend for real
+// verification and applies the exact same session-setup/role-check the
+// password login path uses, so every downstream consumer of LoginResult
+// keeps working unchanged.
+async function performGoogleLogin(credential: string, expectedRole: "ADMIN" | "CUSTOMER"): Promise<LoginResult> {
+  try {
+    const payload = await authApi.google({ credential })
+    if (payload.user.role !== expectedRole) {
+      return {
+        success: false,
+        error: "This Google account isn't registered as a customer.",
+      }
+    }
+    setTokens(payload.access, payload.refresh)
+    useAuthStore.getState().setUser(payload.user)
+    return { success: true }
+  } catch (err) {
+    if (err instanceof ApiError) {
+      return { success: false, error: err.message }
+    }
+    return { success: false, error: "Something went wrong. Please try again." }
+  }
+}
+
 interface CustomerAuthFacade {
   customer: CustomerUser | null
   login: (email: string, password: string) => Promise<LoginResult>
+  googleLogin: (credential: string) => Promise<LoginResult>
   logout: () => void
 }
 
@@ -157,6 +185,7 @@ export function useCustomerAuthStore<T>(selector: (state: CustomerAuthFacade) =>
     return {
       customer: isCustomer ? toCustomerUser(user!) : null,
       login: (email, password) => performLogin(email, password, "CUSTOMER"),
+      googleLogin: (credential) => performGoogleLogin(credential, "CUSTOMER"),
       logout: doLogout,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

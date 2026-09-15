@@ -1,11 +1,9 @@
 ﻿import { useState, type ReactNode } from "react"
-import { toast } from "sonner"
 import {
   Settings as SettingsIcon,
   CreditCard,
   Truck,
   Mail,
-  MessageSquare,
   ShieldCheck,
   Loader2,
 } from "lucide-react"
@@ -17,17 +15,15 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
-import { useSettingsStore } from "@/store/settings-store"
 import { useSingletonSection } from "@/components/admin/content/useSingletonSection"
-import { settingsApi } from "@/lib/contentApi"
-import type { GeneralSettings } from "@/types/content"
+import { emailSettingsApi, paymentSettingsApi, securitySettingsApi, settingsApi, shippingSettingsApi } from "@/lib/contentApi"
+import type { EmailSettings, GeneralSettings, PaymentSettings, SecuritySettings, ShippingSettings } from "@/types/content"
 
 const SECTIONS = [
   { key: "general", label: "General", icon: SettingsIcon },
   { key: "payment", label: "Payment Settings", icon: CreditCard },
   { key: "shipping", label: "Shipping Settings", icon: Truck },
   { key: "email", label: "Email Settings", icon: Mail },
-  { key: "sms", label: "SMS Settings", icon: MessageSquare },
   { key: "security", label: "Security Settings", icon: ShieldCheck },
 ] as const
 
@@ -44,45 +40,40 @@ function FieldRow({ label, children }: { label: string; children: ReactNode }) {
 
 export default function AdminSettings() {
   const [active, setActive] = useState<SectionKey>("general")
-  const settings = useSettingsStore((s) => s.settings)
-  const updateSection = useSettingsStore((s) => s.updateSection)
 
-  // General is database-backed (single source of truth) — see
-  // GeneralSettings in tracker-backend/website_content. Every other section
-  // below is still local-only (zustand + localStorage), unchanged.
+  // Every section here is a real, database-backed singleton — see
+  // website_content.models.settings on the backend. Nothing in this page
+  // is local-only state; every "Save Changes" button is a real PATCH.
   const general = useSingletonSection<GeneralSettings>({
     queryKey: ["settings", "admin"],
     get: settingsApi.get,
     update: settingsApi.update,
     label: "General Settings",
   })
-
-  const [payment, setPayment] = useState(settings.payment)
-  const [shipping, setShipping] = useState(settings.shipping)
-  const [email, setEmail] = useState(settings.email)
-  const [sms, setSms] = useState(settings.sms)
-  const [security, setSecurity] = useState(settings.security)
-
-  function savePayment() {
-    updateSection("payment", payment)
-    toast.success("Settings saved successfully.")
-  }
-  function saveShipping() {
-    updateSection("shipping", shipping)
-    toast.success("Settings saved successfully.")
-  }
-  function saveEmail() {
-    updateSection("email", email)
-    toast.success("Settings saved successfully.")
-  }
-  function saveSms() {
-    updateSection("sms", sms)
-    toast.success("Settings saved successfully.")
-  }
-  function saveSecurity() {
-    updateSection("security", security)
-    toast.success("Settings saved successfully.")
-  }
+  const payment = useSingletonSection<PaymentSettings>({
+    queryKey: ["settings", "payment"],
+    get: paymentSettingsApi.get,
+    update: paymentSettingsApi.update,
+    label: "Payment Settings",
+  })
+  const shipping = useSingletonSection<ShippingSettings>({
+    queryKey: ["settings", "shipping"],
+    get: shippingSettingsApi.get,
+    update: shippingSettingsApi.update,
+    label: "Shipping Settings",
+  })
+  const email = useSingletonSection<EmailSettings>({
+    queryKey: ["settings", "email"],
+    get: emailSettingsApi.get,
+    update: emailSettingsApi.update,
+    label: "Email Settings",
+  })
+  const security = useSingletonSection<SecuritySettings>({
+    queryKey: ["settings", "security"],
+    get: securitySettingsApi.get,
+    update: securitySettingsApi.update,
+    label: "Security Settings",
+  })
 
   return (
     <div className="flex flex-col gap-6">
@@ -204,35 +195,54 @@ export default function AdminSettings() {
                 <CardDescription>Configure your Razorpay integration and payment options.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <FieldRow label="Razorpay Key ID">
-                    <Input
-                      type="password"
-                      value={payment.razorpayKeyId}
-                      onChange={(e) => setPayment((v) => ({ ...v, razorpayKeyId: e.target.value }))}
-                    />
-                  </FieldRow>
-                  <FieldRow label="Razorpay Key Secret">
-                    <Input
-                      type="password"
-                      value={payment.razorpaySecret}
-                      onChange={(e) => setPayment((v) => ({ ...v, razorpaySecret: e.target.value }))}
-                    />
-                  </FieldRow>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border p-3">
-                  <div>
-                    <p className="text-sm font-medium">Enable Cash on Delivery</p>
-                    <p className="text-xs text-muted-foreground">Allow customers to pay on delivery for orders.</p>
+                {payment.isLoading ? (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {Array.from({ length: 2 }).map((_, i) => (
+                      <Skeleton key={i} className="h-10 w-full" />
+                    ))}
                   </div>
-                  <Switch
-                    checked={payment.codEnabled}
-                    onCheckedChange={(v) => setPayment((s) => ({ ...s, codEnabled: v }))}
-                  />
-                </div>
-                <div>
-                  <Button onClick={savePayment}>Save Changes</Button>
-                </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <FieldRow label="Razorpay Key ID">
+                        <Input
+                          value={payment.values.razorpay_key_id ?? ""}
+                          onChange={(e) => payment.setField("razorpay_key_id", e.target.value)}
+                        />
+                      </FieldRow>
+                      <FieldRow
+                        label={
+                          payment.data?.has_secret
+                            ? "Razorpay Key Secret (configured — leave blank to keep it)"
+                            : "Razorpay Key Secret"
+                        }
+                      >
+                        <Input
+                          type="password"
+                          placeholder={payment.data?.has_secret ? "••••••••••••••••" : ""}
+                          value={payment.values.razorpay_secret ?? ""}
+                          onChange={(e) => payment.setField("razorpay_secret", e.target.value)}
+                        />
+                      </FieldRow>
+                    </div>
+                    <div className="flex items-center justify-between rounded-lg border p-3">
+                      <div>
+                        <p className="text-sm font-medium">Enable Cash on Delivery</p>
+                        <p className="text-xs text-muted-foreground">Allow customers to pay on delivery for orders.</p>
+                      </div>
+                      <Switch
+                        checked={payment.values.cod_enabled ?? false}
+                        onCheckedChange={(v) => payment.setField("cod_enabled", v)}
+                      />
+                    </div>
+                    <div>
+                      <Button onClick={payment.save} disabled={payment.isSaving}>
+                        {payment.isSaving ? <Loader2 className="size-4 animate-spin" /> : null}
+                        Save Changes
+                      </Button>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           )}
@@ -244,27 +254,38 @@ export default function AdminSettings() {
                 <CardDescription>Set flat shipping rates and free-shipping thresholds.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <FieldRow label="Flat Shipping Rate (₹)">
-                    <Input
-                      type="number"
-                      value={shipping.flatRate}
-                      onChange={(e) => setShipping((v) => ({ ...v, flatRate: Number(e.target.value) }))}
-                    />
-                  </FieldRow>
-                  <FieldRow label="Free Shipping Threshold (₹)">
-                    <Input
-                      type="number"
-                      value={shipping.freeShippingThreshold}
-                      onChange={(e) =>
-                        setShipping((v) => ({ ...v, freeShippingThreshold: Number(e.target.value) }))
-                      }
-                    />
-                  </FieldRow>
-                </div>
-                <div>
-                  <Button onClick={saveShipping}>Save Changes</Button>
-                </div>
+                {shipping.isLoading ? (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {Array.from({ length: 2 }).map((_, i) => (
+                      <Skeleton key={i} className="h-10 w-full" />
+                    ))}
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <FieldRow label="Flat Shipping Rate (₹)">
+                        <Input
+                          type="number"
+                          value={shipping.values.flat_rate ?? ""}
+                          onChange={(e) => shipping.setField("flat_rate", e.target.value)}
+                        />
+                      </FieldRow>
+                      <FieldRow label="Free Shipping Threshold (₹)">
+                        <Input
+                          type="number"
+                          value={shipping.values.free_shipping_threshold ?? ""}
+                          onChange={(e) => shipping.setField("free_shipping_threshold", e.target.value)}
+                        />
+                      </FieldRow>
+                    </div>
+                    <div>
+                      <Button onClick={shipping.save} disabled={shipping.isSaving}>
+                        {shipping.isSaving ? <Loader2 className="size-4 animate-spin" /> : null}
+                        Save Changes
+                      </Button>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           )}
@@ -273,58 +294,51 @@ export default function AdminSettings() {
             <Card>
               <CardHeader>
                 <CardTitle>Email Settings</CardTitle>
-                <CardDescription>SMTP configuration used to send transactional emails.</CardDescription>
+                <CardDescription>
+                  SMTP configuration used to send transactional emails. Leave blank to use the server's
+                  default mail configuration.
+                </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <FieldRow label="SMTP Host">
-                    <Input value={email.smtpHost} onChange={(e) => setEmail((v) => ({ ...v, smtpHost: e.target.value }))} />
-                  </FieldRow>
-                  <FieldRow label="SMTP Port">
-                    <Input
-                      type="number"
-                      value={email.smtpPort}
-                      onChange={(e) => setEmail((v) => ({ ...v, smtpPort: Number(e.target.value) }))}
-                    />
-                  </FieldRow>
-                  <FieldRow label="From Address">
-                    <Input value={email.fromAddress} onChange={(e) => setEmail((v) => ({ ...v, fromAddress: e.target.value }))} />
-                  </FieldRow>
-                </div>
-                <div>
-                  <Button onClick={saveEmail}>Save Changes</Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {active === "sms" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>SMS Settings</CardTitle>
-                <CardDescription>Configure the SMS gateway used for OTPs and alerts.</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <FieldRow label="Provider">
-                    <Select value={sms.provider} onValueChange={(v) => setSms((s) => ({ ...s, provider: v }))}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Twilio">Twilio</SelectItem>
-                        <SelectItem value="MSG91">MSG91</SelectItem>
-                        <SelectItem value="AWS SNS">AWS SNS</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FieldRow>
-                  <FieldRow label="Sender ID">
-                    <Input value={sms.senderId} onChange={(e) => setSms((v) => ({ ...v, senderId: e.target.value }))} />
-                  </FieldRow>
-                </div>
-                <div>
-                  <Button onClick={saveSms}>Save Changes</Button>
-                </div>
+                {email.isLoading ? (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Skeleton key={i} className="h-10 w-full" />
+                    ))}
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <FieldRow label="SMTP Host">
+                        <Input
+                          value={email.values.smtp_host ?? ""}
+                          onChange={(e) => email.setField("smtp_host", e.target.value)}
+                        />
+                      </FieldRow>
+                      <FieldRow label="SMTP Port">
+                        <Input
+                          type="number"
+                          value={email.values.smtp_port ?? ""}
+                          onChange={(e) =>
+                            email.setField("smtp_port", e.target.value ? Number(e.target.value) : null)
+                          }
+                        />
+                      </FieldRow>
+                      <FieldRow label="From Address">
+                        <Input
+                          value={email.values.from_address ?? ""}
+                          onChange={(e) => email.setField("from_address", e.target.value)}
+                        />
+                      </FieldRow>
+                    </div>
+                    <div>
+                      <Button onClick={email.save} disabled={email.isSaving}>
+                        {email.isSaving ? <Loader2 className="size-4 animate-spin" /> : null}
+                        Save Changes
+                      </Button>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           )}
@@ -333,34 +347,56 @@ export default function AdminSettings() {
             <Card>
               <CardHeader>
                 <CardTitle>Security Settings</CardTitle>
-                <CardDescription>Control admin authentication and session policy.</CardDescription>
+                <CardDescription>
+                  Controls that are actually enforced: session length applies to every new login, and the
+                  password rules apply the next time any account sets or resets a password.
+                </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                <div className="flex items-center justify-between rounded-lg border p-3">
-                  <div>
-                    <p className="text-sm font-medium">Require 2FA for admins</p>
-                    <p className="text-xs text-muted-foreground">
-                      Admins must verify with a second factor when logging in.
-                    </p>
+                {security.isLoading ? (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {Array.from({ length: 2 }).map((_, i) => (
+                      <Skeleton key={i} className="h-10 w-full" />
+                    ))}
                   </div>
-                  <Switch
-                    checked={security.require2FA}
-                    onCheckedChange={(v) => setSecurity((s) => ({ ...s, require2FA: v }))}
-                  />
-                </div>
-                <FieldRow label="Session Timeout (minutes)">
-                  <Input
-                    type="number"
-                    className="max-w-40"
-                    value={security.sessionTimeoutMinutes}
-                    onChange={(e) =>
-                      setSecurity((v) => ({ ...v, sessionTimeoutMinutes: Number(e.target.value) }))
-                    }
-                  />
-                </FieldRow>
-                <div>
-                  <Button onClick={saveSecurity}>Save Changes</Button>
-                </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <FieldRow label="Session Timeout (minutes)">
+                        <Input
+                          type="number"
+                          value={security.values.access_token_minutes ?? ""}
+                          onChange={(e) => security.setField("access_token_minutes", Number(e.target.value))}
+                        />
+                      </FieldRow>
+                      <FieldRow label="Minimum Password Length">
+                        <Input
+                          type="number"
+                          value={security.values.min_password_length ?? ""}
+                          onChange={(e) => security.setField("min_password_length", Number(e.target.value))}
+                        />
+                      </FieldRow>
+                    </div>
+                    <div className="flex items-center justify-between rounded-lg border p-3">
+                      <div>
+                        <p className="text-sm font-medium">Require a special character in passwords</p>
+                        <p className="text-xs text-muted-foreground">
+                          Applied to registration, password reset, and password change.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={security.values.require_special_char ?? false}
+                        onCheckedChange={(v) => security.setField("require_special_char", v)}
+                      />
+                    </div>
+                    <div>
+                      <Button onClick={security.save} disabled={security.isSaving}>
+                        {security.isSaving ? <Loader2 className="size-4 animate-spin" /> : null}
+                        Save Changes
+                      </Button>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           )}
