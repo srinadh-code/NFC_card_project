@@ -50,3 +50,5 @@ class TicketMessage(models.Model):
 
     def __str__(self):
         return f"{self.sender} message on ticket #{self.ticket_id}"
+
+

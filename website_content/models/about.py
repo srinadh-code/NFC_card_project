@@ -12,6 +12,13 @@ class AboutPage(models.Model):
     story_paragraph_1 = models.TextField(blank=True, default="")
     story_paragraph_2 = models.TextField(blank=True, default="")
 
+    # The top "Our Story" showcase image, next to the story copy — same
+    # admin-managed image pattern as HomeHero.phone_image_url and
+    # AboutBuiltFromExperience.image_url. Falls back to a code-built card
+    # mockup on the public page when unset (see NfcCardShowcase).
+    story_image_url = models.URLField(max_length=500, blank=True, default="")
+    story_image_public_id = models.CharField(max_length=255, blank=True, default="")
+
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

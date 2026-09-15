@@ -7,14 +7,19 @@ from .models import EmailOTP, User
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
     ordering = ["-created_at"]
-    list_display = ["email", "full_name", "role", "is_active", "email_verified", "created_at"]
+    list_display = ["email", "full_name", "role", "is_active", "email_verified", "google_linked", "created_at"]
     list_filter = ["role", "is_active", "email_verified", "is_staff"]
-    search_fields = ["email", "full_name", "phone"]
-    readonly_fields = ["created_at", "updated_at", "last_login"]
+    search_fields = ["email", "full_name", "phone", "google_id"]
+    readonly_fields = ["created_at", "updated_at", "last_login", "google_id", "google_avatar_url"]
+
+    @admin.display(boolean=True, description="Google")
+    def google_linked(self, obj):
+        return bool(obj.google_id)
 
     fieldsets = (
         (None, {"fields": ("email", "password")}),
         ("Personal info", {"fields": ("full_name", "phone", "avatar")}),
+        ("Google Sign-In", {"fields": ("google_id", "google_avatar_url")}),
         (
             "Permissions",
             {
@@ -44,7 +49,9 @@ class UserAdmin(DjangoUserAdmin):
 
 @admin.register(EmailOTP)
 class EmailOTPAdmin(admin.ModelAdmin):
-    list_display = ["user", "purpose", "code", "is_used", "created_at", "expires_at"]
+    # `code_hash`/`reset_token_hash` deliberately excluded — never surface
+    # even a hashed OTP/token, and there is no plaintext to show anymore.
+    list_display = ["user", "purpose", "attempts", "is_used", "created_at", "expires_at"]
     list_filter = ["purpose", "is_used"]
     search_fields = ["user__email"]
     readonly_fields = ["created_at"]

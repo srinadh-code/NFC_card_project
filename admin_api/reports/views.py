@@ -8,8 +8,12 @@ from rest_framework.views import APIView
 from accounts.models import User
 from admin_api.permissions import IsAdminRole
 from analytics.models import TapEvent
+from common.pagination import StandardPagination
 from common.response import success
 from orders.models import Order
+from reports.models import GeneratedReport
+
+from .serializers import GeneratedReportCreateSerializer, GeneratedReportSerializer
 
 
 class AdminSalesReportView(APIView):
@@ -104,3 +108,29 @@ class AdminOrderReportView(APIView):
             for o in orders
         ]
         return success(rows)
+
+
+class AdminReportHistoryView(APIView):
+    """Real, persisted "Recent Reports" list — the admin UI POSTs here right
+    after it successfully builds and downloads a report from the four data
+    endpoints above; GET lists that real history. Replaces the frontend's
+    former local-only mock (hardcoded RPT001-004 rows)."""
+
+    permission_classes = [IsAdminRole]
+
+    def get(self, request):
+        qs = GeneratedReport.objects.select_related("generated_by").all()
+        paginator = StandardPagination()
+        page = paginator.paginate_queryset(qs, request)
+        return paginator.get_paginated_response(GeneratedReportSerializer(page, many=True).data)
+
+    def post(self, request):
+        serializer = GeneratedReportCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        entry = GeneratedReport.objects.create(
+            report_type=serializer.validated_data["report_type"],
+            row_count=serializer.validated_data.get("row_count", 0),
+            generated_by=request.user,
+            generated_by_name=request.user.full_name,
+        )
+        return success(GeneratedReportSerializer(entry).data, message="Recorded.", status=201)

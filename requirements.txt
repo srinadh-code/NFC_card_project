@@ -8,6 +8,15 @@ dj-database-url==3.1.2
 qrcode==8.2
 cloudinary==1.44.2
 
+# `requests` is used directly in two places: accounts/emails.py's
+# send_password_reset_otp_email() (Brevo's transactional-email HTTP API) and
+# accounts/google_oauth.py's PyJWT PyJWKClient (fetches/caches Google's
+# public signing keys to verify Google Sign-In ID tokens). PyJWT itself was
+# already installed transitively via djangorestframework-simplejwt; pinned
+# explicitly here now that accounts/ imports both directly.
+PyJWT==2.12.1
+requests==2.33.1
+
 # Production server + Render-specific plumbing. Harmless locally — gunicorn
 # and whitenoise are simply never invoked by `manage.py runserver`, and
 # psycopg2-binary/cloudinary only activate when DATABASE_URL/CLOUDINARY_URL

@@ -13,10 +13,9 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
+from common.image_storage import delete_image, upload_image
 from common.permissions import IsAdminRole
 from common.response import error, success
-
-from website_content.services.cloudinary import delete_image, upload_image
 
 
 class PublicListAPIView(APIView):
@@ -178,15 +177,15 @@ class _ImageOpsMixin:
     public_id_field = "image_public_id"
     folder = "website"
 
-    def _apply_upload(self, obj, file_obj):
+    def _apply_upload(self, obj, file_obj, request=None):
         old_public_id = getattr(obj, self.public_id_field)
 
         # Upload (and validate) BEFORE touching the object — if this raises,
         # nothing below runs and the database is untouched.
-        new_url, new_public_id = upload_image(file_obj, folder=self.folder)
+        uploaded = upload_image(file_obj, folder=self.folder, request=request)
 
-        setattr(obj, self.url_field, new_url)
-        setattr(obj, self.public_id_field, new_public_id)
+        setattr(obj, self.url_field, uploaded["url"])
+        setattr(obj, self.public_id_field, uploaded["public_id"])
         obj.save(update_fields=[self.url_field, self.public_id_field])
 
         # Only clean up the previous asset once the new one is confirmed saved.
@@ -225,7 +224,7 @@ class AdminImageUploadAPIView(_ImageOpsMixin, APIView):
         file_obj = request.FILES.get("image")
         if not file_obj:
             return error("No image file provided.", status=400)
-        obj = self._apply_upload(obj, file_obj)
+        obj = self._apply_upload(obj, file_obj, request=request)
         return success(self.serializer_class(obj).data, message="Image uploaded.")
 
     def delete(self, request, pk):
@@ -254,7 +253,7 @@ class AdminSingletonImageUploadAPIView(_ImageOpsMixin, APIView):
         file_obj = request.FILES.get("image")
         if not file_obj:
             return error("No image file provided.", status=400)
-        obj = self._apply_upload(self.get_object(), file_obj)
+        obj = self._apply_upload(self.get_object(), file_obj, request=request)
         return success(self.serializer_class(obj).data, message="Image uploaded.")
 
     def delete(self, request):

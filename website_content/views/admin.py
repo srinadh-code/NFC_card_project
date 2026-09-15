@@ -20,15 +20,20 @@ from website_content.models import (
     Company,
     ContactMessage,
     ContactMessageReply,
+    EmailSettings,
     Faq,
     Feature,
     GeneralSettings,
+    HomeBottomBarItem,
     HomeCTA,
     HomeHero,
     HomeHeroFeatureHighlight,
     HomeHowItFeels,
     HomeHowItFeelsPoint,
     HowItWorksStep,
+    PaymentSettings,
+    SecuritySettings,
+    ShippingSettings,
     Statistic,
     Testimonial,
     Value,
@@ -42,15 +47,20 @@ from website_content.serializers import (
     CompanySerializer,
     ContactMessageReplyCreateSerializer,
     ContactMessageSerializer,
+    EmailSettingsSerializer,
     FaqSerializer,
     FeatureSerializer,
     GeneralSettingsSerializer,
+    HomeBottomBarItemSerializer,
     HomeCTASerializer,
     HomeHeroFeatureHighlightSerializer,
     HomeHeroSerializer,
     HomeHowItFeelsPointSerializer,
     HomeHowItFeelsSerializer,
     HowItWorksStepSerializer,
+    PaymentSettingsSerializer,
+    SecuritySettingsSerializer,
+    ShippingSettingsSerializer,
     StatisticSerializer,
     TestimonialSerializer,
     ValueSerializer,
@@ -75,11 +85,19 @@ class HomeHeroAdminView(AdminSingletonAPIView):
     serializer_class = HomeHeroSerializer
 
 
-class HomeHeroImageAdminView(AdminSingletonImageUploadAPIView):
+class HomeHeroPhoneImageAdminView(AdminSingletonImageUploadAPIView):
     model = HomeHero
     serializer_class = HomeHeroSerializer
-    url_field = "hero_image_url"
-    public_id_field = "hero_image_public_id"
+    url_field = "phone_image_url"
+    public_id_field = "phone_image_public_id"
+    folder = "website/home"
+
+
+class HomeHeroNfcCardImageAdminView(AdminSingletonImageUploadAPIView):
+    model = HomeHero
+    serializer_class = HomeHeroSerializer
+    url_field = "nfc_card_image_url"
+    public_id_field = "nfc_card_image_public_id"
     folder = "website/home"
 
 
@@ -95,6 +113,20 @@ class HomeHeroFeatureHighlightAdminDetailView(AdminDetailAPIView):
 
 class HomeHeroFeatureHighlightAdminReorderView(AdminReorderAPIView):
     model = HomeHeroFeatureHighlight
+
+
+class HomeBottomBarItemAdminListView(AdminListCreateAPIView):
+    model = HomeBottomBarItem
+    serializer_class = HomeBottomBarItemSerializer
+
+
+class HomeBottomBarItemAdminDetailView(AdminDetailAPIView):
+    model = HomeBottomBarItem
+    serializer_class = HomeBottomBarItemSerializer
+
+
+class HomeBottomBarItemAdminReorderView(AdminReorderAPIView):
+    model = HomeBottomBarItem
 
 
 class HomeHowItFeelsAdminView(AdminSingletonAPIView):
@@ -129,6 +161,14 @@ class HomeCTAAdminView(AdminSingletonAPIView):
 class AboutPageAdminView(AdminSingletonAPIView):
     model = AboutPage
     serializer_class = AboutPageSerializer
+
+
+class AboutPageStoryImageAdminView(AdminSingletonImageUploadAPIView):
+    model = AboutPage
+    serializer_class = AboutPageSerializer
+    url_field = "story_image_url"
+    public_id_field = "story_image_public_id"
+    folder = "website/about"
 
 
 class AboutFeatureHighlightAdminListView(AdminListCreateAPIView):
@@ -375,3 +415,23 @@ class ContactMessageReplyAdminView(APIView):
 class GeneralSettingsAdminView(AdminSingletonAPIView):
     model = GeneralSettings
     serializer_class = GeneralSettingsSerializer
+
+
+class PaymentSettingsAdminView(AdminSingletonAPIView):
+    model = PaymentSettings
+    serializer_class = PaymentSettingsSerializer
+
+
+class ShippingSettingsAdminView(AdminSingletonAPIView):
+    model = ShippingSettings
+    serializer_class = ShippingSettingsSerializer
+
+
+class EmailSettingsAdminView(AdminSingletonAPIView):
+    model = EmailSettings
+    serializer_class = EmailSettingsSerializer
+
+
+class SecuritySettingsAdminView(AdminSingletonAPIView):
+    model = SecuritySettings
+    serializer_class = SecuritySettingsSerializer

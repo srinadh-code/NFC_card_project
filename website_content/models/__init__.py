@@ -1,6 +1,7 @@
 from .home import (
     HomeHero,
     HomeHeroFeatureHighlight,
+    HomeBottomBarItem,
     HomeHowItFeels,
     HomeHowItFeelsPoint,
     HomeCTA,
@@ -20,11 +21,18 @@ from .testimonials import Testimonial
 from .companies import Company
 from .statistics import Statistic
 from .contact import ContactMessage, ContactMessageReply
-from .settings import GeneralSettings
+from .settings import (
+    EmailSettings,
+    GeneralSettings,
+    PaymentSettings,
+    SecuritySettings,
+    ShippingSettings,
+)
 
 __all__ = [
     "HomeHero",
     "HomeHeroFeatureHighlight",
+    "HomeBottomBarItem",
     "HomeHowItFeels",
     "HomeHowItFeelsPoint",
     "HomeCTA",
@@ -43,4 +51,8 @@ __all__ = [
     "ContactMessage",
     "ContactMessageReply",
     "GeneralSettings",
+    "PaymentSettings",
+    "ShippingSettings",
+    "EmailSettings",
+    "SecuritySettings",
 ]
