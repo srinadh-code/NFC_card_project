@@ -1,5 +1,3 @@
-from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
@@ -29,11 +27,7 @@ urlpatterns = [
     path("api/website/",include("website_content.urls")),
 ]
 
-if settings.DEBUG or not settings.MEDIA_USES_CLOUD_STORAGE:
-    # Cloudinary (when configured) serves media directly from its own CDN
-    # URLs, so Django never needs to route MEDIA_URL in that case. Without
-    # it, media still needs to be reachable somehow in production — this is
-    # not a scalable media server, but it's the difference between "profile
-    # photos load" and "every uploaded image 404s", which is what happened
-    # here when this was gated on DEBUG alone.
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# No local media route: this project has no local media storage at all
+# (see config/settings.py's Cloudinary/STORAGES block and
+# common/image_storage.py) — every uploaded image is served directly from
+# Cloudinary's own CDN URL, so Django never needs to route a /media/ path.

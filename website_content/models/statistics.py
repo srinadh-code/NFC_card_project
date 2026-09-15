@@ -11,6 +11,7 @@ class Statistic(models.Model):
     class Page(models.TextChoices):
         HOME = "home", "Home"
         ABOUT = "about", "About"
+        FEATURES = "features", "Features"
 
     page = models.CharField(max_length=20, choices=Page.choices, default=Page.HOME)
     value = models.CharField(max_length=50, help_text="e.g. 10K+, 99.9%")

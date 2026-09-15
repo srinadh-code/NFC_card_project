@@ -163,60 +163,13 @@ USE_I18N = True
 USE_TZ = True
 
 
-# Static & media files
+# Static files. There is deliberately no MEDIA_ROOT/MEDIA_URL — this
+# project has no local media storage at all (see the Cloudinary block
+# below and common/image_storage.py): every ImageField/FileField and every
+# Website Content upload goes to Cloudinary exclusively, nothing is ever
+# written to disk, and nothing is served from a local /media/ route.
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-
-MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
-
-# Render's web service disk is ephemeral — anything written to MEDIA_ROOT
-# (profile avatars, cover images, generated QR codes) is wiped on every
-# deploy/restart. Setting Cloudinary credentials switches customer-uploaded
-# media to Cloudinary (persistent, CDN-backed) with no other code changes:
-# every ImageField already reads its .url through request.build_absolute_uri()
-# (see profiles/serializers.py, customer_profiles/serializers.py,
-# customer_qr_codes/serializers.py) — that call is a no-op passthrough for an
-# already-absolute Cloudinary URL and only adds a scheme+host for a relative
-# local path, so the exact same serializer code is correct for both storage
-# backends. Leave both unset for local dev, or for a Render deployment that
-# accepts losing uploads on every deploy.
-#
-# Two ways to configure it — set whichever is easier to get from the
-# Cloudinary dashboard:
-#   1. CLOUDINARY_URL alone, e.g. cloudinary://<api_key>:<api_secret>@<cloud_name>
-#      (the single string Cloudinary's own dashboard gives you)
-#   2. CLOUDINARY_CLOUD_NAME + CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET
-#      separately — combined into the same URL form internally.
-CLOUDINARY_URL = os.environ.get("CLOUDINARY_URL", "").strip()
-if not CLOUDINARY_URL:
-    _cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "").strip()
-    _api_key = os.environ.get("CLOUDINARY_API_KEY", "").strip()
-    _api_secret = os.environ.get("CLOUDINARY_API_SECRET", "").strip()
-    if _cloud_name and _api_key and _api_secret:
-        CLOUDINARY_URL = f"cloudinary://{_api_key}:{_api_secret}@{_cloud_name}"
-        # cloudinary's SDK reads this env var directly (not just the Django
-        # setting above) the moment it's imported, so it must actually be
-        # set here too — not only assigned to a Django setting.
-        os.environ["CLOUDINARY_URL"] = CLOUDINARY_URL
-
-MEDIA_USES_CLOUD_STORAGE = bool(CLOUDINARY_URL)
-
-if MEDIA_USES_CLOUD_STORAGE:
-    INSTALLED_APPS += ["cloudinary_storage", "cloudinary"]
-
-STORAGES = {
-    "default": {
-        "BACKEND": (
-            "cloudinary_storage.storage.MediaCloudinaryStorage"
-            if MEDIA_USES_CLOUD_STORAGE
-            else "django.core.files.storage.FileSystemStorage"
-        ),
-    },
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    },
-}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -285,22 +238,63 @@ BREVO_SENDER_EMAIL = os.environ.get("BREVO_SENDER_EMAIL", "").strip() or DEFAULT
 BREVO_SENDER_NAME = os.environ.get("BREVO_SENDER_NAME", "").strip()
 
 
-# Cloudinary — image storage for the Website Content module only. Credentials
-# are read from the environment and never exposed to the frontend; uploads
-# are always brokered through a Django APIView (see website_content/services).
-CLOUDINARY_CLOUD_NAME = os.environ.get("CLOUDINARY_CLOUD_NAME", "")
-CLOUDINARY_API_KEY = os.environ.get("CLOUDINARY_API_KEY", "")
-CLOUDINARY_API_SECRET = os.environ.get("CLOUDINARY_API_SECRET", "")
+# Cloudinary — the single source of truth for every uploaded image in this
+# project. No local filesystem fallback exists anywhere: this same
+# cloud_name/api_key/api_secret configures both (1) STORAGES["default"]
+# below, used by every plain ImageField (accounts.User.avatar,
+# profiles.Profile.avatar/cover_image, CustomerQrCode.image), and (2)
+# common/image_storage.py's direct SDK calls, used by every Website Content
+# upload (Home Hero, About, Testimonials, Companies). Credentials are read
+# from the environment and never exposed to the frontend.
+#
+# .strip() matters here: a stray trailing/leading space in a pasted .env
+# value (e.g. "CLOUDINARY_CLOUD_NAME= foo") silently breaks Cloudinary auth
+# otherwise — the SDK treats " foo" and "foo" as different cloud names.
+CLOUDINARY_CLOUD_NAME = os.environ.get("CLOUDINARY_CLOUD_NAME", "").strip()
+CLOUDINARY_API_KEY = os.environ.get("CLOUDINARY_API_KEY", "").strip()
+CLOUDINARY_API_SECRET = os.environ.get("CLOUDINARY_API_SECRET", "").strip()
 
-if CLOUDINARY_CLOUD_NAME:
-    import cloudinary
+# Two ways to configure it — set whichever is easier to get from the
+# Cloudinary dashboard:
+#   1. CLOUDINARY_URL alone, e.g. cloudinary://<api_key>:<api_secret>@<cloud_name>
+#      (the single string Cloudinary's own dashboard gives you)
+#   2. CLOUDINARY_CLOUD_NAME + CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET
+#      separately — combined into the same URL form internally.
+CLOUDINARY_URL = os.environ.get("CLOUDINARY_URL", "").strip()
+if not CLOUDINARY_URL and CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
+    CLOUDINARY_URL = f"cloudinary://{CLOUDINARY_API_KEY}:{CLOUDINARY_API_SECRET}@{CLOUDINARY_CLOUD_NAME}"
 
-    cloudinary.config(
-        cloud_name=CLOUDINARY_CLOUD_NAME,
-        api_key=CLOUDINARY_API_KEY,
-        api_secret=CLOUDINARY_API_SECRET,
-        secure=True,
-    )
+if CLOUDINARY_URL:
+    # django-cloudinary-storage and the cloudinary SDK both read this env
+    # var directly (not just the Django setting above) the moment they're
+    # imported, so it must actually be set here too.
+    os.environ["CLOUDINARY_URL"] = CLOUDINARY_URL
+
+import cloudinary
+
+cloudinary.config(
+    cloud_name=CLOUDINARY_CLOUD_NAME,
+    api_key=CLOUDINARY_API_KEY,
+    api_secret=CLOUDINARY_API_SECRET,
+    secure=True,
+)
+
+# Unconditional — always installed, always the default file storage. If
+# Cloudinary isn't actually configured (blank env vars above), an upload
+# attempt raises a real cloudinary.exceptions.Error the moment it's tried
+# (see common/image_storage.py for the Website Content module's own,
+# clearer pre-check) rather than silently writing to local disk — there is
+# no FileSystemStorage branch left to fall back to.
+INSTALLED_APPS += ["cloudinary_storage", "cloudinary"]
+
+STORAGES = {
+    "default": {
+        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 
 # Django REST Framework

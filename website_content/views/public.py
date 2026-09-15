@@ -23,6 +23,11 @@ from website_content.models import (
     Company,
     Faq,
     Feature,
+    FeaturesAnalyticsSection,
+    FeaturesCTA,
+    FeaturesPageCard,
+    FeaturesPageSettings,
+    FeaturesShowcaseSection,
     GeneralSettings,
     HomeBottomBarItem,
     HomeCTA,
@@ -45,6 +50,11 @@ from website_content.serializers import (
     ContactMessageCreateSerializer,
     FaqSerializer,
     FeatureSerializer,
+    FeaturesAnalyticsSectionSerializer,
+    FeaturesCTASerializer,
+    FeaturesPageCardSerializer,
+    FeaturesPageSettingsSerializer,
+    FeaturesShowcaseSectionSerializer,
     HomeBottomBarItemSerializer,
     HomeCTASerializer,
     HomeHeroFeatureHighlightSerializer,
@@ -137,8 +147,44 @@ class AboutPublicView(APIView):
 
 
 class FeaturesPublicView(PublicListAPIView):
+    """The shared `Feature` collection — used by Home's "Why Choose"
+    section. NOT the Features page's own content; see
+    FeaturesPagePublicView below for that composed payload."""
+
     model = Feature
     serializer_class = FeatureSerializer
+
+
+class FeaturesPagePublicView(APIView):
+    """Composed payload for the Features page itself — same one-call-per-page
+    pattern as HomePublicView/AboutPublicView. Statistics reuse the shared
+    Statistic model filtered to page="features"; every other section is a
+    dedicated Features-page model (see website_content.models.features_page)."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        page = FeaturesPageSettings.objects.filter(is_active=True).first()
+        analytics = FeaturesAnalyticsSection.objects.filter(is_active=True).first()
+        showcase = FeaturesShowcaseSection.objects.filter(is_active=True).first()
+        cta = FeaturesCTA.objects.filter(is_active=True).first()
+
+        if page is None:
+            return error("Features page content not found.", status=404)
+
+        data = {
+            "page": FeaturesPageSettingsSerializer(page).data,
+            "cards": FeaturesPageCardSerializer(
+                FeaturesPageCard.objects.filter(is_active=True), many=True
+            ).data,
+            "analytics": FeaturesAnalyticsSectionSerializer(analytics).data if analytics else None,
+            "showcase": FeaturesShowcaseSectionSerializer(showcase).data if showcase else None,
+            "statistics": StatisticSerializer(
+                Statistic.objects.filter(is_active=True, page=Statistic.Page.FEATURES), many=True
+            ).data,
+            "cta": FeaturesCTASerializer(cta).data if cta else None,
+        }
+        return success(data)
 
 
 class HowItWorksPublicView(PublicListAPIView):
@@ -172,7 +218,7 @@ class StatisticsPublicView(APIView):
     def get(self, request):
         page = request.query_params.get("page")
         queryset = Statistic.objects.filter(is_active=True)
-        if page in (Statistic.Page.HOME, Statistic.Page.ABOUT):
+        if page in (Statistic.Page.HOME, Statistic.Page.ABOUT, Statistic.Page.FEATURES):
             queryset = queryset.filter(page=page)
         return success(StatisticSerializer(queryset, many=True).data)
 

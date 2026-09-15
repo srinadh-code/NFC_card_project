@@ -23,6 +23,11 @@ from website_content.models import (
     EmailSettings,
     Faq,
     Feature,
+    FeaturesAnalyticsSection,
+    FeaturesCTA,
+    FeaturesPageCard,
+    FeaturesPageSettings,
+    FeaturesShowcaseSection,
     GeneralSettings,
     HomeBottomBarItem,
     HomeCTA,
@@ -50,6 +55,11 @@ from website_content.serializers import (
     EmailSettingsSerializer,
     FaqSerializer,
     FeatureSerializer,
+    FeaturesAnalyticsSectionSerializer,
+    FeaturesCTASerializer,
+    FeaturesPageCardSerializer,
+    FeaturesPageSettingsSerializer,
+    FeaturesShowcaseSectionSerializer,
     GeneralSettingsSerializer,
     HomeBottomBarItemSerializer,
     HomeCTASerializer,
@@ -218,6 +228,97 @@ class AboutBuiltFromExperienceImageAdminView(AdminSingletonImageUploadAPIView):
 
 
 # ---------------------------------------------------------------------------
+# Features Page — page-specific sections (hero/settings, cards, analytics,
+# showcase, CTA). Statistics for this page reuse the shared Statistic model
+# (page="features", see the Shared section below) rather than a dedicated
+# model — Statistic was already built to be page-parameterized.
+# ---------------------------------------------------------------------------
+
+
+class FeaturesPageSettingsAdminView(AdminSingletonAPIView):
+    model = FeaturesPageSettings
+    serializer_class = FeaturesPageSettingsSerializer
+
+
+class FeaturesPageHeroImageAdminView(AdminSingletonImageUploadAPIView):
+    model = FeaturesPageSettings
+    serializer_class = FeaturesPageSettingsSerializer
+    url_field = "hero_image_url"
+    public_id_field = "hero_image_public_id"
+    folder = "website/features"
+
+
+class FeaturesPageCardAdminListView(AdminListCreateAPIView):
+    model = FeaturesPageCard
+    serializer_class = FeaturesPageCardSerializer
+
+
+class FeaturesPageCardAdminDetailView(AdminDetailAPIView):
+    model = FeaturesPageCard
+    serializer_class = FeaturesPageCardSerializer
+    image_public_id_field = "image_public_id"
+
+
+class FeaturesPageCardAdminReorderView(AdminReorderAPIView):
+    model = FeaturesPageCard
+
+
+class FeaturesPageCardImageAdminView(AdminImageUploadAPIView):
+    model = FeaturesPageCard
+    serializer_class = FeaturesPageCardSerializer
+    url_field = "image_url"
+    public_id_field = "image_public_id"
+    folder = "website/features"
+
+
+class FeaturesAnalyticsSectionAdminView(AdminSingletonAPIView):
+    model = FeaturesAnalyticsSection
+    serializer_class = FeaturesAnalyticsSectionSerializer
+
+
+class FeaturesAnalyticsSectionImageAdminView(AdminSingletonImageUploadAPIView):
+    model = FeaturesAnalyticsSection
+    serializer_class = FeaturesAnalyticsSectionSerializer
+    url_field = "dashboard_image_url"
+    public_id_field = "dashboard_image_public_id"
+    folder = "website/features"
+
+
+class FeaturesShowcaseSectionAdminView(AdminSingletonAPIView):
+    model = FeaturesShowcaseSection
+    serializer_class = FeaturesShowcaseSectionSerializer
+
+
+class FeaturesShowcaseMainImageAdminView(AdminSingletonImageUploadAPIView):
+    model = FeaturesShowcaseSection
+    serializer_class = FeaturesShowcaseSectionSerializer
+    url_field = "main_image_url"
+    public_id_field = "main_image_public_id"
+    folder = "website/features"
+
+
+class FeaturesShowcaseCardImageAdminView(AdminSingletonImageUploadAPIView):
+    model = FeaturesShowcaseSection
+    serializer_class = FeaturesShowcaseSectionSerializer
+    url_field = "card_image_url"
+    public_id_field = "card_image_public_id"
+    folder = "website/features"
+
+
+class FeaturesCTAAdminView(AdminSingletonAPIView):
+    model = FeaturesCTA
+    serializer_class = FeaturesCTASerializer
+
+
+class FeaturesCTAImageAdminView(AdminSingletonImageUploadAPIView):
+    model = FeaturesCTA
+    serializer_class = FeaturesCTASerializer
+    url_field = "background_image_url"
+    public_id_field = "background_image_public_id"
+    folder = "website/features"
+
+
+# ---------------------------------------------------------------------------
 # Shared: Values, Features, How It Works, FAQs, Testimonials, Companies, Stats
 # ---------------------------------------------------------------------------
 
@@ -286,6 +387,7 @@ class TestimonialAdminListView(AdminListCreateAPIView):
 class TestimonialAdminDetailView(AdminDetailAPIView):
     model = Testimonial
     serializer_class = TestimonialSerializer
+    image_public_id_field = "image_public_id"
 
 
 class TestimonialAdminReorderView(AdminReorderAPIView):
@@ -308,6 +410,7 @@ class CompanyAdminListView(AdminListCreateAPIView):
 class CompanyAdminDetailView(AdminDetailAPIView):
     model = Company
     serializer_class = CompanySerializer
+    image_public_id_field = "logo_public_id"
 
 
 class CompanyAdminReorderView(AdminReorderAPIView):
@@ -329,7 +432,7 @@ class StatisticAdminListView(AdminListCreateAPIView):
     def get_queryset(self):
         queryset = super().get_queryset()
         page = self.request.query_params.get("page")
-        if page in (Statistic.Page.HOME, Statistic.Page.ABOUT):
+        if page in (Statistic.Page.HOME, Statistic.Page.ABOUT, Statistic.Page.FEATURES):
             queryset = queryset.filter(page=page)
         return queryset
 

@@ -69,11 +69,17 @@ class AdminListCreateAPIView(APIView):
 
 
 class AdminDetailAPIView(APIView):
-    """GET / PUT / PATCH / DELETE a single row of an admin-managed collection."""
+    """GET / PUT / PATCH / DELETE a single row of an admin-managed collection.
+
+    Set `image_public_id_field` on a subclass whose model carries a Cloudinary
+    asset (e.g. "image_public_id") to have DELETE clean that asset up too —
+    left as None (the default) for every collection that has no image field
+    at all, which is most of them."""
 
     permission_classes = [IsAdminRole]
     model = None
     serializer_class = None
+    image_public_id_field = None
 
     def get_object(self, pk):
         try:
@@ -106,7 +112,14 @@ class AdminDetailAPIView(APIView):
         obj = self.get_object(pk)
         if obj is None:
             return error("Not found.", status=404)
+        public_id = getattr(obj, self.image_public_id_field, "") if self.image_public_id_field else ""
         obj.delete()
+        # Only after the row is confirmed gone — an orphaned Cloudinary
+        # asset (cleanup failed) is recoverable; a DB row pointing at an
+        # already-destroyed asset (cleanup ran first, delete then failed)
+        # is not.
+        if public_id:
+            delete_image(public_id)
         return success(None, message="Deleted.")
 
 

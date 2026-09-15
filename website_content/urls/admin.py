@@ -26,6 +26,19 @@ from website_content.views.admin import (
     FeatureAdminDetailView,
     FeatureAdminListView,
     FeatureAdminReorderView,
+    FeaturesAnalyticsSectionAdminView,
+    FeaturesAnalyticsSectionImageAdminView,
+    FeaturesCTAAdminView,
+    FeaturesCTAImageAdminView,
+    FeaturesPageCardAdminDetailView,
+    FeaturesPageCardAdminListView,
+    FeaturesPageCardAdminReorderView,
+    FeaturesPageCardImageAdminView,
+    FeaturesPageHeroImageAdminView,
+    FeaturesPageSettingsAdminView,
+    FeaturesShowcaseCardImageAdminView,
+    FeaturesShowcaseMainImageAdminView,
+    FeaturesShowcaseSectionAdminView,
     GeneralSettingsAdminView,
     HomeBottomBarItemAdminDetailView,
     HomeBottomBarItemAdminListView,
@@ -166,6 +179,62 @@ urlpatterns = [
         "about/built-from-experience/image/",
         AboutBuiltFromExperienceImageAdminView.as_view(),
         name="admin-about-built-from-experience-image",
+    ),
+    # Features Page (page-specific sections; the shared "features/" list
+    # below is a DIFFERENT resource — Home's "Why Choose" cards — left
+    # untouched. Statistics for this page reuse "statistics/?page=features".)
+    path("features/page/", FeaturesPageSettingsAdminView.as_view(), name="admin-features-page"),
+    path(
+        "features/page/hero-image/",
+        FeaturesPageHeroImageAdminView.as_view(),
+        name="admin-features-page-hero-image",
+    ),
+    path("features/cards/", FeaturesPageCardAdminListView.as_view(), name="admin-features-cards"),
+    path(
+        "features/cards/reorder/",
+        FeaturesPageCardAdminReorderView.as_view(),
+        name="admin-features-cards-reorder",
+    ),
+    path(
+        "features/cards/<int:pk>/",
+        FeaturesPageCardAdminDetailView.as_view(),
+        name="admin-features-card-detail",
+    ),
+    path(
+        "features/cards/<int:pk>/image/",
+        FeaturesPageCardImageAdminView.as_view(),
+        name="admin-features-card-image",
+    ),
+    path(
+        "features/analytics/",
+        FeaturesAnalyticsSectionAdminView.as_view(),
+        name="admin-features-analytics",
+    ),
+    path(
+        "features/analytics/image/",
+        FeaturesAnalyticsSectionImageAdminView.as_view(),
+        name="admin-features-analytics-image",
+    ),
+    path(
+        "features/showcase/",
+        FeaturesShowcaseSectionAdminView.as_view(),
+        name="admin-features-showcase",
+    ),
+    path(
+        "features/showcase/main-image/",
+        FeaturesShowcaseMainImageAdminView.as_view(),
+        name="admin-features-showcase-main-image",
+    ),
+    path(
+        "features/showcase/card-image/",
+        FeaturesShowcaseCardImageAdminView.as_view(),
+        name="admin-features-showcase-card-image",
+    ),
+    path("features/cta/", FeaturesCTAAdminView.as_view(), name="admin-features-cta"),
+    path(
+        "features/cta/background-image/",
+        FeaturesCTAImageAdminView.as_view(),
+        name="admin-features-cta-image",
     ),
     # Shared
     path("values/", ValueAdminListView.as_view(), name="admin-values"),

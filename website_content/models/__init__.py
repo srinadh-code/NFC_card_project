@@ -15,6 +15,13 @@ from .about import (
 )
 from .values import Value
 from .features import Feature
+from .features_page import (
+    FeaturesAnalyticsSection,
+    FeaturesCTA,
+    FeaturesPageCard,
+    FeaturesPageSettings,
+    FeaturesShowcaseSection,
+)
 from .how_it_works import HowItWorksStep
 from .faqs import Faq
 from .testimonials import Testimonial
@@ -43,6 +50,11 @@ __all__ = [
     "AboutBuiltFromExperience",
     "Value",
     "Feature",
+    "FeaturesPageSettings",
+    "FeaturesPageCard",
+    "FeaturesAnalyticsSection",
+    "FeaturesShowcaseSection",
+    "FeaturesCTA",
     "HowItWorksStep",
     "Faq",
     "Testimonial",

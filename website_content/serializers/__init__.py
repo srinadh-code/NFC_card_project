@@ -15,6 +15,13 @@ from .about import (
 )
 from .values import ValueSerializer
 from .features import FeatureSerializer
+from .features_page import (
+    FeaturesAnalyticsSectionSerializer,
+    FeaturesCTASerializer,
+    FeaturesPageCardSerializer,
+    FeaturesPageSettingsSerializer,
+    FeaturesShowcaseSectionSerializer,
+)
 from .how_it_works import HowItWorksStepSerializer
 from .faqs import FaqSerializer
 from .testimonials import TestimonialSerializer
@@ -49,6 +56,11 @@ __all__ = [
     "AboutBuiltFromExperienceSerializer",
     "ValueSerializer",
     "FeatureSerializer",
+    "FeaturesPageSettingsSerializer",
+    "FeaturesPageCardSerializer",
+    "FeaturesAnalyticsSectionSerializer",
+    "FeaturesShowcaseSectionSerializer",
+    "FeaturesCTASerializer",
     "HowItWorksStepSerializer",
     "FaqSerializer",
     "TestimonialSerializer",

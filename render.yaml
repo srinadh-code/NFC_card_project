@@ -44,8 +44,12 @@ services:
         value: "30"
       - key: REFRESH_TOKEN_LIFETIME_DAYS
         value: "7"
-      # Optional — leave unset for console-backend email / no persistent
-      # media (see .env.example for what each one does).
+      # EMAIL_HOST is genuinely optional — leave unset for the console-backend
+      # fallback (see .env.example). CLOUDINARY_URL is NOT optional: this
+      # project has no local media storage/fallback at all (see
+      # common/image_storage.py and config/settings.py's STORAGES setting)
+      # — leaving it unset means every image upload fails with a clear
+      # error rather than degrading gracefully. Set it before going live.
       - key: EMAIL_HOST
         sync: false
       - key: EMAIL_HOST_USER
