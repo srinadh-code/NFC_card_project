@@ -3,16 +3,21 @@ import { toast } from "sonner"
 import { Check, Loader2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { PhoneMockup } from "@/components/marketing/ProfileThemeShowcase"
-import { PROFILE_THEMES } from "@/data/constants"
+import { CARD_THEME_IDS, PROFILE_THEMES } from "@/data/constants"
 import { cn } from "@/lib/utils"
 import { ApiError, profileApi } from "@/lib/api"
 import type { Profile } from "@/types"
 
-const PLAN_COPY: Record<string, string> = {
-  classic: "1 template included with your Classic plan.",
-  premium: "Choose 1 of 3 templates included with your Premium plan.",
-  custom: "Choose 1 of 5 templates included with your Custom plan.",
-}
+// All 5 existing NEXORA Custom templates — the ones sold on /shop — are
+// now offered to every customer regardless of plan/entitlement. This was
+// previously `profile.availableTemplates` (a server-resolved allow-list
+// keyed to the customer's purchased plan: 1 for Classic, 3 for Premium, 5
+// for Custom); that field is left alone/still comes from the API, it's
+// just no longer read here, so template *availability* is a pure frontend
+// choice again. Template *selection* still round-trips through the real
+// API below — see the module comment there for what that means if the
+// backend still enforces its own plan check server-side.
+const AVAILABLE_TEMPLATE_IDS = CARD_THEME_IDS.custom
 
 interface ProfileTemplatesSectionProps {
   profile: Profile
@@ -20,17 +25,15 @@ interface ProfileTemplatesSectionProps {
 
 /**
  * Lets the customer pick the visual template their profile (and QR-scanned
- * public page) renders with. Only ever shows the templates their purchased
- * plan actually entitles them to (`profile.availableTemplates`, resolved
- * server-side from their paid orders — never trusted from the client), and
- * reuses the exact same theme metadata/mockups as the /shop showcase so
- * there's one visual source of truth for what each template looks like.
+ * public page) renders with. Shows all 5 existing NEXORA templates to every
+ * customer (see `AVAILABLE_TEMPLATE_IDS` above), and reuses the exact same
+ * theme metadata/mockups as the /shop showcase so there's one visual source
+ * of truth for what each template looks like.
  */
 export function ProfileTemplatesSection({ profile }: ProfileTemplatesSectionProps) {
   const queryClient = useQueryClient()
-  const availableIds = profile.availableTemplates ?? ["classic"]
-  const themes = PROFILE_THEMES.filter((t) => availableIds.includes(t.id))
-  const planCopy = PLAN_COPY[profile.plan ?? "classic"] ?? `${availableIds.length} template(s) included with your plan.`
+  const themes = PROFILE_THEMES.filter((t) => AVAILABLE_TEMPLATE_IDS.includes(t.id))
+  const planCopy = "Choose any of these 5 templates for your digital business profile."
 
   const mutation = useMutation({
     mutationFn: (templateId: string) => profileApi.updateSelectedTemplate(templateId),

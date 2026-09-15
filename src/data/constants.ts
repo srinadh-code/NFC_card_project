@@ -1,5 +1,6 @@
-﻿import type { CardType, Product } from "@/types"
+﻿import type { CardType } from "@/types"
 import type { NfcCardTone } from "@/components/marketing/NfcCardShowcase"
+import googleReviewCardImage from "@/assets/google-review-card.webp"
 
 export const CARD_COLORS = [
   { name: "Black", hex: "#111111" },
@@ -9,59 +10,10 @@ export const CARD_COLORS = [
   { name: "Green", hex: "#16a34a" },
 ] as const
 
-export const PRODUCTS: Product[] = [
-  {
-    id: "PRD-STD",
-    name: "VR's NEXORA Classic Card",
-    cardType: "Classic",
-    description: "Durable PVC NFC card with custom QR code and profile link.",
-    price: 599,
-    colors: CARD_COLORS.slice(0, 4).map((c) => ({ ...c })),
-    image: "standard",
-  },
-  {
-    id: "PRD-PRM",
-    name: "VR's NEXORA Premium Card",
-    cardType: "Premium",
-    description: "Matte finish premium PVC card with priority analytics access.",
-    price: 999,
-    colors: CARD_COLORS.map((c) => ({ ...c })),
-    image: "premium",
-    popular: true,
-  },
-  {
-    id: "PRD-WOD",
-    name: "VR's NEXORA Wooden Card",
-    cardType: "Wooden",
-    description: "Eco-friendly engraved wooden NFC card, a true conversation starter.",
-    price: 799,
-    colors: [CARD_COLORS[0], { name: "Natural", hex: "#a9784f" }],
-    image: "wooden",
-  },
-  {
-    id: "PRD-MTL",
-    name: "VR's NEXORA Metal Card",
-    cardType: "Custom",
-    description: "Premium brushed metal card with laser engraving, built to last.",
-    price: 1499,
-    colors: [CARD_COLORS[0], { name: "Silver", hex: "#c0c0c8" }, { name: "Gold", hex: "#d4af37" }],
-    image: "metal",
-  },
-]
-
-// The Shop page sells a single flagship SKU; `PRODUCTS` above is kept for
-// order-history rendering (past orders reference these product ids/types).
-export const FLAGSHIP_PRODUCT: Product = {
-  id: "PRD-FLAGSHIP",
-  name: "VR's NEXORA NFC Business Card",
-  cardType: "Premium",
-  description:
-    "One smart card that replaces your entire stack of paper business cards — tap to share your digital profile instantly.",
-  price: 500,
-  colors: CARD_COLORS.map((c) => ({ ...c })),
-  image: "flagship",
-  popular: true,
-}
+// `PRODUCTS`/`FLAGSHIP_PRODUCT` (an old Classic/Premium/Wooden/Metal catalog
+// and a flagship SKU, both unused by any page — Shop.tsx reads from
+// NEXORA_CARD_TYPES instead) were removed: they only ever held retired
+// Classic/Premium card-type data.
 
 export const FLAGSHIP_FEATURES = [
   "NFC Enabled — tap to share instantly",
@@ -83,60 +35,39 @@ export const FLAGSHIP_FEATURES = [
 // ---------------------------------------------------------------------
 
 export interface NexoraCardType {
-  id: "classic" | "premium" | "custom"
+  id: "custom" | "google-review"
   name: string
   price: number
   design: string
   bestFor: string
-  templateCount: number
+  // Omitted entirely for a product with no profile-template entitlement
+  // (e.g. Google Review Card) — every read site treats "no value" the same
+  // as "hide the template-count UI", rather than displaying a count of 0.
+  templateCount?: number
   features: string[]
   cardType: CardType
-  cardTone: NfcCardTone
+  // NfcCardFace-drawn mockup tone — used only when `image` isn't set.
+  cardTone?: NfcCardTone
+  // A real product photo (e.g. Google Review Card's actual card design),
+  // shown instead of the drawn NfcCardFace mockup when present. See the
+  // "card showcase" panel in Shop.tsx.
+  image?: string
+  // Caption shown under the card-showcase image on Shop.tsx. Falls back to
+  // "Every {name} ships in this finish: {design}" when omitted (NEXORA
+  // Custom's case) — set this when a product needs different copy under
+  // the image than in its main description (e.g. Google Review Card).
+  imageCaption?: string
   color: { name: string; hex: string }
   popular?: boolean
 }
 
+// NEXORA Classic and NEXORA Premium have been retired and removed from sale.
+// Custom remains the flagship NEXORA tier; Google Review Card is a separate
+// (non-NEXORA-branded, no profile-template entitlement) product sold
+// alongside it on the same Shop page — see the omitted templateCount below
+// and the Shop.tsx guard that hides the profile-theme section when it's
+// selected.
 export const NEXORA_CARD_TYPES: NexoraCardType[] = [
-  {
-    id: "classic",
-    name: "NEXORA Classic",
-    price: 499,
-    design: "Matte Black PVC, gradient logo",
-    bestFor: "Individuals & Students",
-    templateCount: 1,
-    cardType: "Classic",
-    cardTone: "front",
-    color: { name: "Matte Black", hex: "#111111" },
-    features: [
-      "NFC Enabled",
-      "Digital Business Profile",
-      "QR Code",
-      "Unlimited Profile Updates",
-      "Social Links",
-      "Analytics Dashboard",
-    ],
-  },
-  {
-    id: "premium",
-    name: "NEXORA Premium",
-    price: 799,
-    design: "Premium metal finish, premium black design",
-    bestFor: "Professionals & Executives",
-    templateCount: 3,
-    cardType: "Premium",
-    cardTone: "gold",
-    color: { name: "Gunmetal Gold", hex: "#d4af37" },
-    popular: true,
-    features: [
-      "NFC Enabled",
-      "Digital Business Profile",
-      "QR Code",
-      "Unlimited Profile Updates",
-      "Social Links",
-      "Analytics Dashboard",
-      "Premium Metal Finish",
-    ],
-  },
   {
     id: "custom",
     name: "NEXORA Custom",
@@ -157,6 +88,30 @@ export const NEXORA_CARD_TYPES: NexoraCardType[] = [
       "Custom Color",
       "Custom Logo",
       "Custom Design",
+    ],
+  },
+  {
+    id: "google-review",
+    name: "Google Review Card",
+    price: 499,
+    design: "Make it easy for customers to leave a Google Review with a simple scan.",
+    bestFor: "Businesses & Local Stores",
+    // Not a NEXORA profile-card tier — no digital profile/template comes
+    // with it, so templateCount is omitted rather than set to 0.
+    cardType: "Review",
+    image: googleReviewCardImage,
+    imageCaption: "Make it easy for customers to find your Google Review page and share their feedback.",
+    color: { name: "Black", hex: "#111111" },
+    // A Google Review collection card, not a digital business profile —
+    // NFC isn't called out here even though the card supports it
+    // technically, since the primary benefit is the QR scan straight to
+    // the business's Google Review page.
+    features: [
+      "Google Review QR Code",
+      "One-Scan Review Access",
+      "Direct Link to Your Google Review Page",
+      "Easy for Customers to Leave Feedback",
+      "Durable Business Review Card",
     ],
   },
 ]
@@ -190,12 +145,15 @@ export const PROFILE_THEMES: ProfileTheme[] = [
   { id: "impact", name: "NEXORA Impact", tagline: "Confident. Dynamic. Powerful." },
 ]
 
-// Which themes belong to which card tier — disjoint sets (no id appears
-// under more than one key), 1 + 3 + 5 = 9 unique themes total. Keyed by
-// NexoraCardType["id"], kept as a separate lookup (rather than a field on
-// NEXORA_CARD_TYPES) so card-selection data stays untouched by this.
+// Which themes belong to which card tier. Keyed by NexoraCardType["id"],
+// kept as a separate lookup (rather than a field on NEXORA_CARD_TYPES) so
+// card-selection data stays untouched by this. Custom's "signature"/
+// "creative"/"executive"/"classic" siblings were Premium/Classic-exclusive
+// themes; now that those tiers are retired, Custom keeps only the 5 themes
+// it always had — those three former-Premium themes aren't reachable from
+// the Shop showcase anymore, though PROFILE_THEMES above still lists them
+// (unrelated systems still reference those ids: any customer's existing
+// `selectedTemplate`, and the base "classic" default new profiles start on).
 export const CARD_THEME_IDS: Record<string, string[]> = {
-  classic: ["classic"],
-  premium: ["signature", "creative", "executive"],
   custom: ["luxury", "future", "nature", "glass", "impact"],
 }

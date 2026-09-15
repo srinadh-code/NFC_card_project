@@ -1,4 +1,4 @@
-import { Globe, Mail, MessageCircle, Nfc, Phone, User } from "lucide-react"
+import { Check, Globe, Loader2, Mail, MessageCircle, Nfc, Phone, User } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { cardClass } from "@/components/marketing/PremiumCard"
 import type { ProfileTheme } from "@/data/constants"
@@ -426,12 +426,22 @@ export function PhoneMockup({ theme }: { theme: ProfileTheme }) {
 
 interface ProfileThemeShowcaseProps {
   themes: ProfileTheme[]
+  // Optional selection wiring — when omitted, this renders as the original
+  // pure showcase (no click interaction, no CTA). When provided (Shop.tsx
+  // passes this only for a signed-in customer with a profile), each card
+  // becomes clickable and calls `onSelect` with the theme id, which Shop.tsx
+  // wires to the exact same profileApi.updateSelectedTemplate call the
+  // Customer Dashboard → QR Code template picker uses — so picking a theme
+  // here updates the same real profile, visible on the public profile link
+  // and in admin, immediately.
+  selectedId?: string
+  onSelect?: (id: string) => void
+  pendingId?: string | null
 }
 
-// Pure showcase — no selection state, no click interaction, no CTA. Each
-// card just displays a theme's design so the customer can see what's
-// included with their plan.
-export default function ProfileThemeShowcase({ themes }: ProfileThemeShowcaseProps) {
+export default function ProfileThemeShowcase({ themes, selectedId, onSelect, pendingId }: ProfileThemeShowcaseProps) {
+  const interactive = Boolean(onSelect)
+
   return (
     <div
       className={cn(
@@ -439,14 +449,45 @@ export default function ProfileThemeShowcase({ themes }: ProfileThemeShowcasePro
         themes.length >= 3 ? "sm:grid-cols-2 lg:grid-cols-3" : themes.length === 2 ? "sm:grid-cols-2" : "",
       )}
     >
-      {themes.map((theme) => (
-        <div key={theme.id} className={cn(cardClass, "flex flex-col items-center p-6 text-center")}>
-          <PhoneMockup theme={theme} />
+      {themes.map((theme) => {
+        const isSelected = interactive && selectedId === theme.id
+        const isSaving = pendingId === theme.id
 
-          <p className="mt-5 text-lg font-bold text-foreground">{theme.name.replace("NEXORA ", "")}</p>
-          <p className="mt-1 text-sm text-muted-foreground">{theme.tagline}</p>
-        </div>
-      ))}
+        return (
+          <button
+            key={theme.id}
+            type="button"
+            disabled={!interactive || isSelected || pendingId != null}
+            onClick={() => onSelect?.(theme.id)}
+            className={cn(
+              cardClass,
+              "relative flex flex-col items-center p-6 text-center",
+              interactive && "cursor-pointer disabled:cursor-not-allowed",
+              !interactive && "cursor-default hover:translate-y-0 hover:shadow-none",
+              isSelected && "border-primary ring-2 ring-primary/50",
+            )}
+          >
+            {isSelected && (
+              <span className="absolute right-3 top-3 z-10 flex items-center gap-1 rounded-full bg-primary px-2 py-1 text-[10px] font-semibold text-primary-foreground shadow-sm">
+                <Check className="size-3" /> Selected
+              </span>
+            )}
+            {isSaving && (
+              <span className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-white/70">
+                <Loader2 className="size-6 animate-spin text-primary" />
+              </span>
+            )}
+
+            <PhoneMockup theme={theme} />
+
+            <p className="mt-5 text-lg font-bold text-foreground">{theme.name.replace("NEXORA ", "")}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{theme.tagline}</p>
+            {interactive && !isSelected && (
+              <p className="mt-3 text-xs font-semibold text-primary">Select this template</p>
+            )}
+          </button>
+        )
+      })}
     </div>
   )
 }
