@@ -46,6 +46,12 @@ export default function CustomerRegister() {
   const [phoneError, setPhoneError] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // Password requirements box: hidden until the user actually engages with
+  // the field. Shown while focused (even before typing, so "all unmet" is
+  // visible immediately), and stays visible on blur as long as there's a
+  // password to correct — only hides again once the field is fully empty.
+  const [passwordFocused, setPasswordFocused] = useState(false)
+  const showPasswordRequirements = passwordFocused || form.password.length > 0
 
   // Recomputed on every keystroke — these drive the live checklist, the
   // "Passwords match" line and the submit guard from one shared helper.
@@ -230,13 +236,17 @@ export default function CustomerRegister() {
                 placeholder="••••••••"
                 value={form.password}
                 onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                onFocus={() => setPasswordFocused(true)}
+                onBlur={() => setPasswordFocused(false)}
                 maxLength={PASSWORD_MAX_LENGTH}
                 autoComplete="new-password"
-                aria-describedby="reg-password-requirements"
+                aria-describedby={showPasswordRequirements ? "reg-password-requirements" : undefined}
                 aria-invalid={form.password.length > 0 && !passwordOk}
                 required
               />
-              <PasswordRequirements id="reg-password-requirements" password={form.password} />
+              {showPasswordRequirements && (
+                <PasswordRequirements id="reg-password-requirements" password={form.password} />
+              )}
             </div>
 
             <div className="space-y-1.5">

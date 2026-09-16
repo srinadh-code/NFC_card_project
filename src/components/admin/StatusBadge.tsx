@@ -28,6 +28,9 @@ const STATUS_VARIANTS: Record<string, BadgeVariant> = {
 
   Suspended: "destructive",
 
+  Enabled: "success",
+  Disabled: "secondary",
+
   Open: "warning",
   "In Progress": "soft",
   Resolved: "success",

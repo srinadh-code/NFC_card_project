@@ -32,9 +32,11 @@ export default function TestimonialCard({ testimonial }: TestimonialCardProps) {
         />
         <div>
           <p className="text-sm font-semibold text-foreground">{testimonial.name}</p>
-          <p className="text-xs text-muted-foreground">
-            {testimonial.role} @ {testimonial.company}
-          </p>
+          {(testimonial.role || testimonial.company) && (
+            <p className="text-xs text-muted-foreground">
+              {testimonial.role} @ {testimonial.company}
+            </p>
+          )}
         </div>
       </div>
     </PremiumCard>

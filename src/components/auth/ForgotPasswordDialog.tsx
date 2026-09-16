@@ -60,6 +60,7 @@ export function ForgotPasswordDialog({
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [email, setEmail] = useState("")
   const [otp, setOtp] = useState("")
+  const [otpError, setOtpError] = useState<string | null>(null)
   const [resetToken, setResetToken] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -79,6 +80,7 @@ export function ForgotPasswordDialog({
     setEmail("")
     setOtp("")
     setResetToken("")
+    setOtpError(null)
     setNewPassword("")
     setConfirmPassword("")
     setNewPasswordError(null)
@@ -151,6 +153,7 @@ export function ForgotPasswordDialog({
       const result = await authApi.resendOtp({ email: email.trim(), purpose: "RESET" })
       toast.success("A new code has been sent.")
       setOtp("")
+      setOtpError(null)
       if (result?.expires_at) startOtpCountdown(result.expires_at)
       startResendCooldown()
     } catch (err) {
@@ -163,13 +166,20 @@ export function ForgotPasswordDialog({
   async function handleVerifyOtp(e: React.FormEvent) {
     e.preventDefault()
     if (otp.length !== 6 || otpExpired) return
+    setOtpError(null)
     setSubmitting(true)
     try {
       const { reset_token } = await authApi.verifyResetOtp({ email: email.trim(), otp })
       setResetToken(reset_token)
       setStep(3)
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Invalid or expired code.")
+      // Shown directly under the OTP field, not as a toast. The backend's
+      // own message is used verbatim (VerifyResetOtpView.GENERIC_ERROR
+      // deliberately covers wrong/expired/already-used with one message,
+      // and a distinct one for the attempt-lockout case) — this never
+      // fabricates a more specific reason than the server actually gave,
+      // which would risk telling the user the wrong thing.
+      setOtpError(err instanceof ApiError ? err.message : "Invalid or expired code. Please check the code and try again.")
     } finally {
       setSubmitting(false)
     }
@@ -271,9 +281,25 @@ export function ForgotPasswordDialog({
                 inputMode="numeric"
                 maxLength={6}
                 value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                onChange={(e) => {
+                  setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+                  setOtpError(null)
+                }}
+                // Backend remains the real authority on expiry either way
+                // (see handleVerifyOtp's own otpExpired guard and the
+                // server's independent check) — this only stops the user
+                // from typing into a code that the client already knows is
+                // dead, until Resend Code restarts the countdown.
+                disabled={otpExpired}
+                aria-invalid={!!otpError}
+                aria-describedby={otpError ? "forgot-otp-error" : undefined}
                 required
               />
+              {otpError && (
+                <p id="forgot-otp-error" role="alert" className="text-sm text-destructive">
+                  {otpError}
+                </p>
+              )}
             </div>
 
             <p

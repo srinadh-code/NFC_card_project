@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Link2,
   LogOut,
+  MessageSquare,
   QrCode,
   Settings,
   ShoppingBag,
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/activity", label: "Activity", icon: Activity },
   { to: "/orders", label: "Orders", icon: ShoppingBag },
+  { to: "/reviews", label: "Reviews", icon: MessageSquare },
   { to: "/settings", label: "Settings", icon: Settings },
 ]
 
