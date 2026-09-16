@@ -249,6 +249,67 @@ export interface PublicFeaturesPagePayload {
 }
 
 // ---------------------------------------------------------------------
+// Order Card page (/shop) — the product catalog previously hardcoded as
+// NEXORA_CARD_TYPES in data/constants.ts. Note: data/constants.ts itself
+// is left as-is for its other, still-static consumers (QrCode.tsx's
+// Google Review upsell, admin's PlanTypeBadge/CardFormDialog) — only the
+// public /shop page reads this CMS data.
+// ---------------------------------------------------------------------
+
+export type OrderCardType = "WOODEN" | "CUSTOM" | "REVIEW"
+export type OrderCardTone = "front" | "back" | "gold" | "custom"
+
+export interface OrderCardPageSettings extends WithId {
+  page_title: string
+  page_subtitle: string
+  theme_section_heading: string
+  theme_section_subtitle: string
+  is_active: boolean
+}
+
+export interface OrderCardProduct extends WithId {
+  slug: string
+  name: string
+  price: string
+  design: string
+  best_for: string
+  template_count: number | null
+  // Newline-separated bullet list — split on "\n" when rendering.
+  features: string
+  card_type: OrderCardType
+  card_tone: OrderCardTone | ""
+  image_url: string
+  image_caption: string
+  color_name: string
+  color_hex: string
+  theme_plan_copy: string
+  popular: boolean
+  display_order: number
+  is_active: boolean
+}
+
+export interface OrderCardTrustBadge extends WithId {
+  icon: string
+  label: string
+  display_order: number
+  is_active: boolean
+}
+
+export interface ProfileTemplatePreview extends WithId {
+  template_id: string
+  image_url: string
+  display_order: number
+  is_active: boolean
+}
+
+export interface PublicOrderCardPayload {
+  page: OrderCardPageSettings
+  products: OrderCardProduct[]
+  trust_badges: OrderCardTrustBadge[]
+  profile_templates: ProfileTemplatePreview[]
+}
+
+// ---------------------------------------------------------------------
 // Contact messages
 // ---------------------------------------------------------------------
 

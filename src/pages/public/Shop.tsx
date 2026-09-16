@@ -1,46 +1,76 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { CheckCircle2, LayoutTemplate, Minus, Plus, RotateCcw, ShieldCheck, Truck } from "lucide-react"
+import { CheckCircle2, Minus, LayoutTemplate, Plus } from "lucide-react"
 import { toast } from "sonner"
 import PageHeader from "@/components/marketing/PageHeader"
 import NexoraCardSelector from "@/components/marketing/NexoraCardSelector"
 import ProfileThemeShowcase from "@/components/marketing/ProfileThemeShowcase"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/mock-api"
-import { ApiError, ordersApi, profileApi } from "@/lib/api"
-import { CARD_THEME_IDS, NEXORA_CARD_TYPES, PROFILE_THEMES } from "@/data/constants"
+import { ApiError, ordersApi, profileApi, CARD_TYPE_MAP } from "@/lib/api"
+import { publicWebsiteApi } from "@/lib/contentApi"
+import { CARD_THEME_IDS, PROFILE_THEMES, type NexoraCardType } from "@/data/constants"
 import { useCartStore } from "@/store/cart-store"
 import { cn } from "@/lib/utils"
 import { cardClass, gradientClass } from "@/components/marketing/PremiumCard"
 import { NfcCardFace } from "@/components/marketing/NfcCardShowcase"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
 import { useEnsuredProfile } from "@/hooks/use-ensured-profile"
+import { resolveIcon } from "@/lib/icon-map"
+import type { OrderCardProduct } from "@/types/content"
 
-const TRUST_BADGES = [
-  { icon: Truck, label: "Free Shipping" },
-  { icon: RotateCcw, label: "7 Days Return" },
-  { icon: ShieldCheck, label: "Secure Payment" },
-  { icon: CheckCircle2, label: "1 Year Warranty" },
-]
-
-// Plan-specific explanation copy for the Profile Theme section — kept
-// separate from NEXORA_CARD_TYPES since it describes the *theme choice*,
-// not the card itself, and only applies on this one section. Partial: a
-// product with no profile-template entitlement (e.g. Google Review Card)
-// has no copy here — that whole section is hidden for it below instead.
-const THEME_PLAN_COPY: Partial<Record<(typeof NEXORA_CARD_TYPES)[number]["id"], string>> = {
-  custom: "Choose one of five premium themes with full customization options.",
+// Maps the admin-editable catalog (see Website Content → Order Card) onto
+// the exact shape NexoraCardSelector/ProfileThemeShowcase already expect —
+// those presentational components stay unchanged; only where their data
+// comes from changes.
+function toNexoraCardType(p: OrderCardProduct): NexoraCardType {
+  return {
+    id: p.slug,
+    name: p.name,
+    price: Number(p.price),
+    design: p.design,
+    bestFor: p.best_for,
+    templateCount: p.template_count ?? undefined,
+    features: p.features
+      .split("\n")
+      .map((f) => f.trim())
+      .filter(Boolean),
+    cardType: CARD_TYPE_MAP[p.card_type] ?? "Custom",
+    cardTone: p.card_tone || undefined,
+    image: p.image_url || undefined,
+    imageCaption: p.image_caption || undefined,
+    color: { name: p.color_name, hex: p.color_hex },
+    popular: p.popular,
+    themePlanCopy: p.theme_plan_copy || undefined,
+  }
 }
 
 export default function Shop() {
   const navigate = useNavigate()
   const addLine = useCartStore((s) => s.addLine)
-  const [selectedId, setSelectedId] = useState<(typeof NEXORA_CARD_TYPES)[number]["id"]>("custom")
+  const [selectedId, setSelectedId] = useState<string>("")
   const { settings } = usePublicSettings()
   const [qty, setQty] = useState(1)
   const queryClient = useQueryClient()
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["content", "public-order-card"],
+    queryFn: publicWebsiteApi.getOrderCard,
+  })
+  const cardTypes = (data?.products ?? []).map(toNexoraCardType)
+
+  // Default to the first product once the catalog loads — mirrors the old
+  // static array's guarantee of "always at least one card", just resolved
+  // asynchronously now instead of at module load.
+  useEffect(() => {
+    if (cardTypes.length > 0 && !cardTypes.some((c) => c.id === selectedId)) {
+      setSelectedId(cardTypes[0].id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data])
   // Only populated for a signed-in customer (the query is disabled without
   // one) — used purely to let a logged-in customer select their profile
   // template straight from this showcase, same as the picker in Customer
@@ -58,14 +88,22 @@ export default function Shop() {
     (order) => order.status !== "CANCELLED" && order.items.some((item) => item.card_type === "CUSTOM"),
   )
 
-  // NEXORA_CARD_TYPES always has at least the Custom tier, so this is never
-  // undefined — the single source of truth every section below reads from.
-  const selectedCard = NEXORA_CARD_TYPES.find((c) => c.id === selectedId) ?? NEXORA_CARD_TYPES[0]
+  // Undefined only while loading/erroring/empty-catalog — guarded below
+  // before anything renders that dereferences it.
+  const selectedCard = cardTypes.find((c) => c.id === selectedId) ?? cardTypes[0]
   // Products with no profile-template entitlement (e.g. Google Review Card)
   // simply have no entry in CARD_THEME_IDS, so this is an empty array for
   // them — the theme section below hides itself when that happens.
-  const availableThemeIds = CARD_THEME_IDS[selectedCard.id] ?? []
+  const availableThemeIds = selectedCard ? (CARD_THEME_IDS[selectedCard.id] ?? []) : []
   const availableThemes = PROFILE_THEMES.filter((t) => availableThemeIds.includes(t.id))
+  // Admin-uploaded image override per template id (Website Content → Order
+  // Card → Profile Templates) — falls back to the code-drawn mockup for any
+  // id with no active override, so this is inert until an admin uploads one.
+  const templateImagesById = Object.fromEntries(
+    (data?.profile_templates ?? [])
+      .filter((t) => t.is_active && t.image_url)
+      .map((t) => [t.template_id, t.image_url]),
+  )
 
   // Same API call, same cache key, and same success/error handling as the
   // Customer Dashboard → QR Code template picker (ProfileTemplatesSection) —
@@ -84,6 +122,7 @@ export default function Shop() {
   })
 
   function buildLine() {
+    if (!selectedCard) throw new Error("No card selected")
     return {
       productId: `PRD-NEXORA-${selectedCard.id.toUpperCase()}`,
       name: selectedCard.name,
@@ -95,6 +134,7 @@ export default function Shop() {
   }
 
   function validate(): boolean {
+    if (!selectedCard) return false
     if (qty < 1) {
       toast.error("Quantity must be at least 1.")
       return false
@@ -114,22 +154,45 @@ export default function Shop() {
     navigate("/checkout")
   }
 
+  if (isError) {
+    return (
+      <div>
+        <p className="py-24 text-center text-muted-foreground">
+          Couldn&apos;t load this page&apos;s content. Please try again shortly.
+        </p>
+      </div>
+    )
+  }
+
+  if (isLoading || !selectedCard) {
+    return (
+      <div>
+        <PageHeader title="" subtitle="" />
+        <section className="bg-[#F8FAFC] px-4 py-16">
+          <div className="mx-auto max-w-[1320px] space-y-4">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <Skeleton className="h-96 w-full rounded-[24px]" />
+              <Skeleton className="h-96 w-full rounded-[24px]" />
+            </div>
+          </div>
+        </section>
+      </div>
+    )
+  }
+
   return (
     <div>
-      <PageHeader
-        title="Choose Your NEXORA Card"
-        subtitle="Select the card that best fits your style and professional needs."
-      />
+      <PageHeader title={data?.page.page_title ?? ""} subtitle={data?.page.page_subtitle} />
 
       {/* 1. Choose Your NEXORA Card */}
       <section className="bg-[#F8FAFC] px-4 py-16">
         <div className="mx-auto max-w-[1320px]">
-          <NexoraCardSelector cardTypes={NEXORA_CARD_TYPES} selectedId={selectedId} onSelect={setSelectedId} />
+          <NexoraCardSelector cardTypes={cardTypes} selectedId={selectedId} onSelect={setSelectedId} />
 
           {/* Template count summary strip — visually integrated, not a
               plain table, reading straight off the same card config. */}
           <div className={cn(cardClass, "mt-8 flex flex-col divide-y divide-[#E2E8F0] p-0 hover:translate-y-0 hover:shadow-[0_10px_30px_rgba(15,23,42,0.06)] sm:flex-row sm:divide-x sm:divide-y-0")}>
-            {NEXORA_CARD_TYPES.map((card) => (
+            {cardTypes.map((card) => (
               <div key={card.id} className="flex flex-1 items-center gap-3 p-5">
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                   <LayoutTemplate className="size-5" />
@@ -261,15 +324,18 @@ export default function Shop() {
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {TRUST_BADGES.map((b) => (
-                <div
-                  key={b.label}
-                  className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 text-center"
-                >
-                  <b.icon className="size-5 text-primary" />
-                  <span className="text-xs font-medium text-muted-foreground">{b.label}</span>
-                </div>
-              ))}
+              {(data?.trust_badges ?? []).map((b) => {
+                const Icon = resolveIcon(b.icon)
+                return (
+                  <div
+                    key={b.id}
+                    className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 text-center"
+                  >
+                    <Icon className="size-5 text-primary" />
+                    <span className="text-xs font-medium text-muted-foreground">{b.label}</span>
+                  </div>
+                )
+              })}
             </div>
           </div>
 
@@ -314,17 +380,15 @@ export default function Shop() {
           <div className="mx-auto max-w-[1320px]">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-                Choose Your Profile Theme
+                {data?.page.theme_section_heading || "Choose Your Profile Theme"}
               </h2>
-              <p className="mt-3 text-muted-foreground">
-                Personalize your digital identity with a profile style that matches you.
-              </p>
+              <p className="mt-3 text-muted-foreground">{data?.page.theme_section_subtitle}</p>
 
               <span className="mt-5 inline-block rounded-full bg-[#4F46E5]/10 px-4 py-1.5 text-xs font-bold tracking-wider text-[#4F46E5]">
                 {selectedCard.id.toUpperCase()} • {selectedCard.templateCount}{" "}
                 {selectedCard.templateCount === 1 ? "THEME" : "THEMES"} INCLUDED
               </span>
-              <p className="mt-3 text-sm text-muted-foreground">{THEME_PLAN_COPY[selectedCard.id]}</p>
+              <p className="mt-3 text-sm text-muted-foreground">{selectedCard.themePlanCopy}</p>
               {customer && profile ? (
                 hasCustomCard ? (
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -355,6 +419,7 @@ export default function Shop() {
                     : undefined
                 }
                 pendingId={selectTemplateMutation.isPending ? (selectTemplateMutation.variables ?? null) : null}
+                imagesByThemeId={templateImagesById}
               />
             </div>
           </div>

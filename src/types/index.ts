@@ -184,6 +184,9 @@ export interface Profile {
   // their plan allows picking from. Not present on a public-profile fetch
   // except `selectedTemplate` (plan/entitlement are owner-only concerns).
   selectedTemplate: string
+  // Color variant for Template 1 ("luxury") only — ignored by every other
+  // template. Same component, same data; only styling changes per variant.
+  luxuryTheme: "green" | "blue" | "black"
   plan?: string
   availableTemplates?: string[]
   socialLinks: SocialLink[]

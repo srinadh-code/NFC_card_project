@@ -2,6 +2,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import HomeTab from "./HomeTab"
 import AboutTab from "./AboutTab"
 import FeaturesTab from "./FeaturesTab"
+import OrderCardTab from "./OrderCardTab"
 import HowItWorksTab from "./HowItWorksTab"
 import FaqsTab from "./FaqsTab"
 import TestimonialsTab from "./TestimonialsTab"
@@ -23,6 +24,7 @@ export default function AdminWebsiteContent() {
           <TabsTrigger value="home">Home</TabsTrigger>
           <TabsTrigger value="about">About</TabsTrigger>
           <TabsTrigger value="features">Features</TabsTrigger>
+          <TabsTrigger value="order-card">Order Card</TabsTrigger>
           <TabsTrigger value="how-it-works">How It Works</TabsTrigger>
           <TabsTrigger value="faqs">FAQs</TabsTrigger>
           <TabsTrigger value="testimonials">Testimonials</TabsTrigger>
@@ -40,6 +42,9 @@ export default function AdminWebsiteContent() {
         </TabsContent>
         <TabsContent value="features" className="mt-4">
           <FeaturesTab />
+        </TabsContent>
+        <TabsContent value="order-card" className="mt-4">
+          <OrderCardTab />
         </TabsContent>
         <TabsContent value="how-it-works" className="mt-4">
           <HowItWorksTab />

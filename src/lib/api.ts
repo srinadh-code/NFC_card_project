@@ -323,6 +323,7 @@ interface ApiProfile {
   show_contact_info: boolean
   show_in_search: boolean
   selected_template: string
+  luxury_theme: string
   plan: string
   available_templates: string[]
   social_links: ApiSocialLink[]
@@ -381,6 +382,7 @@ interface ApiPublicProfile {
   avatar: string
   cover_image: string | null
   selected_template: string
+  luxury_theme: string
   social_links: ApiSocialLink[]
   custom_links: ApiCustomLink[]
   custom_fields: ApiCustomField[]
@@ -428,6 +430,7 @@ function toFrontendProfile(p: ApiProfile): Profile {
     status: p.status === "ACTIVE" ? "Active" : "Suspended",
     createdOn: p.created_at,
     selectedTemplate: p.selected_template,
+    luxuryTheme: (p.luxury_theme as Profile["luxuryTheme"]) || "black",
     plan: p.plan,
     availableTemplates: p.available_templates,
     socialLinks: p.social_links
@@ -527,6 +530,13 @@ export const profileApi = {
     return profileApi.getMine()
   },
 
+  // Color variant for Template 1 ("luxury") only — same PATCH target/shape
+  // as updateSelectedTemplate, just a different field on the same model.
+  updateLuxuryTheme: async (theme: string): Promise<Profile> => {
+    await request<ApiProfile>("/profiles/me/", { method: "PATCH", body: { luxury_theme: theme } })
+    return profileApi.getMine()
+  },
+
   getPrivacySettings: async () => {
     const p = await request<ApiProfile>("/profiles/me/")
     return {
@@ -591,6 +601,7 @@ export const profileApi = {
         status: "Active",
         createdOn: "",
         selectedTemplate: p.selected_template,
+        luxuryTheme: (p.luxury_theme as Profile["luxuryTheme"]) || "black",
         socialLinks: p.social_links
           .slice()
           .sort((a, b) => a.display_order - b.display_order)
@@ -744,9 +755,10 @@ export interface ApiNfcCard {
 }
 
 // Shared by NfcCard inventory responses (WOODEN/CUSTOM only — an NfcCard can
-// never actually be REVIEW) and by order-item responses (which can be
-// REVIEW — see Google Review Card in @/data/constants).
-const CARD_TYPE_MAP: Record<string, NfcCard["cardType"]> = {
+// never actually be REVIEW), by order-item responses (which can be REVIEW —
+// see Google Review Card in @/data/constants), and by the Order Card page's
+// admin-editable product catalog (Shop.tsx).
+export const CARD_TYPE_MAP: Record<string, NfcCard["cardType"]> = {
   WOODEN: "Wooden",
   CUSTOM: "Custom",
   REVIEW: "Review",
@@ -1741,6 +1753,7 @@ function toFrontendAdminProfile(p: ApiAdminProfile): Profile {
     // Admin's profile surface doesn't expose template selection (this
     // feature is customer-facing only, in /qr-code) — default is safe here.
     selectedTemplate: "classic",
+    luxuryTheme: "black",
     socialLinks: p.social_links
       .slice()
       .sort((a, b) => a.display_order - b.display_order)

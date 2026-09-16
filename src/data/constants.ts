@@ -23,19 +23,28 @@ export const FLAGSHIP_FEATURES = [
 ]
 
 // ---------------------------------------------------------------------
-// Order Card page — the 3 NEXORA tiers. Single source of truth for price,
-// feature list, and profile-template entitlement: every place that needs
-// any of these (the selector cards, the configurator, the comparison
-// strip, the template showcase) reads from here rather than repeating
-// values inline, so there's exactly one place to update pricing/features.
+// Order Card page catalog. As of the Order Card CMS (website_content.
+// OrderCardProduct), Shop.tsx itself no longer reads NEXORA_CARD_TYPES
+// below — it fetches the real, admin-editable catalog from the backend
+// and maps it onto this same shape (see toNexoraCardType in Shop.tsx), so
+// NexoraCardSelector/ProfileThemeShowcase need no changes. This array
+// remains the source of truth only for its few remaining static
+// consumers: QrCode.tsx's Google Review upsell card, and admin's
+// PlanTypeBadge/CardFormDialog plan-label lookups. Those will show stale
+// data if the catalog is edited in Website Content → Order Card — a known
+// limitation, not (yet) propagated to every consumer.
 //
-// `cardType` maps each tier onto the existing CardType enum so a selected
-// tier flows through the existing CartLine/OrderItem/checkout pipeline
-// completely unchanged — no new field, no backend change needed.
+// `cardType` maps each entry onto the existing CardType enum so it flows
+// through the existing CartLine/OrderItem/checkout pipeline unchanged.
 // ---------------------------------------------------------------------
 
 export interface NexoraCardType {
-  id: "custom" | "google-review"
+  // A plain string, not a fixed literal union: Shop.tsx's product catalog
+  // (its "id" is a product's `slug`) is now admin-editable — see
+  // website_content.OrderCardProduct / OrderCardTab.tsx — so the exact set
+  // of ids is no longer fixed at build time. The two ids used below
+  // ("custom"/"google-review") stay valid `string`s regardless.
+  id: string
   name: string
   price: number
   design: string
@@ -59,6 +68,11 @@ export interface NexoraCardType {
   imageCaption?: string
   color: { name: string; hex: string }
   popular?: boolean
+  // Explanatory line for the Profile Theme section, specific to this
+  // product — set only by Shop.tsx's API-driven mapping (see
+  // toNexoraCardType there); the other static consumers of this type
+  // (PlanTypeBadge, CardFormDialog, QrCode.tsx) never set or read it.
+  themePlanCopy?: string
 }
 
 // NEXORA Classic and NEXORA Premium have been retired and removed from sale.

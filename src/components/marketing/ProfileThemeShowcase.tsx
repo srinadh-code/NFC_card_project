@@ -419,7 +419,19 @@ export const MOCKUPS: Record<string, () => React.ReactElement> = {
   impact: ImpactMockup,
 }
 
-export function PhoneMockup({ theme }: { theme: ProfileTheme }) {
+export function PhoneMockup({ theme, imageUrl }: { theme: ProfileTheme; imageUrl?: string }) {
+  // An admin-uploaded image (Website Content → Order Card → Profile
+  // Templates) overrides the code-drawn mockup when present — same
+  // "real image if set, else the code fallback" pattern this page already
+  // uses for a product's own card photo (see NfcCardFace/selectedCard.image
+  // in Shop.tsx).
+  if (imageUrl) {
+    return (
+      <PhoneFrame bg="">
+        <img src={imageUrl} alt={theme.name} className="h-full w-full object-cover" />
+      </PhoneFrame>
+    )
+  }
   const Mockup = MOCKUPS[theme.id] ?? ClassicMockup
   return <Mockup />
 }
@@ -437,9 +449,11 @@ interface ProfileThemeShowcaseProps {
   selectedId?: string
   onSelect?: (id: string) => void
   pendingId?: string | null
+  // Admin-uploaded image override per theme id — see PhoneMockup above.
+  imagesByThemeId?: Record<string, string>
 }
 
-export default function ProfileThemeShowcase({ themes, selectedId, onSelect, pendingId }: ProfileThemeShowcaseProps) {
+export default function ProfileThemeShowcase({ themes, selectedId, onSelect, pendingId, imagesByThemeId }: ProfileThemeShowcaseProps) {
   const interactive = Boolean(onSelect)
 
   return (
@@ -478,7 +492,7 @@ export default function ProfileThemeShowcase({ themes, selectedId, onSelect, pen
               </span>
             )}
 
-            <PhoneMockup theme={theme} />
+            <PhoneMockup theme={theme} imageUrl={imagesByThemeId?.[theme.id]} />
 
             <p className="mt-5 text-lg font-bold text-foreground">{theme.name.replace("NEXORA ", "")}</p>
             <p className="mt-1 text-sm text-muted-foreground">{theme.tagline}</p>

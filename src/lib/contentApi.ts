@@ -28,11 +28,16 @@ import type {
   HowItFeelsPoint,
   HowItWorksStep,
   Mission,
+  OrderCardPageSettings,
+  OrderCardProduct,
+  OrderCardTrustBadge,
   PaymentSettings,
+  ProfileTemplatePreview,
   PublicAboutPayload,
   PublicFeaturesPagePayload,
   PublicGeneralSettings,
   PublicHomePayload,
+  PublicOrderCardPayload,
   SecuritySettings,
   ShippingSettings,
   Statistic,
@@ -230,6 +235,28 @@ export const featuresCTAApi = {
 }
 
 // ---------------------------------------------------------------------
+// Order Card page (/shop) — the product catalog, replacing the frontend's
+// formerly-hardcoded NEXORA_CARD_TYPES/TRUST_BADGES constants.
+// ---------------------------------------------------------------------
+
+export const orderCardPageApi = makeSingletonApi<OrderCardPageSettings>(`${ADMIN}/order-card/page`)
+
+export const orderCardProductsApi = {
+  ...makeCrudApi<OrderCardProduct>(`${ADMIN}/order-card/products`),
+  ...makeImageApi<OrderCardProduct>(`${ADMIN}/order-card/products`),
+}
+
+export const orderCardTrustBadgesApi = makeCrudApi<OrderCardTrustBadge>(`${ADMIN}/order-card/trust-badges`)
+
+// Admin-uploaded image override per real profile template id, shown on the
+// /shop "Choose Your Profile Theme" grid in place of the code-drawn mockup —
+// see ProfileThemeShowcase.tsx / PhoneMockup.
+export const profileTemplatePreviewsApi = {
+  ...makeCrudApi<ProfileTemplatePreview>(`${ADMIN}/profile-templates`),
+  ...makeImageApi<ProfileTemplatePreview>(`${ADMIN}/profile-templates`),
+}
+
+// ---------------------------------------------------------------------
 // Shared resources
 // ---------------------------------------------------------------------
 
@@ -308,6 +335,7 @@ export const publicWebsiteApi = {
   getFeatures: () => request<Feature[]>(`${PUBLIC}/features/`, { auth: false }),
   getFeaturesPage: () =>
     request<PublicFeaturesPagePayload>(`${PUBLIC}/features/page/`, { auth: false }),
+  getOrderCard: () => request<PublicOrderCardPayload>(`${PUBLIC}/order-card/`, { auth: false }),
   getHowItWorks: () => request<HowItWorksStep[]>(`${PUBLIC}/how-it-works/`, { auth: false }),
   getFaqs: () => request<Faq[]>(`${PUBLIC}/faqs/`, { auth: false }),
   getValues: () => request<Value[]>(`${PUBLIC}/values/`, { auth: false }),
