@@ -25,6 +25,7 @@ urlpatterns = [
     path("api/customer/dashboard/", include("customer_management.customer_dashboard.urls")),
     path("api/customer/services/", include("customer_management.customer_services.urls")),
     path("api/website/",include("website_content.urls")),
+    path("api/reviews/", include("reviews.urls")),
 ]
 
 # No local media route: this project has no local media storage at all
