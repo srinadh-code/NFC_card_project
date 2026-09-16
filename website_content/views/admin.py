@@ -36,6 +36,10 @@ from website_content.models import (
     HomeHowItFeels,
     HomeHowItFeelsPoint,
     HowItWorksStep,
+    OrderCardPageSettings,
+    OrderCardProduct,
+    OrderCardTrustBadge,
+    ProfileTemplatePreview,
     PaymentSettings,
     SecuritySettings,
     ShippingSettings,
@@ -68,6 +72,10 @@ from website_content.serializers import (
     HomeHowItFeelsPointSerializer,
     HomeHowItFeelsSerializer,
     HowItWorksStepSerializer,
+    OrderCardPageSettingsSerializer,
+    OrderCardProductSerializer,
+    OrderCardTrustBadgeSerializer,
+    ProfileTemplatePreviewSerializer,
     PaymentSettingsSerializer,
     SecuritySettingsSerializer,
     ShippingSettingsSerializer,
@@ -316,6 +324,78 @@ class FeaturesCTAImageAdminView(AdminSingletonImageUploadAPIView):
     url_field = "background_image_url"
     public_id_field = "background_image_public_id"
     folder = "website/features"
+
+
+# ---------------------------------------------------------------------------
+# Order Card Page — the /shop page's catalog (products, trust badges,
+# header/theme-section copy). Replaces the frontend's formerly-hardcoded
+# NEXORA_CARD_TYPES/TRUST_BADGES constants as the real source of truth.
+# ---------------------------------------------------------------------------
+
+
+class OrderCardPageSettingsAdminView(AdminSingletonAPIView):
+    model = OrderCardPageSettings
+    serializer_class = OrderCardPageSettingsSerializer
+
+
+class OrderCardProductAdminListView(AdminListCreateAPIView):
+    model = OrderCardProduct
+    serializer_class = OrderCardProductSerializer
+
+
+class OrderCardProductAdminDetailView(AdminDetailAPIView):
+    model = OrderCardProduct
+    serializer_class = OrderCardProductSerializer
+    image_public_id_field = "image_public_id"
+
+
+class OrderCardProductAdminReorderView(AdminReorderAPIView):
+    model = OrderCardProduct
+
+
+class OrderCardProductImageAdminView(AdminImageUploadAPIView):
+    model = OrderCardProduct
+    serializer_class = OrderCardProductSerializer
+    url_field = "image_url"
+    public_id_field = "image_public_id"
+    folder = "website/order-card"
+
+
+class OrderCardTrustBadgeAdminListView(AdminListCreateAPIView):
+    model = OrderCardTrustBadge
+    serializer_class = OrderCardTrustBadgeSerializer
+
+
+class OrderCardTrustBadgeAdminDetailView(AdminDetailAPIView):
+    model = OrderCardTrustBadge
+    serializer_class = OrderCardTrustBadgeSerializer
+
+
+class OrderCardTrustBadgeAdminReorderView(AdminReorderAPIView):
+    model = OrderCardTrustBadge
+
+
+class ProfileTemplatePreviewAdminListView(AdminListCreateAPIView):
+    model = ProfileTemplatePreview
+    serializer_class = ProfileTemplatePreviewSerializer
+
+
+class ProfileTemplatePreviewAdminDetailView(AdminDetailAPIView):
+    model = ProfileTemplatePreview
+    serializer_class = ProfileTemplatePreviewSerializer
+    image_public_id_field = "image_public_id"
+
+
+class ProfileTemplatePreviewAdminReorderView(AdminReorderAPIView):
+    model = ProfileTemplatePreview
+
+
+class ProfileTemplatePreviewImageAdminView(AdminImageUploadAPIView):
+    model = ProfileTemplatePreview
+    serializer_class = ProfileTemplatePreviewSerializer
+    url_field = "image_url"
+    public_id_field = "image_public_id"
+    folder = "website/profile-templates"
 
 
 # ---------------------------------------------------------------------------

@@ -6,7 +6,14 @@ from rest_framework.test import APITestCase
 
 from common.test_utils import make_user
 
-from .models import FeaturesPageCard, FeaturesPageSettings, GeneralSettings, Statistic
+from .models import (
+    FeaturesPageCard,
+    FeaturesPageSettings,
+    GeneralSettings,
+    OrderCardPageSettings,
+    OrderCardProduct,
+    Statistic,
+)
 
 
 class GeneralSettingsPublicViewTests(APITestCase):
@@ -224,3 +231,136 @@ class FeaturesStatisticsTests(APITestCase):
         labels = [s["label"] for s in response.data["data"]]
         self.assertNotIn("Home Stat", labels)
         self.assertTrue(all(s["page"] == "features" for s in response.data["data"]))
+
+
+class OrderCardPublicViewTests(APITestCase):
+    """The composed public payload the /shop page fetches in one call —
+    migration 0012 seeds a real page/products/trust-badges row set."""
+
+    def test_returns_seeded_content_with_no_auth(self):
+        response = self.client.get(reverse("public-order-card"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.data["data"]
+        self.assertEqual(data["page"]["page_title"], "Choose Your NEXORA Card")
+        slugs = {p["slug"] for p in data["products"]}
+        self.assertEqual(slugs, {"custom", "google-review"})
+        self.assertEqual(len(data["trust_badges"]), 4)
+
+    def test_hides_inactive_product(self):
+        product = OrderCardProduct.objects.create(
+            slug="draft-product",
+            name="Draft",
+            price="1.00",
+            card_type="CUSTOM",
+            is_active=False,
+        )
+        response = self.client.get(reverse("public-order-card"))
+        slugs = [p["slug"] for p in response.data["data"]["products"]]
+        self.assertNotIn(product.slug, slugs)
+
+    def test_404_when_page_settings_missing(self):
+        OrderCardPageSettings.objects.all().delete()
+        response = self.client.get(reverse("public-order-card"))
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class OrderCardProductAdminViewTests(APITestCase):
+    """Full CRUD + reorder + slug-uniqueness + Cloudinary-cleanup-on-delete
+    for the Order Card product catalog."""
+
+    def setUp(self):
+        super().setUp()
+        self.admin = make_user(email="order-card-admin@example.com", role="ADMIN")
+        self.customer = make_user(email="order-card-customer@example.com")
+
+    def test_requires_admin_role(self):
+        self.client.force_authenticate(user=self.customer)
+        response = self.client.get(reverse("admin-order-card-products"))
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_can_create_update_and_delete_a_product(self):
+        self.client.force_authenticate(user=self.admin)
+
+        create = self.client.post(
+            reverse("admin-order-card-products"),
+            {"slug": "wooden", "name": "NEXORA Wooden", "price": "799.00", "card_type": "WOODEN"},
+            format="json",
+        )
+        self.assertEqual(create.status_code, status.HTTP_201_CREATED)
+        product_id = create.data["data"]["id"]
+
+        update = self.client.patch(
+            reverse("admin-order-card-product-detail", args=[product_id]),
+            {"price": "849.00"},
+            format="json",
+        )
+        self.assertEqual(update.status_code, status.HTTP_200_OK)
+        self.assertEqual(update.data["data"]["price"], "849.00")
+
+        delete = self.client.delete(reverse("admin-order-card-product-detail", args=[product_id]))
+        self.assertEqual(delete.status_code, status.HTTP_200_OK)
+        self.assertFalse(OrderCardProduct.objects.filter(pk=product_id).exists())
+
+    def test_duplicate_slug_is_rejected(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            reverse("admin-order-card-products"),
+            {"slug": "custom", "name": "Another Custom", "price": "1.00", "card_type": "CUSTOM"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_deleting_a_product_cleans_up_its_cloudinary_asset(self):
+        self.client.force_authenticate(user=self.admin)
+        product = OrderCardProduct.objects.create(
+            slug="with-image",
+            name="With Image",
+            price="1.00",
+            card_type="CUSTOM",
+            image_url="https://res.cloudinary.com/demo/image/upload/v1/website/order-card/abc123.png",
+            image_public_id="website/order-card/abc123",
+        )
+
+        with patch("website_content.views.base.delete_image") as mock_delete:
+            response = self.client.delete(reverse("admin-order-card-product-detail", args=[product.id]))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_delete.assert_called_once_with("website/order-card/abc123")
+
+    def test_reorder(self):
+        self.client.force_authenticate(user=self.admin)
+        a = OrderCardProduct.objects.create(
+            slug="prod-a", name="A", price="1.00", card_type="CUSTOM", display_order=0
+        )
+        b = OrderCardProduct.objects.create(
+            slug="prod-b", name="B", price="1.00", card_type="CUSTOM", display_order=1
+        )
+
+        response = self.client.patch(
+            reverse("admin-order-card-products-reorder"), {"order": [b.id, a.id]}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        a.refresh_from_db()
+        b.refresh_from_db()
+        self.assertEqual(b.display_order, 0)
+        self.assertEqual(a.display_order, 1)
+
+
+class OrderCardPageSettingsAdminViewTests(APITestCase):
+    def setUp(self):
+        super().setUp()
+        self.admin = make_user(email="order-card-settings-admin@example.com", role="ADMIN")
+
+    def test_admin_can_update_and_it_reflects_publicly(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.patch(
+            reverse("admin-order-card-page"),
+            {"page_title": "Updated Title"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        public = self.client.get(reverse("public-order-card"))
+        self.assertEqual(public.data["data"]["page"]["page_title"], "Updated Title")

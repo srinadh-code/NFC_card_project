@@ -22,6 +22,12 @@ from .features_page import (
     FeaturesPageSettingsSerializer,
     FeaturesShowcaseSectionSerializer,
 )
+from .order_card import (
+    OrderCardPageSettingsSerializer,
+    OrderCardProductSerializer,
+    OrderCardTrustBadgeSerializer,
+    ProfileTemplatePreviewSerializer,
+)
 from .how_it_works import HowItWorksStepSerializer
 from .faqs import FaqSerializer
 from .testimonials import TestimonialSerializer
@@ -61,6 +67,10 @@ __all__ = [
     "FeaturesAnalyticsSectionSerializer",
     "FeaturesShowcaseSectionSerializer",
     "FeaturesCTASerializer",
+    "OrderCardPageSettingsSerializer",
+    "OrderCardProductSerializer",
+    "OrderCardTrustBadgeSerializer",
+    "ProfileTemplatePreviewSerializer",
     "HowItWorksStepSerializer",
     "FaqSerializer",
     "TestimonialSerializer",

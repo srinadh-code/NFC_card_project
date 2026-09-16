@@ -22,6 +22,12 @@ from .features_page import (
     FeaturesPageSettings,
     FeaturesShowcaseSection,
 )
+from .order_card import (
+    OrderCardPageSettings,
+    OrderCardProduct,
+    OrderCardTrustBadge,
+    ProfileTemplatePreview,
+)
 from .how_it_works import HowItWorksStep
 from .faqs import Faq
 from .testimonials import Testimonial
@@ -55,6 +61,10 @@ __all__ = [
     "FeaturesAnalyticsSection",
     "FeaturesShowcaseSection",
     "FeaturesCTA",
+    "OrderCardPageSettings",
+    "OrderCardProduct",
+    "OrderCardTrustBadge",
+    "ProfileTemplatePreview",
     "HowItWorksStep",
     "Faq",
     "Testimonial",

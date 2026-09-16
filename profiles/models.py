@@ -71,6 +71,17 @@ class Profile(models.Model):
     # profile — a single field so there's exactly one source of truth.
     selected_template = models.CharField(max_length=30, choices=TEMPLATE_CHOICES, default=DEFAULT_TEMPLATE)
 
+    class LuxuryTheme(models.TextChoices):
+        GREEN = "green", "Luxury Green"
+        BLUE = "blue", "Luxury Blue"
+        BLACK = "black", "Luxury Black"
+
+    # Color variant used only when selected_template == "luxury" — a single
+    # reusable Template 1 component switches its palette based on this
+    # instead of the app defining 3 separate templates. Defaults to BLACK so
+    # customers who already picked Luxury keep their current look.
+    luxury_theme = models.CharField(max_length=10, choices=LuxuryTheme.choices, default=LuxuryTheme.BLACK)
+
     # Per-profile privacy settings (replaces the frontend's single global
     # client-side store — each customer's visibility is now their own).
     profile_public = models.BooleanField(default=True)

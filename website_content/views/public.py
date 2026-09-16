@@ -36,6 +36,10 @@ from website_content.models import (
     HomeHowItFeels,
     HomeHowItFeelsPoint,
     HowItWorksStep,
+    OrderCardPageSettings,
+    OrderCardProduct,
+    OrderCardTrustBadge,
+    ProfileTemplatePreview,
     Statistic,
     Testimonial,
     Value,
@@ -62,6 +66,10 @@ from website_content.serializers import (
     HomeHowItFeelsPointSerializer,
     HomeHowItFeelsSerializer,
     HowItWorksStepSerializer,
+    OrderCardPageSettingsSerializer,
+    OrderCardProductSerializer,
+    OrderCardTrustBadgeSerializer,
+    ProfileTemplatePreviewSerializer,
     PublicGeneralSettingsSerializer,
     StatisticSerializer,
     TestimonialSerializer,
@@ -183,6 +191,34 @@ class FeaturesPagePublicView(APIView):
                 Statistic.objects.filter(is_active=True, page=Statistic.Page.FEATURES), many=True
             ).data,
             "cta": FeaturesCTASerializer(cta).data if cta else None,
+        }
+        return success(data)
+
+
+class OrderCardPublicView(APIView):
+    """Composed payload for the /shop ("Order Card") page — same
+    one-call-per-page pattern as Home/About/Features. Products and trust
+    badges are each their own list; there's no per-page-section grouping
+    to compose beyond that."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        page = OrderCardPageSettings.objects.filter(is_active=True).first()
+        if page is None:
+            return error("Order Card page content not found.", status=404)
+
+        data = {
+            "page": OrderCardPageSettingsSerializer(page).data,
+            "products": OrderCardProductSerializer(
+                OrderCardProduct.objects.filter(is_active=True), many=True
+            ).data,
+            "trust_badges": OrderCardTrustBadgeSerializer(
+                OrderCardTrustBadge.objects.filter(is_active=True), many=True
+            ).data,
+            "profile_templates": ProfileTemplatePreviewSerializer(
+                ProfileTemplatePreview.objects.filter(is_active=True), many=True
+            ).data,
         }
         return success(data)
 
