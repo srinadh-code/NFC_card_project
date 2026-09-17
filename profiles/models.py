@@ -82,6 +82,38 @@ class Profile(models.Model):
     # customers who already picked Luxury keep their current look.
     luxury_theme = models.CharField(max_length=10, choices=LuxuryTheme.choices, default=LuxuryTheme.BLACK)
 
+    class FutureTheme(models.TextChoices):
+        GREEN = "green", "Future Green"
+        BLUE = "blue", "Future Blue"
+        BLACK = "black", "Future Black"
+
+    # Color variant used only when selected_template == "future" — same
+    # single-reusable-component-with-a-palette-switch approach as
+    # luxury_theme above. Defaults to GREEN, the template's current/original
+    # look, so existing customers on "future" keep the same appearance.
+    future_theme = models.CharField(max_length=10, choices=FutureTheme.choices, default=FutureTheme.GREEN)
+
+    class ImpactTheme(models.TextChoices):
+        RED = "red", "Impact Red"
+        BLUE = "blue", "Impact Blue"
+        BLACK = "black", "Impact Black"
+        WHITE = "white", "Impact White"
+
+    # Color variant used only when selected_template == "impact" — same
+    # approach as luxury_theme/future_theme above. Defaults to RED, this
+    # template's primary/original look.
+    impact_theme = models.CharField(max_length=10, choices=ImpactTheme.choices, default=ImpactTheme.RED)
+
+    class GlassTheme(models.TextChoices):
+        WHITE = "white", "Glass White"
+        BLUE = "blue", "Glass Blue"
+        GREEN = "green", "Glass Green"
+
+    # Color variant used only when selected_template == "glass" — same
+    # approach as luxury_theme/future_theme/impact_theme above. Defaults to
+    # BLUE, this template's original look.
+    glass_theme = models.CharField(max_length=10, choices=GlassTheme.choices, default=GlassTheme.BLUE)
+
     # Per-profile privacy settings (replaces the frontend's single global
     # client-side store — each customer's visibility is now their own).
     profile_public = models.BooleanField(default=True)

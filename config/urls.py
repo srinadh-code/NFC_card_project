@@ -31,6 +31,7 @@ urlpatterns = [
     path("api/customer/addresses/", include("customer_management.customer_addresses.urls")),
     path("api/customer/cart/", include("customer_management.customer_cart.urls")),
     path("api/website/",include("website_content.urls")),
+    path("api/reviews/", include("reviews.urls")),
 ]
 
 # No local media route: this project has no local media storage at all

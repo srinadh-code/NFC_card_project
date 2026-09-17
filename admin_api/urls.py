@@ -28,6 +28,7 @@ from .profiles.views import (
     AdminProfileListCreateView,
     AdminProfileSuspendView,
 )
+from .reviews.views import AdminReviewDetailView, AdminReviewListView
 from .reports.views import (
     AdminCustomerReportView,
     AdminOrderReportView,
@@ -74,6 +75,9 @@ urlpatterns = [
     path("transactions/", AdminTransactionListCreateView.as_view(), name="admin-transactions"),
     path("transactions/summary/", AdminTransactionSummaryView.as_view(), name="admin-transaction-summary"),
     path("transactions/<int:pk>/", AdminTransactionDetailView.as_view(), name="admin-transaction-detail"),
+    # Reviews
+    path("reviews/", AdminReviewListView.as_view(), name="admin-reviews"),
+    path("reviews/<int:pk>/", AdminReviewDetailView.as_view(), name="admin-review-detail"),
     # Support
     path("support/", AdminSupportTicketListCreateView.as_view(), name="admin-support-tickets"),
     path("support/<int:pk>/", AdminSupportTicketDetailView.as_view(), name="admin-support-ticket-detail"),

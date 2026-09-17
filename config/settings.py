@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     "profiles",
     "nfc_cards",
     "orders",
+    "reviews",
     "support",
     "analytics",
     "reports",
