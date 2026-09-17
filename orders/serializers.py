@@ -58,6 +58,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "status",
             "address",
             "tracking",
+            "tracking_token",
             "assigned_card_id",
             "placed_at",
         ]
@@ -84,6 +85,24 @@ class OrderSerializer(serializers.ModelSerializer):
                 done = date is not None
             steps.append({"label": label, "date": date, "done": done})
         return steps
+
+
+class PublicOrderTrackingSerializer(OrderSerializer):
+    """Anonymous, public-website Track Order lookup. Subclasses
+    OrderSerializer purely to reuse its real get_tracking() unchanged (same
+    5-step timeline, same honest CANCELLED-order handling) — Meta.fields is
+    trimmed to drop everything unsafe for an unauthenticated request:
+    customer name/email/phone, items, and the shipping address are all
+    excluded here, even though the parent class still declares them."""
+
+    order_number = serializers.SerializerMethodField()
+
+    class Meta(OrderSerializer.Meta):
+        fields = ["order_number", "status", "tracking", "placed_at", "updated_at"]
+        read_only_fields = fields
+
+    def get_order_number(self, obj):
+        return f"ORD{obj.pk:06d}"
 
 
 class OrderItemInputSerializer(serializers.Serializer):

@@ -21,7 +21,7 @@ class GenerateQrCodeView(APIView):
     permission_classes = [IsCustomerRole]
 
     def post(self, request):
-        qr, created = services.generate_qr_code(request.user, request)
+        qr, created = services.generate_qr_code(request.user)
         message = "QR code generated." if created else "QR code already exists."
         return success(
             CustomerQrCodeSerializer(qr, context={"request": request}).data,
@@ -34,7 +34,7 @@ class RegenerateQrCodeView(APIView):
     permission_classes = [IsCustomerRole]
 
     def post(self, request):
-        qr = services.regenerate_qr_code(request.user, request)
+        qr = services.regenerate_qr_code(request.user)
         return success(
             CustomerQrCodeSerializer(qr, context={"request": request}).data,
             message="QR code regenerated.",

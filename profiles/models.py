@@ -117,8 +117,20 @@ class Profile(models.Model):
     # Per-profile privacy settings (replaces the frontend's single global
     # client-side store — each customer's visibility is now their own).
     profile_public = models.BooleanField(default=True)
-    show_contact_info = models.BooleanField(default=True)
     show_in_search = models.BooleanField(default=True)
+
+    # Field-level contact visibility — replaces the old single
+    # show_contact_info toggle (too broad: a customer couldn't show their
+    # city while hiding their phone number). Each one independently gates
+    # exactly one field on PublicProfileSerializer; see get_email/get_phone/
+    # get_address/get_city/get_state there. All default True so an existing
+    # customer's public profile looks the same immediately after this
+    # migration as it did under the old all-or-nothing flag.
+    show_address = models.BooleanField(default=True)
+    show_city = models.BooleanField(default=True)
+    show_state = models.BooleanField(default=True)
+    show_phone = models.BooleanField(default=True)
+    show_email = models.BooleanField(default=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

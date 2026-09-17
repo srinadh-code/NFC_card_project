@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.db import models
 
@@ -40,6 +42,15 @@ class Order(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders"
     )
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
+
+    # Opaque, unguessable credential for the *anonymous* Track Order page —
+    # the human-readable "ORD000013" shown to customers is just this row's
+    # sequential pk zero-padded, so it alone must never grant access (an
+    # attacker could just increment it). PublicOrderTrackingView requires
+    # this token to match the order looked up by pk; an authenticated
+    # customer viewing their own order (CustomerOrderDetailView) needs no
+    # token, since ownership is already proven by the session.
+    tracking_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
 
     # One-per-submission-attempt token the client generates and resends on
     # every retry/double-click of the *same* checkout attempt (see

@@ -1,6 +1,20 @@
 from rest_framework import serializers
 
-from .models import Notification
+from .models import Announcement, Notification
+
+
+class AnnouncementSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.CharField(source="created_by.full_name", read_only=True, default=None)
+
+    class Meta:
+        model = Announcement
+        fields = ["id", "title", "message", "created_by_name", "recipient_count", "created_at"]
+        read_only_fields = fields
+
+
+class AnnouncementCreateSerializer(serializers.Serializer):
+    title = serializers.CharField(max_length=200)
+    message = serializers.CharField(allow_blank=True, required=False, default="")
 
 
 class NotificationSerializer(serializers.ModelSerializer):

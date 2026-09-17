@@ -55,8 +55,12 @@ class ProfileSerializer(serializers.ModelSerializer):
             "profile_url",
             "status",
             "profile_public",
-            "show_contact_info",
             "show_in_search",
+            "show_address",
+            "show_city",
+            "show_state",
+            "show_phone",
+            "show_email",
             "selected_template",
             "luxury_theme",
             "future_theme",
@@ -120,14 +124,21 @@ class ProfileSerializer(serializers.ModelSerializer):
 class PublicProfileSerializer(serializers.ModelSerializer):
     """
     Public, unauthenticated view of a profile. Only ever includes enabled
-    links, and only includes contact info when the owner opted in via
-    show_contact_info — never exposes internal ids beyond what's needed to
-    render the page, passwords, tokens, or admin/account data.
+    links, and only includes each contact field when the owner has
+    independently opted that specific field in (show_address/show_city/
+    show_state/show_phone/show_email — see PART 1 of the field-level
+    privacy settings feature) — never exposes internal ids beyond what's
+    needed to render the page, passwords, tokens, or admin/account data.
+    `country` stays unconditional (not part of the granular set the
+    customer controls — same as before this change).
     """
 
     full_name = serializers.CharField(source="user.full_name", read_only=True)
     email = serializers.SerializerMethodField()
     phone = serializers.SerializerMethodField()
+    address = serializers.SerializerMethodField()
+    city = serializers.SerializerMethodField()
+    state = serializers.SerializerMethodField()
     avatar = serializers.SerializerMethodField()
     cover_image = serializers.SerializerMethodField()
     social_links = serializers.SerializerMethodField()
@@ -179,10 +190,19 @@ class PublicProfileSerializer(serializers.ModelSerializer):
         return self._absolute_url(obj.cover_image.url)
 
     def get_email(self, obj):
-        return obj.user.email if obj.show_contact_info else None
+        return obj.user.email if obj.show_email else None
 
     def get_phone(self, obj):
-        return obj.user.phone if obj.show_contact_info else None
+        return obj.user.phone if obj.show_phone else None
+
+    def get_address(self, obj):
+        return obj.address if obj.show_address else None
+
+    def get_city(self, obj):
+        return obj.city if obj.show_city else None
+
+    def get_state(self, obj):
+        return obj.state if obj.show_state else None
 
     def get_social_links(self, obj):
         links = [link for link in obj.social_links.all() if link.enabled]
