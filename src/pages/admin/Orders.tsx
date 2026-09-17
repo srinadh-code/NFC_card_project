@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Search, Download, Eye, CheckCircle2, Circle, PackageCheck, Nfc } from "lucide-react"
+import { Search, Download, Eye, CheckCircle2, Circle, MapPin, PackageCheck, Nfc, Truck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -27,8 +27,21 @@ import {
 import { StatusBadge } from "@/components/admin/StatusBadge"
 import { TablePagination } from "@/components/admin/TablePagination"
 import { downloadCsv } from "@/components/admin/export-csv"
+import { CopyTrackingIdButton } from "@/components/orders/OrderTrackingView"
 import { adminOrderApi, adminNfcApi, ApiError } from "@/lib/api"
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/mock-api"
+import { usePublicSettings } from "@/hooks/usePublicSettings"
+import {
+  COURIER_TRANSIT_LABEL,
+  PROCESSING_TIME_LABEL,
+  deliveredAt,
+  deriveCurrentStatus,
+  deriveOfficeAddress,
+  destinationLine,
+  estimateDeliveryWindow,
+  officeFullLine,
+} from "@/lib/order-tracking"
+import { DEMO_COURIER_NAME, SHIPPING_DEMO_DISCLAIMER, getDemoDistanceKm } from "@/lib/shipping-demo"
 import type { Order, OrderStatus } from "@/types"
 import { cn } from "@/lib/utils"
 
@@ -43,6 +56,10 @@ const STATUS_OPTIONS: (OrderStatus | "All")[] = [
   "Cancelled",
 ]
 
+function errorMessage(err: unknown, fallback: string) {
+  return err instanceof ApiError ? err.message : fallback
+}
+
 function productSummary(order: Order) {
   const [first, ...rest] = order.items
   if (!first) return "—"
@@ -52,6 +69,8 @@ function productSummary(order: Order) {
 
 export default function AdminOrders() {
   const queryClient = useQueryClient()
+  const { settings } = usePublicSettings()
+  const office = deriveOfficeAddress(settings)
 
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "All">("All")
@@ -65,7 +84,7 @@ export default function AdminOrders() {
   const [cardChoice, setCardChoice] = useState<string>("")
   const [exporting, setExporting] = useState(false)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["admin-orders", page, search, statusFilter],
     queryFn: () => adminOrderApi.list({ page, search: search || undefined, status: statusFilter }),
     placeholderData: keepPreviousData,
@@ -84,6 +103,14 @@ export default function AdminOrders() {
 
   const viewing = orders.find((o) => o.id === viewingId) ?? null
   const assigningOrder = orders.find((o) => o.id === assigningOrderId) ?? null
+  const trackingStatus = viewing ? deriveCurrentStatus(viewing) : null
+  const deliveryWindow = viewing ? estimateDeliveryWindow(viewing) : null
+  const estimatedDeliveryText = deliveryWindow
+    ? `${formatDate(deliveryWindow.from.toISOString())} – ${formatDate(deliveryWindow.to.toISOString())}`
+    : "—"
+  const viewingDeliveredOn = viewing ? deliveredAt(viewing) : null
+  const viewingDistanceKm = viewing ? getDemoDistanceKm(viewing) : 0
+  const viewingOrderNumber = viewing ? (viewing.orderNumber ?? viewing.id) : ""
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin-orders"] })
 
@@ -138,7 +165,7 @@ export default function AdminOrders() {
       downloadCsv(
         `orders-${new Date().toISOString().slice(0, 10)}.csv`,
         rows.map((o) => ({
-          OrderID: o.id,
+          OrderID: o.orderNumber ?? o.id,
           Customer: o.customerName,
           Phone: o.customerPhone,
           Email: o.customerEmail,
@@ -211,6 +238,15 @@ export default function AdminOrders() {
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
+          ) : isError ? (
+            <div className="flex flex-col items-center gap-3 py-10 text-center">
+              <p className="text-sm text-muted-foreground">
+                {errorMessage(error, "Unable to load order details.")}
+              </p>
+              <Button variant="outline" size="sm" onClick={() => refetch()}>
+                Retry
+              </Button>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -221,23 +257,36 @@ export default function AdminOrders() {
                     <TableHead>Phone</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Product</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead>Shipping</TableHead>
+                    <TableHead>Current Status</TableHead>
+                    <TableHead>Estimated Delivery</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {orders.map((o) => (
+                  {orders.map((o) => {
+                    const rowStatus = deriveCurrentStatus(o)
+                    const rowWindow = estimateDeliveryWindow(o)
+                    return (
                     <TableRow key={o.id}>
-                      <TableCell className="font-medium">{o.id}</TableCell>
+                      <TableCell className="font-mono text-xs font-medium">{o.orderNumber ?? o.id}</TableCell>
                       <TableCell>{o.customerName}</TableCell>
                       <TableCell className="text-muted-foreground">{o.customerPhone || "—"}</TableCell>
                       <TableCell className="text-muted-foreground">{o.customerEmail}</TableCell>
                       <TableCell>{productSummary(o)}</TableCell>
                       <TableCell>{formatCurrency(o.total)}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {o.shipping === 0 ? "Free" : formatCurrency(o.shipping)}
+                      </TableCell>
                       <TableCell>
-                        <StatusBadge status={o.status} />
+                        <StatusBadge status={rowStatus.label} />
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {rowWindow
+                          ? `${formatDate(rowWindow.from.toISOString())} – ${formatDate(rowWindow.to.toISOString())}`
+                          : "—"}
                       </TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(o.date)}</TableCell>
                       <TableCell className="text-right">
@@ -271,11 +320,20 @@ export default function AdminOrders() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    )
+                  })}
                   {orders.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
-                        No orders found.
+                      <TableCell colSpan={11} className="py-14 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <span className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                            <Truck className="size-5" />
+                          </span>
+                          <p className="font-medium text-foreground">No orders found</p>
+                          <p className="text-sm text-muted-foreground">
+                            Customer orders will appear here once they are placed.
+                          </p>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )}
@@ -299,7 +357,10 @@ export default function AdminOrders() {
           {viewing && (
             <>
               <SheetHeader>
-                <SheetTitle>Order {viewing.id}</SheetTitle>
+                <div className="flex items-center justify-between gap-2">
+                  <SheetTitle>Order {viewingOrderNumber}</SheetTitle>
+                  <CopyTrackingIdButton trackingId={viewingOrderNumber} label="Copy Order ID" />
+                </div>
                 <SheetDescription>
                   Placed on {formatDate(viewing.date)} by {viewing.customerName}
                 </SheetDescription>
@@ -393,26 +454,148 @@ export default function AdminOrders() {
                   </p>
                 </div>
 
+                <Separator />
+
                 <div>
-                  <p className="mb-2 text-sm font-medium">Tracking</p>
-                  <div className="flex flex-col gap-3">
-                    {viewing.tracking.map((step, idx) => (
-                      <div key={idx} className="flex items-start gap-3">
-                        {step.done ? (
-                          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
-                        ) : (
-                          <Circle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                  <p className="mb-3 text-sm font-semibold">Delivery & Tracking</p>
+
+                  {/* Prominent current-status card */}
+                  {trackingStatus?.kind === "delivered" ? (
+                    <div className="rounded-lg border border-success/30 bg-success/10 p-4">
+                      <p className="flex items-center gap-2 text-base font-bold text-success">
+                        <CheckCircle2 className="size-5" /> DELIVERED
+                      </p>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Delivered on{" "}
+                        <span className="font-semibold text-foreground">
+                          {viewingDeliveredOn ? formatDateTime(viewingDeliveredOn) : "—"}
+                        </span>
+                      </p>
+                    </div>
+                  ) : (
+                    <div
+                      className={cn(
+                        "rounded-lg border p-4",
+                        trackingStatus?.kind === "cancelled"
+                          ? "border-destructive/30 bg-destructive/5"
+                          : "border-border bg-gradient-to-br from-primary/5 via-transparent to-transparent",
+                      )}
+                    >
+                      <p className="text-xs font-medium text-muted-foreground">Current Status</p>
+                      <p
+                        className={cn(
+                          "mt-1 flex items-center gap-2 text-base font-bold",
+                          trackingStatus?.kind === "cancelled" ? "text-destructive" : "text-primary",
                         )}
-                        <div>
-                          <p className={cn("text-sm", step.done ? "font-medium" : "text-muted-foreground")}>
-                            {step.label}
-                          </p>
-                          {step.date && (
-                            <p className="text-xs text-muted-foreground">{formatDateTime(step.date)}</p>
-                          )}
-                        </div>
+                      >
+                        <Truck className="size-4" /> {trackingStatus?.label}
+                      </p>
+                      {trackingStatus?.kind !== "cancelled" && (
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          Estimated Delivery: <span className="font-medium text-foreground">{estimatedDeliveryText}</span>
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Delivery overview */}
+                  <p className="mt-4 mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    Delivery Overview
+                  </p>
+                  <div className="grid grid-cols-1 gap-3 rounded-lg border p-3 text-sm sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs text-muted-foreground">From</p>
+                      <p className="font-medium">{officeFullLine(office) || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">To</p>
+                      <p className="font-medium">{destinationLine(viewing) || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Distance</p>
+                      <p className="font-medium">{viewingDistanceKm} km</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Shipping Charge</p>
+                      <p className="font-medium">
+                        {viewing.shipping === 0 ? "Free" : formatCurrency(viewing.shipping)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Processing Time</p>
+                      <p className="font-medium">{PROCESSING_TIME_LABEL}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Courier Transit</p>
+                      <p className="font-medium">{COURIER_TRANSIT_LABEL}</p>
+                    </div>
+                  </div>
+
+                  {/* Simple CSS-only route visual — no maps/geocoding API */}
+                  <div className="mt-3 flex flex-col items-center gap-1 rounded-lg border bg-muted/30 p-4 text-center">
+                    <MapPin className="size-4 text-primary" />
+                    <p className="text-xs font-medium">{office.name || "—"}</p>
+                    <span className="h-3 w-px bg-border" />
+                    <Truck className="size-4 text-primary" />
+                    <span className="h-3 w-px bg-border" />
+                    <MapPin className="size-4 text-primary" />
+                    <p className="text-xs font-medium">{destinationLine(viewing) || "—"}</p>
+                  </div>
+
+                  {/* Shipment / tracking information */}
+                  <p className="mt-4 mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    Shipment Information
+                  </p>
+                  <div className="rounded-lg border p-3">
+                    <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Courier</p>
+                        <p className="font-medium">{DEMO_COURIER_NAME}</p>
                       </div>
-                    ))}
+                      <div>
+                        <p className="text-xs text-muted-foreground">Status</p>
+                        <p className="font-medium">{trackingStatus?.label}</p>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-xs text-muted-foreground">{SHIPPING_DEMO_DISCLAIMER}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-2 text-sm font-medium">Order Timeline</p>
+                  <div className="flex flex-col gap-3">
+                    {viewing.tracking.map((step, idx) => {
+                      const isCurrent = idx === trackingStatus?.index && trackingStatus?.kind === "in-progress"
+                      return (
+                        <div key={idx} className="flex items-start gap-3">
+                          {step.done ? (
+                            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
+                          ) : (
+                            <Circle
+                              className={cn(
+                                "mt-0.5 size-4 shrink-0",
+                                isCurrent ? "text-primary" : "text-muted-foreground",
+                              )}
+                            />
+                          )}
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className={cn("text-sm", step.done || isCurrent ? "font-medium" : "text-muted-foreground")}>
+                                {step.label}
+                              </p>
+                              {isCurrent && (
+                                <span className="rounded-full bg-gradient-brand px-2 py-0.5 text-[10px] font-semibold text-white">
+                                  Current
+                                </span>
+                              )}
+                            </div>
+                            {step.date && (
+                              <p className="text-xs text-muted-foreground">{formatDateTime(step.date)}</p>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               </div>
@@ -426,7 +609,8 @@ export default function AdminOrders() {
           <DialogHeader>
             <DialogTitle>Assign NFC Card</DialogTitle>
             <DialogDescription>
-              Link a physical card to order {assigningOrder?.id} for {assigningOrder?.customerName}. Once
+              Link a physical card to order {assigningOrder?.orderNumber ?? assigningOrder?.id} for{" "}
+              {assigningOrder?.customerName}. Once
               assigned, it appears on the customer's My Card page ready to activate.
             </DialogDescription>
           </DialogHeader>

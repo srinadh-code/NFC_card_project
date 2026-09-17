@@ -5,13 +5,14 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useCartStore } from "@/store/cart-store"
+import { Skeleton } from "@/components/ui/skeleton"
+import { useCart } from "@/hooks/useCart"
 import { formatCurrency } from "@/lib/mock-api"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
 
 export default function Cart() {
   const navigate = useNavigate()
-  const { lines, updateQty, removeLine, applyCoupon, subtotal, couponCode, discount } = useCartStore()
+  const { lines, updateQty, removeLine, applyCoupon, subtotal, couponCode, discount, isLoading } = useCart()
   const [coupon, setCoupon] = useState("")
   const { settings } = usePublicSettings()
 
@@ -30,6 +31,15 @@ export default function Cart() {
     } else {
       toast.error(result.message)
     }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-6xl space-y-3 px-4 py-12">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-64 w-full rounded-2xl" />
+      </div>
+    )
   }
 
   if (lines.length === 0) {

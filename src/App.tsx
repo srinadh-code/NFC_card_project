@@ -3,6 +3,7 @@ import { Route, Routes } from "react-router-dom"
 
 import { ScrollToTop } from "@/components/ScrollToTop"
 import { useAuthStore } from "@/store/auth-store"
+import { useBrandingStore } from "@/store/branding-store"
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute"
 import PublicLayout from "@/components/layout/PublicLayout"
 import AuthLayout from "@/components/layout/AuthLayout"
@@ -48,13 +49,19 @@ import CustomerQrCode from "@/pages/customer/QrCode"
 import CustomerAnalytics from "@/pages/customer/Analytics"
 import CustomerActivity from "@/pages/customer/Activity"
 import CustomerOrders from "@/pages/customer/Orders"
+import CustomerAddresses from "@/pages/customer/Addresses"
 import CustomerSettings from "@/pages/customer/Settings"
 
 import PublicProfile from "@/pages/profile/PublicProfile"
 import NotFound from "@/pages/NotFound"
 
+// The favicon actually shipped in index.html — restored here the moment
+// an Admin-uploaded favicon (Settings → General → Branding) is removed.
+const DEFAULT_FAVICON_HREF = "/favicon.svg"
+
 function App() {
   const bootstrap = useAuthStore((s) => s.bootstrap)
+  const favicon = useBrandingStore((s) => s.favicon)
 
   // Re-validates the persisted session against the server once on load, so
   // a revoked/expired token gets cleared instead of leaving a stale "logged
@@ -63,6 +70,15 @@ function App() {
     bootstrap()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Applies the Admin-uploaded Favicon live — updates the browser tab icon
+  // immediately, no reload needed — and restores the app's real default
+  // the moment it's removed. Reuses the existing <link rel="icon"> element
+  // from index.html rather than injecting a second one.
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>("link[rel~='icon']")
+    if (link) link.href = favicon?.previewUrl ?? DEFAULT_FAVICON_HREF
+  }, [favicon])
 
   return (
     <>
@@ -135,6 +151,7 @@ function App() {
             <Route path="/analytics" element={<CustomerAnalytics />} />
             <Route path="/activity" element={<CustomerActivity />} />
             <Route path="/orders" element={<CustomerOrders />} />
+            <Route path="/addresses" element={<CustomerAddresses />} />
             <Route path="/settings" element={<CustomerSettings />} />
           </Route>
         </Route>

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ForgotPasswordDialog } from "@/components/auth/ForgotPasswordDialog"
+import { BrandMark } from "@/components/layout/BrandMark"
 import { useCustomerAuthStore } from "@/store/auth-store"
 import { sanitizeRedirect } from "@/lib/utils"
 
@@ -94,9 +95,14 @@ export default function Login() {
         <div className="absolute -bottom-32 -left-16 size-80 rounded-full bg-fuchsia-500/10 blur-3xl" />
 
         <div className="relative z-10 flex items-center gap-2">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-white/15">
-            <Zap className="size-5" fill="currentColor" />
-          </div>
+          <BrandMark
+            className="size-9 rounded-xl"
+            fallback={
+              <div className="flex size-9 items-center justify-center rounded-xl bg-white/15">
+                <Zap className="size-5" fill="currentColor" />
+              </div>
+            }
+          />
           <span className="text-lg font-bold tracking-tight">VR's NEXORA</span>
         </div>
 
@@ -134,9 +140,14 @@ export default function Login() {
         <div className="w-full max-w-sm space-y-6">
           <div className="space-y-1 md:hidden">
             <div className="flex items-center gap-2">
-              <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-                <Zap className="size-5" fill="currentColor" />
-              </div>
+              <BrandMark
+                className="size-9 rounded-xl"
+                fallback={
+                  <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+                    <Zap className="size-5" fill="currentColor" />
+                  </div>
+                }
+              />
               <span className="text-lg font-bold tracking-tight">VR's NEXORA</span>
             </div>
           </div>

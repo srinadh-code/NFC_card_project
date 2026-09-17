@@ -1,31 +1,73 @@
-﻿import { useState, type FormEvent } from "react"
-import { CheckCircle2, Circle, Download, PackageSearch } from "lucide-react"
+import { useState, type FormEvent } from "react"
+import { CheckCircle2, Download, Loader2, PackageX, Search } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
 import PageHeader from "@/components/marketing/PageHeader"
-import { useDataStore } from "@/store/data-store"
+import { OrderTrackingView } from "@/components/orders/OrderTrackingView"
+import { ApiError, publicOrderTrackingApi, toFrontendPublicOrder } from "@/lib/api"
 import { formatCurrency, formatDate } from "@/lib/mock-api"
 import type { Order } from "@/types"
-import { cn } from "@/lib/utils"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
 
+// Real backend lookup: GET /api/orders/track/<order_number>/ (see
+// orders.views.PublicOrderTrackingView) — unauthenticated, keyed by the
+// order's real public order_number (e.g. "NXTRK250344", see
+// Order.generate_order_number in the backend), never the internal numeric
+// database id. The lookup is case-insensitive server-side.
+const INFO_POINTS = ["Order status", "Estimated delivery", "Shipment progress", "Courier tracking"]
+
+type SearchState = "idle" | "loading" | "found" | "not-found" | "error"
+
 export default function TrackOrder() {
-  const orders = useDataStore((s) => s.orders)
   const { settings } = usePublicSettings()
   const [orderIdInput, setOrderIdInput] = useState("")
-  const [result, setResult] = useState<Order | null | undefined>(undefined)
+  const [state, setState] = useState<SearchState>("idle")
+  const [result, setResult] = useState<Order | null>(null)
+  const [errorMessage, setErrorMessage] = useState("")
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    const query = orderIdInput.trim().toUpperCase()
-    if (!query) {
-      toast.error("Please enter an order ID.")
+  async function runLookup(rawOrderId: string): Promise<void> {
+    const orderId = rawOrderId.trim()
+    if (!/^[A-Za-z0-9]+$/.test(orderId)) {
+      setState("not-found")
+      setErrorMessage("Please enter a valid Order ID.")
       return
     }
-    const found = orders.find((o) => o.id.toUpperCase() === query)
-    setResult(found ?? null)
+    try {
+      const apiOrder = await publicOrderTrackingApi.track(orderId)
+      setResult(toFrontendPublicOrder(apiOrder))
+      setState("found")
+    } catch (err) {
+      setResult(null)
+      if (err instanceof ApiError && err.status === 404) {
+        setState("not-found")
+        setErrorMessage("")
+      } else {
+        setState("error")
+        setErrorMessage(err instanceof ApiError ? err.message : "Couldn't reach the server. Please try again.")
+      }
+    }
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    const query = orderIdInput.trim()
+    if (!query) {
+      toast.error("Please enter an Order ID.")
+      return
+    }
+    setState("loading")
+    await runLookup(query)
+  }
+
+  async function handleRefresh() {
+    if (!result) return
+    setIsRefreshing(true)
+    await runLookup(result.id)
+    setIsRefreshing(false)
   }
 
   function handleDownloadInvoice(order: Order) {
@@ -59,97 +101,90 @@ export default function TrackOrder() {
 
   return (
     <div>
-      <PageHeader title="Track Your Order" subtitle="Enter your order ID to see live shipping status." />
+      <PageHeader
+        title="Track Your Order"
+        subtitle="Enter your order ID to view delivery progress, estimated delivery and shipment details."
+      />
 
       <section className="px-4 py-12">
-        <div className="mx-auto max-w-xl">
-          <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row">
-            <div className="flex-1 space-y-1.5">
-              <Label htmlFor="order-id" className="sr-only">
-                Order ID
-              </Label>
-              <Input
-                id="order-id"
-                placeholder="e.g. ORD001"
-                value={orderIdInput}
-                onChange={(e) => setOrderIdInput(e.target.value)}
-              />
+        <div className="mx-auto max-w-xl rounded-2xl border border-border bg-card p-6 shadow-[0_10px_30px_rgba(15,23,42,0.06)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.4)]">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="order-id">Order ID</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="order-id"
+                  placeholder="e.g. NXTRK250344"
+                  className="pl-9"
+                  value={orderIdInput}
+                  onChange={(e) => setOrderIdInput(e.target.value)}
+                />
+              </div>
             </div>
-            <Button type="submit">Track Order</Button>
+            <Button type="submit" size="lg" disabled={state === "loading"}>
+              {state === "loading" ? <Loader2 className="size-4 animate-spin" /> : null}
+              {state === "loading" ? "Tracking Order..." : "Track Order"}
+            </Button>
           </form>
-          <p className="mt-2 text-xs text-muted-foreground">Try ORD001</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            You'll find your Order ID on your order confirmation or in your Orders page.
+          </p>
         </div>
 
-        {result === null && (
-          <div className="mx-auto mt-10 flex max-w-xl flex-col items-center rounded-2xl border bg-card p-8 text-center shadow-sm">
-            <PackageSearch className="size-10 text-muted-foreground" />
-            <p className="mt-4 text-muted-foreground">
-              We couldn't find that order. Please check the Order ID and try again.
+        <div className="mx-auto mt-6 flex max-w-xl flex-wrap justify-center gap-x-6 gap-y-2">
+          {INFO_POINTS.map((point) => (
+            <span key={point} className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <CheckCircle2 className="size-3.5 text-primary" /> {point}
+            </span>
+          ))}
+        </div>
+
+        {state === "loading" && (
+          <div className="mx-auto mt-10 max-w-2xl space-y-3">
+            <p className="text-center text-sm text-muted-foreground">Loading order details...</p>
+            <Skeleton className="h-24 w-full rounded-2xl" />
+            <Skeleton className="h-40 w-full rounded-2xl" />
+          </div>
+        )}
+
+        {state === "not-found" && (
+          <div className="mx-auto mt-10 flex max-w-xl flex-col items-center rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
+            <span className="flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <PackageX className="size-6" />
+            </span>
+            <p className="mt-4 font-semibold text-foreground">Order not found</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {errorMessage || "Please check your order ID and try again."}
             </p>
           </div>
         )}
 
-        {result && (
-          <div className="mx-auto mt-10 grid max-w-4xl gap-8 lg:grid-cols-2">
-            <div className="rounded-2xl border bg-card p-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-foreground">Order Details</h2>
-              <dl className="mt-4 space-y-3 text-sm">
-                <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Order ID</dt>
-                  <dd className="font-mono font-semibold text-foreground">{result.id}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Date</dt>
-                  <dd className="text-foreground">{formatDate(result.date, settings.timezone)}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Payment Method</dt>
-                  <dd className="text-foreground">{result.paymentMethod}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Status</dt>
-                  <dd className="text-foreground">{result.status}</dd>
-                </div>
-                <div className="flex justify-between border-t pt-3">
-                  <dt className="font-medium text-foreground">Total Amount</dt>
-                  <dd className="font-semibold text-primary">{formatCurrency(result.total, settings.currency)}</dd>
-                </div>
-              </dl>
-              <Button variant="outline" className="mt-6 w-full" onClick={() => handleDownloadInvoice(result)}>
-                <Download className="size-4" />
-                Download Invoice
-              </Button>
-            </div>
+        {state === "error" && (
+          <div className="mx-auto mt-10 flex max-w-xl flex-col items-center rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
+            <span className="flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <PackageX className="size-6" />
+            </span>
+            <p className="mt-4 font-semibold text-foreground">Unable to load order details.</p>
+            <p className="mt-1 text-sm text-muted-foreground">{errorMessage}</p>
+            <Button variant="outline" size="sm" className="mt-4" onClick={() => runLookup(orderIdInput)}>
+              Retry
+            </Button>
+          </div>
+        )}
 
-            <div className="rounded-2xl border bg-card p-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-foreground">Shipping Timeline</h2>
-              <ol className="mt-5 space-y-6">
-                {result.tracking.map((step, i) => (
-                  <li key={step.label} className="relative flex gap-3 pl-1">
-                    {i < result.tracking.length - 1 && (
-                      <span
-                        className={cn(
-                          "absolute left-[11px] top-6 h-full w-px",
-                          step.done ? "bg-primary" : "bg-border",
-                        )}
-                      />
-                    )}
-                    {step.done ? (
-                      <CheckCircle2 className="size-5.5 shrink-0 text-primary" />
-                    ) : (
-                      <Circle className="size-5.5 shrink-0 text-muted-foreground/40" />
-                    )}
-                    <div>
-                      <p className={cn("text-sm font-medium", step.done ? "text-foreground" : "text-muted-foreground")}>
-                        {step.label}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {step.date ? formatDate(step.date, settings.timezone) : "Pending"}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
+        {state === "found" && result && (
+          <div className="mx-auto mt-10 max-w-2xl">
+            <OrderTrackingView
+              order={result}
+              onRefresh={handleRefresh}
+              isRefreshing={isRefreshing}
+              onViewDetails={() => handleDownloadInvoice(result)}
+            />
+            <div className="mt-3 flex justify-center">
+              <Button variant="ghost" size="sm" onClick={() => handleDownloadInvoice(result)}>
+                <Download className="size-3.5" /> Download Invoice
+              </Button>
             </div>
           </div>
         )}

@@ -332,35 +332,53 @@ function NatureMockup() {
   )
 }
 
-// --- 8. Glass — two separate floating frosted panels (an icon chip
-// overlapping top-right, a name/CTA card overlapping the bottom), unlike
-// Creative's single-column glow structure. ------------------------------
+// --- 8. Glass — light frosted-glass surfaces over a blurred dusk-toned
+// backdrop (translucent white chips, dark navy text), a circular photo
+// ring, and a separate icon-per-action contact row — matching the real
+// Template 4 implementation's palette (src/components/customer/profile-
+// templates/GlassTemplate.tsx) instead of the dark-navy glass every other
+// mockup on this page otherwise leans toward. ---------------------------
 function GlassMockup() {
   return (
-    <PhoneFrame bg="bg-gradient-to-br from-[#1E293B] via-[#334155] to-[#0F172A]">
-      <div className="pointer-events-none absolute left-4 top-14 size-24 rounded-full bg-[#38BDF8]/30 blur-[40px]" />
-      <div className="pointer-events-none absolute right-2 top-28 size-20 rounded-full bg-[#A78BFA]/30 blur-[35px]" />
+    <PhoneFrame bg="bg-gradient-to-br from-[#8B9DC3] via-[#A79FC9] to-[#D8A98F]">
+      <div className="pointer-events-none absolute left-2 top-20 size-20 rounded-full bg-[#38BDF8]/25 blur-[35px]" />
+      <div className="pointer-events-none absolute right-2 top-4 size-16 rounded-full bg-[#F59E0B]/20 blur-[30px]" />
+      <div className="pointer-events-none absolute inset-0 bg-white/10" />
 
-      <div className="absolute right-3 top-10 z-[1] flex gap-1.5 rounded-2xl border border-white/20 bg-white/10 p-1.5 backdrop-blur-md">
+      <div className="relative mt-4 flex items-center gap-1.5 px-4">
+        <span className="flex size-6 items-center justify-center rounded-lg border border-white/60 bg-white/50 text-[7px] font-bold text-slate-800 backdrop-blur-md">
+          YN
+        </span>
+        <div>
+          <p className="text-[8px] font-bold text-slate-800">Your Name</p>
+          <p className="text-[7px] text-slate-600">Digital Identity</p>
+        </div>
+      </div>
+
+      <div className="relative mt-3 flex justify-center">
+        <div className="flex size-16 items-center justify-center rounded-full border-[3px] border-white/70 bg-white/30 backdrop-blur-md">
+          <User className="size-7 text-slate-700" />
+        </div>
+      </div>
+
+      <div className="relative mt-3 text-center">
+        <p className="text-sm font-bold text-slate-900">Your Name</p>
+        <p className="text-[9px] text-slate-600">Your Title</p>
+      </div>
+
+      <div className="relative mx-4 mt-3 flex justify-center gap-2">
         {[Phone, MessageCircle, Mail].map((Icon, i) => (
-          <span key={i} className="flex size-5 items-center justify-center rounded-lg text-white">
-            <Icon className="size-2.5" />
+          <span
+            key={i}
+            className="flex size-7 items-center justify-center rounded-lg border border-white/60 bg-white/40 text-slate-700 backdrop-blur-md"
+          >
+            <Icon className="size-3" />
           </span>
         ))}
       </div>
 
-      <div className="relative mt-16 flex justify-center">
-        <div className="flex size-16 items-center justify-center rounded-2xl border border-white/25 bg-white/10 backdrop-blur-md">
-          <User className="size-7 text-white/80" />
-        </div>
-      </div>
-
-      <div className="relative mx-4 mt-6 rounded-2xl border border-white/20 bg-white/10 p-3 text-center backdrop-blur-md">
-        <p className="text-sm font-bold text-white">Your Name</p>
-        <p className="text-[9px] text-white/70">Your Title · Your Company</p>
-        <div className="mt-2 rounded-xl border border-white/30 bg-white/15 py-1.5 text-[9px] font-semibold text-white">
-          + Save Contact
-        </div>
+      <div className="relative mx-4 mt-3 rounded-xl bg-slate-900 py-1.5 text-center text-[9px] font-semibold text-white">
+        + Save Contact
       </div>
     </PhoneFrame>
   )

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ForgotPasswordDialog } from "@/components/auth/ForgotPasswordDialog"
+import { BrandMark } from "@/components/layout/BrandMark"
 import { useAdminAuthStore } from "@/store/auth-store"
 import { sanitizeRedirect } from "@/lib/utils"
 
@@ -67,7 +68,8 @@ export default function AdminLogin() {
           </div>
           <div className="space-y-1">
             <h1 className="flex items-center justify-center gap-1.5 text-xl font-bold tracking-tight">
-              <Zap className="size-4" fill="currentColor" /> VR's NEXORA
+              <BrandMark className="size-4 rounded-sm" fallback={<Zap className="size-4" fill="currentColor" />} />
+              <span>VR&apos;s NEXORA</span>
             </h1>
             <p className="text-sm text-muted-foreground">Admin Portal sign-in</p>
           </div>

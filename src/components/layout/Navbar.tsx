@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link, NavLink, useNavigate } from "react-router-dom"
-import { LayoutDashboard, LogOut, Menu, ShoppingCart } from "lucide-react"
+import { LayoutDashboard, LogOut, Menu, Package, ShoppingCart } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from "@/components/ui/sheet"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -12,11 +12,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useCartStore } from "@/store/cart-store"
+import { useCart } from "@/hooks/useCart"
 import { useCustomerAuthStore } from "@/store/auth-store"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
 import { cn } from "@/lib/utils"
 import ThemeToggle from "@/components/layout/ThemeToggle"
+import { BrandMark } from "@/components/layout/BrandMark"
 
 const NAV_LINKS = [
   { to: "/", label: "Home" },
@@ -30,11 +31,16 @@ function Logo() {
   const { settings } = usePublicSettings()
   return (
     <Link to="/" className="flex items-center gap-2.5">
-      {/* Luxury coin emblem */}
-      <span className="relative flex size-11 shrink-0 items-center justify-center rounded-full bg-[#0B0B0F] ring-2 ring-[#D4AF37]/70">
-        <span className="absolute inset-[3px] rounded-full border border-[#D4AF37]/40" />
-        <span className="relative font-serif text-lg font-bold text-[#D4AF37]">N</span>
-      </span>
+      <BrandMark
+        className="size-11 shrink-0 rounded-full"
+        fallback={
+          // Luxury coin emblem
+          <span className="relative flex size-11 shrink-0 items-center justify-center rounded-full bg-[#0B0B0F] ring-2 ring-[#D4AF37]/70">
+            <span className="absolute inset-[3px] rounded-full border border-[#D4AF37]/40" />
+            <span className="relative font-serif text-lg font-bold text-[#D4AF37]">N</span>
+          </span>
+        }
+      />
       <span className="flex flex-col leading-none">
         <span className="text-lg font-bold tracking-tight text-foreground">{settings.site_name}</span>
         <span className="mt-1 text-[11px] font-medium text-muted-foreground">Digital Identity</span>
@@ -47,7 +53,8 @@ export default function Navbar() {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
-  const itemCount = useCartStore((s) => s.lines.reduce((sum, l) => sum + l.qty, 0))
+  const { lines: cartLines } = useCart()
+  const itemCount = cartLines.reduce((sum, l) => sum + l.qty, 0)
   // Reflects the REAL, token-backed customer session (see hasValidSession
   // in auth-store.ts) — this is what previously always showed "Login" even
   // to an already-authenticated customer, which is exactly the kind of
@@ -155,6 +162,10 @@ export default function Navbar() {
                     <LayoutDashboard />
                     My Dashboard
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/orders")}>
+                    <Package />
+                    My Orders
+                  </DropdownMenuItem>
                   <DropdownMenuItem
                     variant="destructive"
                     onClick={() => {
@@ -179,9 +190,9 @@ export default function Navbar() {
             <Button
               variant="gradient"
               className="rounded-full px-6 shadow-[0_8px_24px_rgba(124,58,237,0.28)] transition-all duration-300 hover:scale-[1.03] hover:shadow-[0_10px_32px_rgba(124,58,237,0.4)] dark:shadow-[0_8px_24px_rgba(139,92,246,0.35)] dark:hover:shadow-[0_10px_32px_rgba(139,92,246,0.5)]"
-              onClick={() => navigate("/shop")}
+              onClick={() => navigate("/orders")}
             >
-              Order Now →
+              My Orders
             </Button>
           </div>
 
@@ -269,9 +280,9 @@ export default function Navbar() {
                     <Button
                       variant="gradient"
                       className="w-full rounded-full transition-transform duration-300 hover:scale-[1.03]"
-                      onClick={() => navigate("/shop")}
+                      onClick={() => navigate("/orders")}
                     >
-                      Order Now
+                      My Orders
                     </Button>
                   </SheetClose>
                 </div>

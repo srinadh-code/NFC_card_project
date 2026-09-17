@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAdminAuthStore } from "@/store/auth-store"
+import { BrandMark } from "@/components/layout/BrandMark"
 
 const NAV_ITEMS = [
   { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -38,9 +39,14 @@ export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex items-center gap-2 px-5 py-5">
-        <div className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-          <Zap className="size-4.5" />
-        </div>
+        <BrandMark
+          className="size-8 rounded-lg"
+          fallback={
+            <div className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+              <Zap className="size-4.5" />
+            </div>
+          }
+        />
         <span className="text-lg font-semibold tracking-tight">VR's NEXORA</span>
       </div>
 

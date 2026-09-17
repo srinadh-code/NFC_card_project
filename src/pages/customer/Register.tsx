@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PasswordInput, PasswordRequirements } from "@/components/ui/password-input"
+import { BrandMark } from "@/components/layout/BrandMark"
 import { useCustomerAuthStore, useAuthStore } from "@/store/auth-store"
 import { ApiError, authApi, fieldErrorMessage, setTokens } from "@/lib/api"
 import {
@@ -117,9 +118,14 @@ export default function CustomerRegister() {
         <div className="absolute -bottom-32 -left-16 size-80 rounded-full bg-fuchsia-500/10 blur-3xl" />
 
         <div className="relative z-10 flex items-center gap-2">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-white/15">
-            <Zap className="size-5" fill="currentColor" />
-          </div>
+          <BrandMark
+            className="size-9 rounded-xl"
+            fallback={
+              <div className="flex size-9 items-center justify-center rounded-xl bg-white/15">
+                <Zap className="size-5" fill="currentColor" />
+              </div>
+            }
+          />
           <span className="text-lg font-bold tracking-tight">VR's NEXORA</span>
         </div>
 

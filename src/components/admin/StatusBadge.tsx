@@ -22,6 +22,17 @@ const STATUS_VARIANTS: Record<string, BadgeVariant> = {
   Completed: "success",
   Cancelled: "destructive",
 
+  // Real order-tracking step labels (see the backend's tracking array via
+  // toFrontendOrder in lib/api.ts) surfaced as "Current Status" across
+  // Admin Orders/Order Details, Customer Orders and the public Track
+  // Order page.
+  "Order Placed": "soft",
+  "Order Confirmed": "soft",
+  "Out for Delivery": "default",
+  "In Transit": "default",
+  Returned: "warning",
+  "Failed Delivery": "destructive",
+
   Paid: "success",
   Refunded: "soft",
   Failed: "destructive",

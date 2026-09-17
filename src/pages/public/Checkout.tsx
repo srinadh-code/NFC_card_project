@@ -1,43 +1,69 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { useNavigate } from "react-router-dom"
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Info } from "lucide-react"
+import { CheckCircle2, Info, MapPin, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { useCartStore } from "@/store/cart-store"
+import { Skeleton } from "@/components/ui/skeleton"
+import { AddressFormDialog } from "@/components/customer/AddressFormDialog"
+import { useCart } from "@/hooks/useCart"
 import { useCustomerAuthStore } from "@/store/auth-store"
-import { ordersApi, ApiError, type CreateOrderPayload } from "@/lib/api"
+import { ordersApi, customerAddressApi, ApiError, type CreateOrderPayload } from "@/lib/api"
 import { formatCurrency } from "@/lib/mock-api"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
+import { cn } from "@/lib/utils"
+import type { CustomerAddress } from "@/types"
 
-interface BillingForm {
-  fullName: string
-  phone: string
-  address: string
-  city: string
-  state: string
-  pincode: string
-}
-
-const INITIAL_FORM: BillingForm = {
-  fullName: "",
-  phone: "",
-  address: "",
-  city: "",
-  state: "",
-  pincode: "",
+// The customer's delivery address now always comes from their saved
+// address book (customerAddressApi — see components/customer/
+// AddressFormDialog.tsx) rather than being typed fresh on every order.
+// Placing an order sends `address_id`; the backend copies that address's
+// fields into the order's own shipping_* snapshot columns exactly once
+// (see orders/services.py's compose_shipping_snapshot) — editing or
+// deleting the saved address afterward never changes a past order.
+function AddressOption({
+  address,
+  selected,
+  onSelect,
+}: {
+  address: CustomerAddress
+  selected: boolean
+  onSelect: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        "flex w-full flex-col items-start gap-1 rounded-xl border p-4 text-left text-sm transition-colors",
+        selected ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40",
+      )}
+    >
+      <span className="flex w-full items-center justify-between gap-2">
+        <span className="font-semibold text-foreground">{address.label || "Address"}</span>
+        {address.isDefault && <span className="text-xs font-medium text-primary">DEFAULT</span>}
+      </span>
+      <span className="text-foreground">{address.fullName}</span>
+      <span className="text-muted-foreground">
+        {[address.addressLine1, address.locality].filter(Boolean).join(", ")}
+      </span>
+      <span className="text-muted-foreground">
+        {[address.city, address.state].filter(Boolean).join(", ")} - {address.pincode}
+      </span>
+    </button>
+  )
 }
 
 export default function Checkout() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const customer = useCustomerAuthStore((s) => s.customer)
-  const { lines, subtotal, couponCode, discount, clearCart } = useCartStore()
+  const { lines, subtotal, couponCode, discount, clearCart } = useCart()
   const { settings } = usePublicSettings()
 
-  const [form, setForm] = useState<BillingForm>(INITIAL_FORM)
-  const [errors, setErrors] = useState<Partial<Record<keyof BillingForm, boolean>>>({})
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
+  const [selectorOpen, setSelectorOpen] = useState(false)
+  const [formOpen, setFormOpen] = useState(false)
 
   // One id per checkout attempt (this page mount) — sent on every submit so
   // a double-click or retry resends the *same* id, letting the backend
@@ -47,17 +73,24 @@ export default function Checkout() {
   // successful order navigates away and the user starts a new one).
   const [idempotencyKey] = useState(() => crypto.randomUUID())
 
-  // Redirecting an unauthenticated visitor is <ProtectedRoute role="CUSTOMER">'s
-  // job (see App.tsx) — it wraps this route and never mounts this component
-  // at all unless a real, token-backed customer session exists. `customer`
-  // is only ever null here for a single render right after logout, before
-  // the route transition away completes.
+  const addressesQuery = useQuery({
+    queryKey: ["customer-addresses"],
+    queryFn: customerAddressApi.list,
+    enabled: Boolean(customer),
+  })
+  const addresses = addressesQuery.data ?? []
+
+  // Auto-select the default address the first time addresses load (or the
+  // first one if none is flagged default) — the customer can still pick a
+  // different saved address before placing the order.
   useEffect(() => {
-    if (customer) {
-      setForm((f) => ({ ...f, fullName: f.fullName || customer.name }))
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customer?.id])
+    if (selectedAddressId) return
+    if (addresses.length === 0) return
+    const preferred = addresses.find((a) => a.isDefault) ?? addresses[0]
+    setSelectedAddressId(preferred.id)
+  }, [addresses, selectedAddressId])
+
+  const selectedAddress = addresses.find((a) => a.id === selectedAddressId) ?? null
 
   const sub = subtotal()
   // The live Order backend doesn't model a separate shipping charge yet —
@@ -81,21 +114,10 @@ export default function Checkout() {
     return null
   }
 
-  function update<K extends keyof BillingForm>(key: K, value: BillingForm[K]) {
-    setForm((f) => ({ ...f, [key]: value }))
-  }
-
-  function validate(): boolean {
-    const next: Partial<Record<keyof BillingForm, boolean>> = {}
-    ;(Object.keys(form) as (keyof BillingForm)[]).forEach((key) => {
-      if (!form[key].trim()) next[key] = true
-    })
-    setErrors(next)
-    if (Object.keys(next).length > 0) {
-      toast.error("Please fill in all required fields.")
-      return false
-    }
-    return true
+  function handleAddressSaved(address: CustomerAddress) {
+    queryClient.invalidateQueries({ queryKey: ["customer-addresses"] })
+    setSelectedAddressId(address.id)
+    setSelectorOpen(false)
   }
 
   function handleSubmit(e: FormEvent) {
@@ -105,7 +127,10 @@ export default function Checkout() {
       toast.error("Your cart is empty.")
       return
     }
-    if (!validate()) return
+    if (!selectedAddress) {
+      toast.error("Please select or add a delivery address.")
+      return
+    }
 
     placeOrderMutation.mutate({
       idempotency_key: idempotencyKey,
@@ -122,11 +147,7 @@ export default function Checkout() {
       // form) — orders are placed as Cash on Delivery / pay-on-confirmation
       // until one exists, so there's nothing for the customer to pick here.
       payment_method: "COD",
-      shipping_line1: form.address,
-      shipping_city: form.city,
-      shipping_state: form.state,
-      shipping_pincode: form.pincode,
-      shipping_country: "India",
+      address_id: Number(selectedAddress.id),
     })
   }
 
@@ -135,65 +156,77 @@ export default function Checkout() {
       <h1 className="text-3xl font-bold tracking-tight text-foreground">Checkout</h1>
 
       <form onSubmit={handleSubmit} className="mt-8 grid gap-8 lg:grid-cols-3">
-        <div className="space-y-8 lg:col-span-2">
+        <div className="space-y-6 lg:col-span-2">
           <div className="rounded-2xl border bg-card p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-foreground">Billing Details</h2>
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="fullName">Full Name</Label>
-                <Input
-                  id="fullName"
-                  value={form.fullName}
-                  onChange={(e) => update("fullName", e.target.value)}
-                  aria-invalid={errors.fullName}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="phone">Phone</Label>
-                <Input
-                  id="phone"
-                  value={form.phone}
-                  onChange={(e) => update("phone", e.target.value)}
-                  aria-invalid={errors.phone}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="pincode">Pincode</Label>
-                <Input
-                  id="pincode"
-                  value={form.pincode}
-                  onChange={(e) => update("pincode", e.target.value)}
-                  aria-invalid={errors.pincode}
-                />
-              </div>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="address">Address Line</Label>
-                <Input
-                  id="address"
-                  value={form.address}
-                  onChange={(e) => update("address", e.target.value)}
-                  aria-invalid={errors.address}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="city">City</Label>
-                <Input
-                  id="city"
-                  value={form.city}
-                  onChange={(e) => update("city", e.target.value)}
-                  aria-invalid={errors.city}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="state">State</Label>
-                <Input
-                  id="state"
-                  value={form.state}
-                  onChange={(e) => update("state", e.target.value)}
-                  aria-invalid={errors.state}
-                />
-              </div>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                <MapPin className="size-4 text-primary" /> Delivery Address
+              </h2>
+              {addresses.length > 0 && (
+                <Button type="button" variant="outline" size="sm" onClick={() => setSelectorOpen((v) => !v)}>
+                  {selectorOpen ? "Close" : "Change Address"}
+                </Button>
+              )}
             </div>
+
+            {addressesQuery.isLoading ? (
+              <div className="mt-4 space-y-2">
+                <Skeleton className="h-24 w-full rounded-xl" />
+              </div>
+            ) : addressesQuery.isError ? (
+              <div className="mt-4 flex flex-col items-center gap-2 py-6 text-center">
+                <p className="text-sm text-muted-foreground">Unable to load your saved addresses.</p>
+                <Button variant="outline" size="sm" onClick={() => addressesQuery.refetch()}>
+                  Retry
+                </Button>
+              </div>
+            ) : addresses.length === 0 ? (
+              <div className="mt-4 flex flex-col items-center gap-3 rounded-xl border border-dashed p-8 text-center">
+                <p className="text-sm font-medium text-foreground">No delivery address found.</p>
+                <Button type="button" onClick={() => setFormOpen(true)}>
+                  <Plus className="size-4" /> Add Delivery Address
+                </Button>
+              </div>
+            ) : selectorOpen ? (
+              <div className="mt-4 flex flex-col gap-2">
+                {addresses.map((address) => (
+                  <AddressOption
+                    key={address.id}
+                    address={address}
+                    selected={address.id === selectedAddressId}
+                    onSelect={() => {
+                      setSelectedAddressId(address.id)
+                      setSelectorOpen(false)
+                    }}
+                  />
+                ))}
+                <Button type="button" variant="outline" className="mt-1" onClick={() => setFormOpen(true)}>
+                  <Plus className="size-4" /> Add New Address
+                </Button>
+              </div>
+            ) : selectedAddress ? (
+              <div className="mt-4 space-y-0.5 text-sm text-muted-foreground">
+                <p className="font-semibold text-foreground">
+                  {selectedAddress.label || "Address"}
+                  {selectedAddress.isDefault && (
+                    <span className="ml-2 text-xs font-medium text-primary">DEFAULT</span>
+                  )}
+                </p>
+                <p className="font-medium text-foreground">{selectedAddress.fullName}</p>
+                <p>{selectedAddress.addressLine1}</p>
+                {selectedAddress.addressLine2 && <p>{selectedAddress.addressLine2}</p>}
+                {selectedAddress.landmark && <p>Near {selectedAddress.landmark}</p>}
+                <p>{[selectedAddress.locality, selectedAddress.city].filter(Boolean).join(", ")}</p>
+                <p>{selectedAddress.district} District</p>
+                <p>
+                  {selectedAddress.state} - {selectedAddress.pincode}
+                </p>
+                <p>{selectedAddress.country}</p>
+                <p className="pt-2 flex items-center gap-1.5 text-success">
+                  <CheckCircle2 className="size-3.5" /> Address details verified
+                </p>
+              </div>
+            ) : null}
           </div>
 
           <div className="flex items-start gap-2 rounded-2xl border bg-muted/30 p-4 text-sm text-muted-foreground">
@@ -233,11 +266,18 @@ export default function Checkout() {
               <span>{formatCurrency(total, settings.currency)}</span>
             </div>
           </div>
-          <Button type="submit" size="lg" className="mt-6 w-full" disabled={placeOrderMutation.isPending}>
+          <Button
+            type="submit"
+            size="lg"
+            className="mt-6 w-full"
+            disabled={!selectedAddress || placeOrderMutation.isPending}
+          >
             {placeOrderMutation.isPending ? "Placing Order…" : "Place Order"}
           </Button>
         </div>
       </form>
+
+      <AddressFormDialog open={formOpen} onOpenChange={setFormOpen} onSaved={handleAddressSaved} />
     </div>
   )
 }

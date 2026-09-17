@@ -15,6 +15,17 @@ const FALLBACK_SETTINGS: PublicGeneralSettings = {
   site_address: "Hyderabad, Telangana, India",
   currency: "INR",
   timezone: "Asia/Kolkata",
+  office_name: "VR's NEXORA",
+  office_address_line1: "",
+  office_address_line2: "",
+  office_landmark: "",
+  office_locality: "",
+  office_city: "Hyderabad",
+  office_district: "",
+  office_state: "Telangana",
+  office_pincode: "",
+  office_country: "India",
+  office_phone: "",
 }
 
 /**

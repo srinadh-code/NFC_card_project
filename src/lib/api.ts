@@ -3,6 +3,7 @@
 // fetch() call or mock data.
 import type {
   Address,
+  CustomerAddress,
   CustomField,
   CustomLink,
   NfcCard,
@@ -737,6 +738,157 @@ export const servicesApi = {
 }
 
 // ---------------------------------------------------------------------
+// Customer delivery addresses (the "address book") — entirely separate
+// from the admin-controlled office/dispatch address (see
+// website_content's GeneralSettings.office_* fields / settingsApi in
+// contentApi.ts). CRUD + set-default; Checkout.tsx selects one of these
+// by id when placing an order (see CreateOrderPayload.address_id above) —
+// the backend snapshots it into the order at creation time, never a live
+// reference.
+// ---------------------------------------------------------------------
+
+export interface ApiCustomerAddress {
+  id: number
+  label: string
+  full_name: string
+  phone: string
+  address_line1: string
+  address_line2: string
+  landmark: string
+  locality: string
+  city: string
+  district: string
+  state: string
+  pincode: string
+  country: string
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CustomerAddressInput {
+  label?: string
+  fullName: string
+  phone: string
+  addressLine1: string
+  addressLine2?: string
+  landmark?: string
+  locality?: string
+  city: string
+  district: string
+  state: string
+  pincode: string
+  country?: string
+}
+
+function toFrontendCustomerAddress(a: ApiCustomerAddress): CustomerAddress {
+  return {
+    id: String(a.id),
+    label: a.label,
+    fullName: a.full_name,
+    phone: a.phone,
+    addressLine1: a.address_line1,
+    addressLine2: a.address_line2,
+    landmark: a.landmark,
+    locality: a.locality,
+    city: a.city,
+    district: a.district,
+    state: a.state,
+    pincode: a.pincode,
+    country: a.country,
+    isDefault: a.is_default,
+  }
+}
+
+function toApiAddressPayload(values: CustomerAddressInput): Record<string, unknown> {
+  return {
+    label: values.label ?? "",
+    full_name: values.fullName,
+    phone: values.phone,
+    address_line1: values.addressLine1,
+    address_line2: values.addressLine2 ?? "",
+    landmark: values.landmark ?? "",
+    locality: values.locality ?? "",
+    city: values.city,
+    district: values.district,
+    state: values.state,
+    pincode: values.pincode,
+    country: values.country ?? "India",
+  }
+}
+
+export const customerAddressApi = {
+  list: async (): Promise<CustomerAddress[]> =>
+    (await request<ApiCustomerAddress[]>("/customer/addresses/")).map(toFrontendCustomerAddress),
+
+  create: async (values: CustomerAddressInput): Promise<CustomerAddress> =>
+    toFrontendCustomerAddress(
+      await request<ApiCustomerAddress>("/customer/addresses/", {
+        method: "POST",
+        body: toApiAddressPayload(values),
+      }),
+    ),
+
+  update: async (id: string, values: CustomerAddressInput): Promise<CustomerAddress> =>
+    toFrontendCustomerAddress(
+      await request<ApiCustomerAddress>(`/customer/addresses/${id}/`, {
+        method: "PATCH",
+        body: toApiAddressPayload(values),
+      }),
+    ),
+
+  remove: (id: string) => request<null>(`/customer/addresses/${id}/`, { method: "DELETE" }),
+
+  setDefault: async (id: string): Promise<CustomerAddress> =>
+    toFrontendCustomerAddress(
+      await request<ApiCustomerAddress>(`/customer/addresses/${id}/set-default/`, { method: "POST" }),
+    ),
+}
+
+// ---------------------------------------------------------------------
+// Customer cart — always the authenticated customer's own cart (see
+// customer_management.customer_cart on the backend: every endpoint looks
+// it up via request.user, never a client-supplied cart/customer id). Only
+// ever called when a real customer session exists — see hooks/useCart.ts,
+// which falls back to a local guest cart store for an unauthenticated
+// visitor instead of calling any of these.
+// ---------------------------------------------------------------------
+
+export interface ApiCartItem {
+  id: number
+  product_id: string
+  name: string
+  card_type: string
+  color_name: string
+  color_hex: string
+  qty: number
+  price: string
+  updated_at: string
+}
+export interface ApiCart {
+  id: number
+  items: ApiCartItem[]
+  updated_at: string
+}
+export interface AddCartItemInput {
+  product_id: string
+  name: string
+  card_type: string
+  color_name: string
+  color_hex?: string
+  qty: number
+  price: number
+}
+
+export const cartApi = {
+  get: () => request<ApiCart>("/customer/cart/"),
+  addItem: (item: AddCartItemInput) => request<ApiCart>("/customer/cart/items/", { method: "POST", body: item }),
+  updateQty: (id: number, qty: number) =>
+    request<ApiCart>(`/customer/cart/items/${id}/`, { method: "PATCH", body: { qty } }),
+  remove: (id: number) => request<ApiCart>(`/customer/cart/items/${id}/`, { method: "DELETE" }),
+}
+
+// ---------------------------------------------------------------------
 // NFC cards
 // ---------------------------------------------------------------------
 
@@ -1209,6 +1361,7 @@ interface ApiAdminOrderItem {
 }
 interface ApiAdminOrder {
   id: number
+  order_number: string | null
   customer_id: number
   customer_name: string
   customer_email: string
@@ -1226,9 +1379,15 @@ interface ApiAdminOrder {
   placed_at: string
 }
 
-function toFrontendOrder(o: ApiAdminOrder): Order {
+// Exported so customer-facing code (pages/customer/Orders.tsx) can reuse
+// this exact same adapter on its own ApiOrder objects — that interface is
+// field-for-field identical to ApiAdminOrder (both come from the same
+// backend OrderSerializer/AdminOrderSerializer shape), so this one function
+// already works for both without needing a second, duplicate adapter.
+export function toFrontendOrder(o: ApiAdminOrder): Order {
   return {
     id: String(o.id),
+    orderNumber: o.order_number,
     customerId: String(o.customer_id),
     customerName: o.customer_name,
     customerEmail: o.customer_email,
@@ -1915,6 +2074,7 @@ export interface ApiOrderAddress {
 }
 export interface ApiOrder {
   id: number
+  order_number: string | null
   customer_id: number
   customer_name: string
   customer_email: string
@@ -1933,22 +2093,100 @@ export interface ApiOrder {
 }
 
 // Matches backend/orders/serializers.py's CustomerOrderCreateSerializer.
+// `address_id` selects one of the customer's own saved CustomerAddress rows
+// (see customerAddressApi below) — the backend copies its fields into the
+// new order's shipping_* snapshot columns exactly once at creation time.
 export interface CreateOrderPayload {
   idempotency_key?: string
   items: { product_id: string; name: string; card_type: string; color: string; qty: number; price: number }[]
   shipping?: number
   payment_method: "UPI" | "CARD" | "NET_BANKING" | "RAZORPAY" | "COD"
-  shipping_line1: string
-  shipping_city: string
-  shipping_state?: string
-  shipping_pincode: string
-  shipping_country?: string
+  address_id: number
 }
 
 export const ordersApi = {
   list: (page = 1) => requestPaginated<ApiOrder>(`/customer/orders/?page=${page}&page_size=100`),
   create: (payload: CreateOrderPayload) => request<ApiOrder>("/customer/orders/", { method: "POST", body: payload }),
   getById: (id: number | string) => request<ApiOrder>(`/customer/orders/${id}/`),
+}
+
+// ---------------------------------------------------------------------
+// Public order tracking — GET /api/orders/track/<id>/, unauthenticated.
+// Backed by orders.serializers.PublicOrderTrackingSerializer, a
+// deliberately narrower response than ApiOrder above: no customer_id,
+// email, phone, exact street address line, or assigned_card_id. Used only
+// by the public /track-order page, where the visitor hasn't signed in and
+// may not even be the order's owner — just someone with the real Order ID.
+// ---------------------------------------------------------------------
+
+export interface ApiPublicOrderAddress {
+  city: string
+  state: string
+  pincode: string
+  country: string
+}
+export interface ApiPublicOrder {
+  order_number: string
+  customer_name: string
+  items: ApiOrderItem[]
+  amount: string
+  shipping: string
+  total: string
+  payment_status: string
+  status: string
+  address: ApiPublicOrderAddress
+  tracking: ApiOrderTrackingStep[]
+  placed_at: string
+}
+
+// Adapts the narrower public payload into the same frontend `Order` shape
+// OrderTrackingView already renders end to end. The public endpoint has no
+// internal numeric id at all (see PublicOrderTrackingSerializer) — its
+// order_number *is* the only identifier, so it fills both `id` (the public
+// page's own lookup/refresh key) and `orderNumber` (what's displayed).
+// payment_method isn't returned publicly either — OrderTrackingView reads
+// paymentStatus for its summary card, which every surface does have, so no
+// value is guessed here. customerId/email/phone and the exact street
+// address line are filled with harmless empty defaults since
+// OrderTrackingView never displays any of them.
+export function toFrontendPublicOrder(o: ApiPublicOrder): Order {
+  return {
+    id: o.order_number,
+    orderNumber: o.order_number,
+    customerId: "",
+    customerName: o.customer_name,
+    customerEmail: "",
+    customerPhone: "",
+    items: o.items.map((it) => ({
+      productId: it.product_id,
+      name: it.name,
+      cardType: CARD_TYPE_MAP[it.card_type] ?? "Custom",
+      color: it.color,
+      qty: it.qty,
+      price: Number(it.price),
+    })),
+    amount: Number(o.amount),
+    shipping: Number(o.shipping),
+    total: Number(o.total),
+    paymentMethod: "UPI",
+    paymentStatus: PAYMENT_STATUS_MAP[o.payment_status] ?? "Pending",
+    status: ORDER_STATUS_MAP[o.status] ?? "Pending",
+    date: o.placed_at,
+    address: {
+      line1: "",
+      city: o.address.city,
+      state: o.address.state,
+      pincode: o.address.pincode,
+      country: o.address.country,
+    },
+    tracking: o.tracking as TrackingStep[],
+    assignedCardId: null,
+  }
+}
+
+export const publicOrderTrackingApi = {
+  track: (orderNumber: string) =>
+    request<ApiPublicOrder>(`/orders/track/${encodeURIComponent(orderNumber)}/`, { auth: false }),
 }
 
 // ---------------------------------------------------------------------

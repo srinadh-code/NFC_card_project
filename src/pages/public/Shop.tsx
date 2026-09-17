@@ -13,7 +13,7 @@ import { formatCurrency } from "@/lib/mock-api"
 import { ApiError, ordersApi, profileApi, CARD_TYPE_MAP } from "@/lib/api"
 import { publicWebsiteApi } from "@/lib/contentApi"
 import { CARD_THEME_IDS, PROFILE_THEMES, type NexoraCardType } from "@/data/constants"
-import { useCartStore } from "@/store/cart-store"
+import { useCart } from "@/hooks/useCart"
 import { cn } from "@/lib/utils"
 import { cardClass, gradientClass } from "@/components/marketing/PremiumCard"
 import { NfcCardFace } from "@/components/marketing/NfcCardShowcase"
@@ -50,7 +50,7 @@ function toNexoraCardType(p: OrderCardProduct): NexoraCardType {
 
 export default function Shop() {
   const navigate = useNavigate()
-  const addLine = useCartStore((s) => s.addLine)
+  const { addLine } = useCart()
   const [selectedId, setSelectedId] = useState<string>("")
   const { settings } = usePublicSettings()
   const [qty, setQty] = useState(1)

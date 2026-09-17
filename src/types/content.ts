@@ -371,6 +371,20 @@ export interface GeneralSettings extends WithId {
   site_address: string
   currency: string
   timezone: string
+  // Office / Dispatch Address — where every order physically ships FROM
+  // (used by tracking/shipping "From" displays). Separate from
+  // `site_address` above, which is just one free-text contact line.
+  office_name: string
+  office_address_line1: string
+  office_address_line2: string
+  office_landmark: string
+  office_locality: string
+  office_city: string
+  office_district: string
+  office_state: string
+  office_pincode: string
+  office_country: string
+  office_phone: string
   updated_at: string
 }
 

@@ -12,6 +12,8 @@ import {
   setTokens,
   setUnauthorizedHandler,
 } from "@/lib/api"
+import { useCartStore } from "@/store/cart-store"
+import { useCouponStore } from "@/store/coupon-store"
 
 interface AuthState {
   user: ApiUser | null
@@ -102,6 +104,13 @@ function doLogout() {
   if (refresh) authApi.logout(refresh).catch(() => {})
   clearTokens()
   useAuthStore.getState().setUser(null)
+  // The database cart (customer_management.customer_cart) is untouched —
+  // only this browser's local guest-cart/coupon state is cleared, so the
+  // next visitor on this browser (a guest, or a *different* customer
+  // logging in) never sees this customer's items or discount code. That
+  // customer's own cart is exactly as they left it next time they log in.
+  useCartStore.getState().clearCart()
+  useCouponStore.getState().clearCoupon()
 }
 
 type LoginResult = { success: true } | { success: false; error: string; unverifiedEmail?: string }

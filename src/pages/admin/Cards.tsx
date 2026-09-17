@@ -79,7 +79,7 @@ export default function AdminCards() {
     return () => clearTimeout(t)
   }, [searchInput])
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: ["admin-cards", page, search, statusFilter],
     queryFn: () => adminNfcApi.list({ page, search: search || undefined, status: statusFilter }),
     placeholderData: keepPreviousData,
@@ -234,6 +234,13 @@ export default function AdminCards() {
               {Array.from({ length: 6 }).map((_, i) => (
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
+            </div>
+          ) : isError ? (
+            <div className="flex flex-col items-center gap-3 py-10 text-center">
+              <p className="text-sm text-muted-foreground">{errorMessage(error, "Could not load cards.")}</p>
+              <Button variant="outline" size="sm" onClick={() => refetch()}>
+                Retry
+              </Button>
             </div>
           ) : (
             <div className="overflow-x-auto">

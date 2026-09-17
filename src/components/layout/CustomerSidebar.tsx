@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Link2,
   LogOut,
+  MapPin,
   QrCode,
   Settings,
   ShoppingBag,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useCustomerAuthStore } from "@/store/auth-store"
+import { BrandMark } from "@/components/layout/BrandMark"
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -26,6 +28,7 @@ const NAV_ITEMS = [
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/activity", label: "Activity", icon: Activity },
   { to: "/orders", label: "Orders", icon: ShoppingBag },
+  { to: "/addresses", label: "Addresses", icon: MapPin },
   { to: "/settings", label: "Settings", icon: Settings },
 ]
 
@@ -40,9 +43,14 @@ export function CustomerSidebar({ onNavigate }: CustomerSidebarProps) {
   return (
     <div className="flex h-full flex-col bg-[#0F172A] text-white">
       <div className="flex items-center gap-2 px-6 py-5">
-        <div className="flex size-9 items-center justify-center rounded-xl bg-gradient-brand text-white shadow-glow-primary">
-          <Zap className="size-5" fill="currentColor" />
-        </div>
+        <BrandMark
+          className="size-9 rounded-xl shadow-glow-primary"
+          fallback={
+            <div className="flex size-9 items-center justify-center rounded-xl bg-gradient-brand text-white shadow-glow-primary">
+              <Zap className="size-5" fill="currentColor" />
+            </div>
+          }
+        />
         <span className="text-lg font-bold tracking-tight text-white">VR's NEXORA</span>
       </div>
 

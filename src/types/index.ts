@@ -86,8 +86,39 @@ export interface TrackingStep {
   done: boolean
 }
 
+// A customer's saved delivery address (the "address book") — entirely
+// customer-controlled, purely CUSTOMER → DELIVERY/TO. Never confused with
+// the admin-controlled office/dispatch address (see
+// lib/order-tracking.ts's OfficeAddress, ADMIN → DISPATCH/FROM). An order
+// never holds a live reference to one of these — see Order.address below,
+// which is a one-time snapshot copied from whichever CustomerAddress was
+// selected at checkout, so editing/deleting this row later never changes
+// any existing order's delivery address.
+export interface CustomerAddress {
+  id: string
+  label: string
+  fullName: string
+  phone: string
+  addressLine1: string
+  addressLine2: string
+  landmark: string
+  locality: string
+  city: string
+  district: string
+  state: string
+  pincode: string
+  country: string
+  isDefault: boolean
+}
+
 export interface Order {
-  id: string // ORD001
+  id: string // internal numeric id — used for admin/customer API calls (status update, card assignment, detail fetch)
+  // The real public order code (e.g. "NXTRK250344") — see Order.generate_order_number
+  // on the backend. This is what customers/admin should see and share as
+  // "the Order ID"; `id` above stays purely an internal lookup key. Null
+  // only in the moment before a fresh order's first save (never null once
+  // it comes back from any real API response).
+  orderNumber: string | null
   customerId: string
   customerName: string
   customerEmail: string

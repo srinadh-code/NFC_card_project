@@ -10,7 +10,7 @@ import { ResourceListPage } from "@/components/admin/content/ResourceListPage"
 import { useSingletonSection } from "@/components/admin/content/useSingletonSection"
 import { orderCardPageApi, orderCardProductsApi, orderCardTrustBadgesApi, profileTemplatePreviewsApi } from "@/lib/contentApi"
 import { CARD_THEME_IDS, PROFILE_THEMES } from "@/data/constants"
-import type { OrderCardPageSettings, OrderCardProduct, OrderCardTrustBadge, ProfileTemplatePreview } from "@/types/content"
+import type { OrderCardPageSettings, OrderCardProduct, OrderCardTone, OrderCardTrustBadge, ProfileTemplatePreview } from "@/types/content"
 
 const PROFILE_TEMPLATE_ID_OPTIONS = CARD_THEME_IDS.custom.map((id) => ({
   value: id,
@@ -181,7 +181,7 @@ function ProductsSection() {
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Mockup Tone (used only when no image is uploaded)</Label>
-            <Select value={values.card_tone || "custom"} onValueChange={(v) => setField("card_tone", v)}>
+            <Select value={values.card_tone || "custom"} onValueChange={(v) => setField("card_tone", v as OrderCardTone)}>
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>

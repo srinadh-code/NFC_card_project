@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dialog"
 import { StatusBadge } from "@/components/admin/StatusBadge"
 import { TablePagination } from "@/components/admin/TablePagination"
-import { adminProfileApi, adminCustomerApi } from "@/lib/api"
+import { ApiError, adminProfileApi, adminCustomerApi } from "@/lib/api"
 import { formatDate } from "@/lib/mock-api"
 import type { Profile } from "@/types"
 
@@ -46,7 +46,7 @@ export default function AdminProfiles() {
     bio: "",
   })
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["admin-profiles", search],
     queryFn: () => adminProfileApi.list({ search: search || undefined }),
   })
@@ -164,6 +164,15 @@ export default function AdminProfiles() {
               {Array.from({ length: 6 }).map((_, i) => (
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
+            </div>
+          ) : isError ? (
+            <div className="flex flex-col items-center gap-3 py-10 text-center">
+              <p className="text-sm text-muted-foreground">
+                {error instanceof ApiError ? error.message : "Could not load profiles."}
+              </p>
+              <Button variant="outline" size="sm" onClick={() => refetch()}>
+                Retry
+              </Button>
             </div>
           ) : (
             <div className="overflow-x-auto">

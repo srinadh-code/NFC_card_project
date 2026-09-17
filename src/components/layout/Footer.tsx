@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
 import { buildMailtoHref, buildTelHref } from "@/lib/utils"
+import { BrandMark } from "@/components/layout/BrandMark"
+import { useSupportSettingsStore } from "@/store/support-settings-store"
 
 const QUICK_LINKS = [
   { to: "/", label: "Home" },
@@ -52,8 +54,14 @@ const SOCIALS = [
 export default function Footer() {
   const [email, setEmail] = useState("")
   const { settings } = usePublicSettings()
-  const mailtoHref = buildMailtoHref(settings.site_email)
-  const telHref = buildTelHref(settings.site_phone)
+  // Admin Dashboard → Settings → General → Support & Website is the source
+  // of truth here — falling back to Site Email/Phone (Basic Information)
+  // only for a site that hasn't configured Support & Website yet, same as
+  // Contact.tsx, so this never regresses to a blank footer row.
+  const supportEmail = useSupportSettingsStore((s) => s.supportEmail) || settings.site_email
+  const supportPhone = useSupportSettingsStore((s) => s.supportPhone) || settings.site_phone
+  const mailtoHref = buildMailtoHref(supportEmail)
+  const telHref = buildTelHref(supportPhone)
 
   function handleSubscribe(e: FormEvent) {
     e.preventDefault()
@@ -71,9 +79,14 @@ export default function Footer() {
         <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-6 lg:gap-6">
           <div className="col-span-2 sm:col-span-3 lg:col-span-2">
             <Link to="/" className="flex items-center gap-2">
-              <span className="flex size-8 items-center justify-center rounded-lg bg-gradient-brand-br text-white">
-                <Nfc className="size-4" />
-              </span>
+              <BrandMark
+                className="size-8 rounded-lg"
+                fallback={
+                  <span className="flex size-8 items-center justify-center rounded-lg bg-gradient-brand-br text-white">
+                    <Nfc className="size-4" />
+                  </span>
+                }
+              />
               <span className="text-base font-bold tracking-tight text-white">{settings.site_name}</span>
             </Link>
             <p className="mt-2.5 max-w-xs text-sm text-[#9CA3AF]">
@@ -84,13 +97,13 @@ export default function Footer() {
               {mailtoHref && (
                 <a href={mailtoHref} className="flex items-center gap-2 transition-colors duration-200 hover:text-[#EC4899]">
                   <Mail className="size-3.5 shrink-0" />
-                  {settings.site_email}
+                  {supportEmail}
                 </a>
               )}
               {telHref && (
                 <a href={telHref} className="flex items-center gap-2 transition-colors duration-200 hover:text-[#EC4899]">
                   <Phone className="size-3.5 shrink-0" />
-                  {settings.site_phone}
+                  {supportPhone}
                 </a>
               )}
             </div>

@@ -12,16 +12,23 @@ import { buildMailtoHref, buildTelHref, cn } from "@/lib/utils"
 import { publicWebsiteApi } from "@/lib/contentApi"
 import { ApiError } from "@/lib/api"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
+import { useSupportSettingsStore } from "@/store/support-settings-store"
 
 const INITIAL_FORM = { fullName: "", email: "", subject: "", message: "" }
 
 export default function Contact() {
   const [form, setForm] = useState(INITIAL_FORM)
   const { settings } = usePublicSettings()
+  // Admin Dashboard → Settings → General → Support & Website is the source
+  // of truth for these two; falling back to Site Email/Phone (Basic
+  // Information) only for a site that hasn't configured Support & Website
+  // yet, so this never regresses to a blank card.
+  const supportEmail = useSupportSettingsStore((s) => s.supportEmail) || settings.site_email
+  const supportPhone = useSupportSettingsStore((s) => s.supportPhone) || settings.site_phone
 
   const INFO = [
-    { icon: Mail, label: "Email", value: settings.site_email, href: buildMailtoHref(settings.site_email) },
-    { icon: Phone, label: "Phone", value: settings.site_phone, href: buildTelHref(settings.site_phone) },
+    { icon: Mail, label: "Email", value: supportEmail, href: buildMailtoHref(supportEmail) },
+    { icon: Phone, label: "Phone", value: supportPhone, href: buildTelHref(supportPhone) },
     { icon: MapPin, label: "Address", value: settings.site_address },
     { icon: Clock, label: "Business Hours", value: "Mon – Sat, 9:00 AM – 6:00 PM" },
   ]
