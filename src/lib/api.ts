@@ -324,6 +324,9 @@ interface ApiProfile {
   show_in_search: boolean
   selected_template: string
   luxury_theme: string
+  future_theme: string
+  impact_theme: string
+  glass_theme: string
   plan: string
   available_templates: string[]
   social_links: ApiSocialLink[]
@@ -383,6 +386,9 @@ interface ApiPublicProfile {
   cover_image: string | null
   selected_template: string
   luxury_theme: string
+  future_theme: string
+  impact_theme: string
+  glass_theme: string
   social_links: ApiSocialLink[]
   custom_links: ApiCustomLink[]
   custom_fields: ApiCustomField[]
@@ -431,6 +437,9 @@ function toFrontendProfile(p: ApiProfile): Profile {
     createdOn: p.created_at,
     selectedTemplate: p.selected_template,
     luxuryTheme: (p.luxury_theme as Profile["luxuryTheme"]) || "black",
+    futureTheme: (p.future_theme as Profile["futureTheme"]) || "green",
+    impactTheme: (p.impact_theme as Profile["impactTheme"]) || "red",
+    glassTheme: (p.glass_theme as Profile["glassTheme"]) || "blue",
     plan: p.plan,
     availableTemplates: p.available_templates,
     socialLinks: p.social_links
@@ -537,6 +546,25 @@ export const profileApi = {
     return profileApi.getMine()
   },
 
+  // Color variant for Template 2 ("future") only — same PATCH pattern as
+  // updateLuxuryTheme, just a different field on the same model.
+  updateFutureTheme: async (theme: string): Promise<Profile> => {
+    await request<ApiProfile>("/profiles/me/", { method: "PATCH", body: { future_theme: theme } })
+    return profileApi.getMine()
+  },
+
+  // Color variant for "Impact" only — same PATCH pattern as updateFutureTheme.
+  updateImpactTheme: async (theme: string): Promise<Profile> => {
+    await request<ApiProfile>("/profiles/me/", { method: "PATCH", body: { impact_theme: theme } })
+    return profileApi.getMine()
+  },
+
+  // Color variant for "Glass" only — same PATCH pattern as updateImpactTheme.
+  updateGlassTheme: async (theme: string): Promise<Profile> => {
+    await request<ApiProfile>("/profiles/me/", { method: "PATCH", body: { glass_theme: theme } })
+    return profileApi.getMine()
+  },
+
   getPrivacySettings: async () => {
     const p = await request<ApiProfile>("/profiles/me/")
     return {
@@ -602,6 +630,9 @@ export const profileApi = {
         createdOn: "",
         selectedTemplate: p.selected_template,
         luxuryTheme: (p.luxury_theme as Profile["luxuryTheme"]) || "black",
+        futureTheme: (p.future_theme as Profile["futureTheme"]) || "green",
+        impactTheme: (p.impact_theme as Profile["impactTheme"]) || "red",
+        glassTheme: (p.glass_theme as Profile["glassTheme"]) || "blue",
         socialLinks: p.social_links
           .slice()
           .sort((a, b) => a.display_order - b.display_order)
@@ -1754,6 +1785,9 @@ function toFrontendAdminProfile(p: ApiAdminProfile): Profile {
     // feature is customer-facing only, in /qr-code) — default is safe here.
     selectedTemplate: "classic",
     luxuryTheme: "black",
+    futureTheme: "green",
+    impactTheme: "red",
+    glassTheme: "blue",
     socialLinks: p.social_links
       .slice()
       .sort((a, b) => a.display_order - b.display_order)

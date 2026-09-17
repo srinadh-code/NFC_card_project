@@ -75,9 +75,10 @@ export function useProfileSections(profile: Profile, showContactInfo: boolean) {
   return { enabledSocial, enabledCustom, customFields, activeServices, showPhone, showEmail, hasAddressInfo }
 }
 
-/** Phone-frame chrome shared by every template — same bezel/notch/share
- * button DigitalCardPreview uses, so all 9 templates read as one coherent
- * "live preview" surface no matter which is selected. */
+/** Phone-frame chrome shared by every template — same bezel/share button
+ * DigitalCardPreview uses, so all 9 templates read as one coherent "live
+ * preview" surface no matter which is selected. No notch/status-bar
+ * element — the preview starts cleanly from the top of the frame. */
 export function TemplateFrame({
   onShare,
   bodyClassName,
@@ -89,7 +90,6 @@ export function TemplateFrame({
 }) {
   return (
     <div className="relative mx-auto w-[300px] overflow-hidden rounded-[36px] border-[8px] border-neutral-900 bg-white shadow-xl">
-      <span className="absolute left-1/2 top-1.5 z-20 h-1.5 w-16 -translate-x-1/2 rounded-full bg-neutral-900" />
       <button
         type="button"
         onClick={onShare}

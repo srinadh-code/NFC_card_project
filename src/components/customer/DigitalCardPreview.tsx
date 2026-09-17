@@ -145,8 +145,6 @@ export function DigitalCardPreview({
 
   return (
     <div className="relative mx-auto w-[300px] overflow-hidden rounded-[36px] border-[8px] border-neutral-900 bg-white shadow-xl">
-      <span className="absolute left-1/2 top-1.5 z-20 h-1.5 w-16 -translate-x-1/2 rounded-full bg-neutral-900" />
-
       <button
         type="button"
         onClick={onShare}
