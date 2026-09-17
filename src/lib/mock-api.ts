@@ -31,6 +31,18 @@ export function formatDate(iso: string, timeZone?: string) {
   })
 }
 
+// The backend has no separate customer-facing order-number field — the
+// real Order's own database id is the identifier (see orders/models.py) —
+// so this only formats that same id for display/URLs ("ORD000013"), it
+// never invents a second identifier. Matches
+// orders/serializers.py's PublicOrderTrackingSerializer.get_order_number()
+// exactly, so a value formatted here always round-trips through
+// ordersApi.trackPublic() (which also accepts the bare numeric id).
+export function formatOrderNumber(id: number | string): string {
+  const numeric = typeof id === "number" ? id : parseInt(id.replace(/\D/g, ""), 10)
+  return Number.isFinite(numeric) ? `ORD${String(numeric).padStart(6, "0")}` : String(id)
+}
+
 export function formatDateTime(iso: string, timeZone?: string) {
   return new Date(iso).toLocaleString("en-IN", {
     day: "2-digit",
@@ -40,4 +52,22 @@ export function formatDateTime(iso: string, timeZone?: string) {
     minute: "2-digit",
     ...(timeZone ? { timeZone } : {}),
   })
+}
+
+// "10 minutes ago" / "2 hours ago" / "Yesterday" style relative timestamp —
+// for short-lived UI like the notification dropdown, where the exact date
+// matters less than roughly how recent something is. Falls back to
+// formatDate() once an item is old enough that "N days ago" stops being
+// more useful than just the date.
+export function formatTimeAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime()
+  const minutes = Math.floor(diffMs / 60_000)
+  if (minutes < 1) return "Just now"
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`
+  const days = Math.floor(hours / 24)
+  if (days === 1) return "Yesterday"
+  if (days < 7) return `${days} days ago`
+  return formatDate(iso)
 }

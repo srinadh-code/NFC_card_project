@@ -136,11 +136,13 @@ export function DigitalCardPreview({
   const customFields = [...profile.customFields].sort((a, b) => a.order - b.order)
   const activeServices = [...profile.services].filter((s) => s.isActive).sort((a, b) => a.order - b.order)
 
+  // Backend now gates every one of these fields independently (show_email,
+  // show_phone, show_address, show_city, show_state) and returns null for
+  // whichever ones the owner hid — profile.phone/email/address/etc. are
+  // already the post-privacy values here, so simply checking for their
+  // presence is enough; there's no separate client-side flag to apply.
   const showPhone = showContactInfo && Boolean(profile.phone)
   const showEmail = showContactInfo && Boolean(profile.email)
-  // Address/city/state/country are not gated behind `show_contact_info` on
-  // the backend (same as the pre-existing "address" field) — only email and
-  // phone are, so this checks the fields directly rather than the flag.
   const hasAddressInfo = Boolean(profile.address || profile.city || profile.state || profile.country)
 
   return (

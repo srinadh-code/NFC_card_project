@@ -240,6 +240,10 @@ export const useDataStore = create<DataState>()(
             status: "Active",
             createdOn: now,
             selectedTemplate: "classic",
+            luxuryTheme: "black",
+            futureTheme: "green",
+            impactTheme: "red",
+            glassTheme: "blue",
             services: [],
             socialLinks: DEFAULT_SOCIAL_PLATFORMS.map((platform, order) => ({
               platform,

@@ -320,8 +320,12 @@ interface ApiProfile {
   profile_url: string
   status: "ACTIVE" | "SUSPENDED"
   profile_public: boolean
-  show_contact_info: boolean
   show_in_search: boolean
+  show_address: boolean
+  show_city: boolean
+  show_state: boolean
+  show_phone: boolean
+  show_email: boolean
   selected_template: string
   luxury_theme: string
   future_theme: string
@@ -376,9 +380,9 @@ interface ApiPublicProfile {
   email: string | null
   phone: string | null
   website: string
-  address: string
-  city: string
-  state: string
+  address: string | null
+  city: string | null
+  state: string | null
   country: string
   google_maps_url: string
   bio: string
@@ -569,16 +573,35 @@ export const profileApi = {
     const p = await request<ApiProfile>("/profiles/me/")
     return {
       profilePublic: p.profile_public,
-      showContactInfo: p.show_contact_info,
       showInSearch: p.show_in_search,
+      showAddress: p.show_address,
+      showCity: p.show_city,
+      showState: p.show_state,
+      showPhone: p.show_phone,
+      showEmail: p.show_email,
     }
   },
 
-  updatePrivacySettings: (patch: { profilePublic?: boolean; showContactInfo?: boolean; showInSearch?: boolean }) => {
+  // Field-level contact visibility — each toggle is independent (replaces
+  // the old single showContactInfo flag). Only whichever keys are actually
+  // passed get sent, so toggling one switch never touches the others.
+  updatePrivacySettings: (patch: {
+    profilePublic?: boolean
+    showInSearch?: boolean
+    showAddress?: boolean
+    showCity?: boolean
+    showState?: boolean
+    showPhone?: boolean
+    showEmail?: boolean
+  }) => {
     const body: Record<string, unknown> = {}
     if (patch.profilePublic !== undefined) body.profile_public = patch.profilePublic
-    if (patch.showContactInfo !== undefined) body.show_contact_info = patch.showContactInfo
     if (patch.showInSearch !== undefined) body.show_in_search = patch.showInSearch
+    if (patch.showAddress !== undefined) body.show_address = patch.showAddress
+    if (patch.showCity !== undefined) body.show_city = patch.showCity
+    if (patch.showState !== undefined) body.show_state = patch.showState
+    if (patch.showPhone !== undefined) body.show_phone = patch.showPhone
+    if (patch.showEmail !== undefined) body.show_email = patch.showEmail
     return request<ApiProfile>("/profiles/me/", { method: "PATCH", body })
   },
 
@@ -618,9 +641,9 @@ export const profileApi = {
         phone: p.phone ?? "",
         alternatePhone: "",
         website: p.website,
-        address: p.address,
-        city: p.city,
-        state: p.state,
+        address: p.address ?? "",
+        city: p.city ?? "",
+        state: p.state ?? "",
         country: p.country,
         googleMapsUrl: p.google_maps_url,
         bio: p.bio,
@@ -1705,6 +1728,29 @@ export interface AdminAnalyticsSummary {
   topLocations: { location: string; count: number }[]
 }
 
+// ---------------------------------------------------------------------
+// Admin announcements — "System Messages". Sending one fans out to every
+// customer's notification bell on the backend (still gated per-customer by
+// their own notify_system_messages preference); this is the only place a
+// System Message notification is ever created (see admin_api/announcements
+// and customer_management.customer_notifications.services.create_announcement).
+// ---------------------------------------------------------------------
+
+export interface ApiAnnouncement {
+  id: number
+  title: string
+  message: string
+  created_by_name: string | null
+  recipient_count: number
+  created_at: string
+}
+
+export const adminAnnouncementApi = {
+  list: (page = 1) => requestPaginated<ApiAnnouncement>(`/admin/announcements/?page=${page}`),
+  send: (payload: { title: string; message?: string }) =>
+    request<ApiAnnouncement>("/admin/announcements/", { method: "POST", body: payload }),
+}
+
 export const adminAnalyticsApi = {
   summary: async (params: { range?: number; customerId?: string } = {}): Promise<AdminAnalyticsSummary> => {
     const qs = new URLSearchParams()
@@ -1962,6 +2008,10 @@ export interface ApiOrder {
   status: string
   address: ApiOrderAddress
   tracking: ApiOrderTrackingStep[]
+  // Opaque per-order credential for the anonymous Track Order page — see
+  // orders/models.py's Order.tracking_token and PublicOrderTrackingView.
+  // Only ever visible here, to the order's own authenticated owner.
+  tracking_token: string
   assigned_card_id: number | null
   placed_at: string
 }
@@ -1979,10 +2029,34 @@ export interface CreateOrderPayload {
   shipping_country?: string
 }
 
+// Anonymous, public-website Track Order lookup — a deliberately trimmed
+// view of the same real Order row ApiOrder above represents (no customer
+// name/email/phone/items/address; see orders/serializers.py's
+// PublicOrderTrackingSerializer for exactly what's excluded and why).
+export interface ApiPublicOrderTracking {
+  order_number: string
+  status: string
+  tracking: ApiOrderTrackingStep[]
+  placed_at: string
+  updated_at: string
+}
+
 export const ordersApi = {
   list: (page = 1) => requestPaginated<ApiOrder>(`/customer/orders/?page=${page}&page_size=100`),
   create: (payload: CreateOrderPayload) => request<ApiOrder>("/customer/orders/", { method: "POST", body: payload }),
   getById: (id: number | string) => request<ApiOrder>(`/customer/orders/${id}/`),
+
+  // `orderQuery` accepts either a bare id ("13") or the "ORD000013" format
+  // shown on the payment-success page — the backend strips non-digits
+  // either way, so both resolve to the same real order. `token` is the
+  // order's own tracking_token (see ApiOrder) — required: the order id
+  // alone is a guessable sequential number, not a credential, so the
+  // backend 404s without a matching token even if the id is real.
+  trackPublic: (orderQuery: string, token: string) =>
+    request<ApiPublicOrderTracking>(
+      `/customer/orders/track/?order=${encodeURIComponent(orderQuery)}&token=${encodeURIComponent(token)}`,
+      { auth: false },
+    ),
 }
 
 // ---------------------------------------------------------------------
@@ -2022,6 +2096,13 @@ export const notificationsApi = {
     requestPaginated<ApiNotification>(`/customer/notifications/?page=${page}${unreadOnly ? "&unread_only=true" : ""}`),
   markRead: (payload: { ids?: number[]; all?: boolean }) =>
     request<{ updated: number }>("/customer/notifications/read/", { method: "POST", body: payload }),
+  // Deletion is a separate action from read/unread state — never touches
+  // the Order/NfcCard/Announcement/etc. the notification was created from,
+  // only this row. Backend enforces ownership (customer-notification-detail
+  // is scoped to request.user); this just calls it.
+  delete: (id: number) => request<null>(`/customer/notifications/${id}/`, { method: "DELETE" }),
+  deleteAllRead: () =>
+    request<{ deleted: number }>("/customer/notifications/delete-read/", { method: "DELETE" }),
 }
 
 // ---------------------------------------------------------------------
