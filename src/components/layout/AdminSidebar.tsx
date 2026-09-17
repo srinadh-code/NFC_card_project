@@ -13,6 +13,7 @@ import {
   LogOut,
   Zap,
   Newspaper,
+  MessageSquare,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAdminAuthStore } from "@/store/auth-store"
@@ -29,7 +30,9 @@ const NAV_ITEMS = [
   { to: "/admin/settings", label: "Settings", icon: Settings },
   { to: "/admin/support", label: "Support", icon: LifeBuoy },
   { to: "/admin/content", label: "Website Content", icon: Newspaper },
+  { to: "/admin/reviews", label: "Reviews", icon: MessageSquare },
 ]
+
 
 export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const navigate = useNavigate()

@@ -1,6 +1,21 @@
 ﻿import { create } from "zustand"
 import { persist } from "zustand/middleware"
-import type { CartLine } from "@/types"
+import type { CardType, CartLine } from "@/types"
+
+// The single source of truth for "which card types can still be sold" is
+// the CardType union itself (@/types) — Wooden/Custom/Review are the only
+// values the backend's OrderItem.card_type ChoiceField accepts (see
+// orders/serializers.py's ORDER_ITEM_CARD_TYPE_CHOICES; Classic and Premium
+// were deliberately retired there). A cart persisted in localStorage from
+// before a retirement can still hold an old line with a now-invalid
+// cardType — nothing re-validates persisted JSON against the current type
+// at runtime — so it must be filtered out here, once, rather than trusted
+// all the way to checkout where it would 400.
+const VALID_CARD_TYPES: readonly CardType[] = ["Wooden", "Custom", "Review"]
+
+export function sanitizeCartLines(lines: CartLine[]): CartLine[] {
+  return lines.filter((l) => (VALID_CARD_TYPES as readonly string[]).includes(l.cardType))
+}
 
 interface CartState {
   lines: CartLine[]
@@ -62,6 +77,21 @@ export const useCartStore = create<CartState>()(
       clearCart: () => set({ lines: [], couponCode: null, discount: 0 }),
       subtotal: () => get().lines.reduce((sum, l) => sum + l.price * l.qty, 0),
     }),
-    { name: "taplink-cart" },
+    {
+      name: "taplink-cart",
+      // Silently drops any line for a card type that's since been retired
+      // (e.g. an old "Premium" line from before that product was removed)
+      // the moment a returning customer's cart loads — not at checkout,
+      // where it would otherwise be the first time anyone notices. Existing
+      // valid lines (Wooden/Custom/Review) are untouched.
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<CartState> | undefined
+        return {
+          ...currentState,
+          ...persisted,
+          lines: sanitizeCartLines(persisted?.lines ?? []),
+        }
+      },
+    },
   ),
 )

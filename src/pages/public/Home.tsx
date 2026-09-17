@@ -16,20 +16,25 @@ import { cardClass } from "@/components/marketing/PremiumCard"
 import { cn } from "@/lib/utils"
 import { resolveIcon } from "@/lib/icon-map"
 import { publicWebsiteApi } from "@/lib/contentApi"
-import type { Testimonial as PublicTestimonial } from "@/types/content"
+import { publicReviewsApi, type ApiPublicReview } from "@/lib/api"
 import type { Testimonial } from "@/types"
 
 const AVATAR_SEEDS = ["ananya-reddy", "rahul-menon", "priya-nair", "karthik-iyer"]
 
-function toTestimonial(t: PublicTestimonial): Testimonial {
+// Real, customer-submitted reviews (see tracker-backend/reviews/) — not
+// website_content.Testimonial, which is admin-authored marketing copy with
+// no customer/order link. Same TestimonialCard UI either way; only the
+// data source changed. role/company are left blank (a review has no job
+// title) — TestimonialCard skips that line entirely when both are empty.
+function toReviewTestimonial(r: ApiPublicReview): Testimonial {
   return {
-    id: String(t.id),
-    name: t.name,
-    role: t.designation,
-    company: t.company,
-    avatar: t.image_url || `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(t.name)}`,
-    rating: t.rating,
-    quote: t.review,
+    id: String(r.id),
+    name: r.customer_name,
+    role: "",
+    company: "",
+    avatar: `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(r.customer_name)}`,
+    rating: r.rating,
+    quote: r.review_text,
   }
 }
 
@@ -52,6 +57,10 @@ export default function Home() {
   const { data: features } = useQuery({
     queryKey: ["content", "public-features"],
     queryFn: publicWebsiteApi.getFeatures,
+  })
+  const { data: reviews, isLoading: reviewsLoading } = useQuery({
+    queryKey: ["reviews", "public"],
+    queryFn: publicReviewsApi.list,
   })
 
   const hero = data?.hero ?? null
@@ -367,8 +376,10 @@ export default function Home() {
         </section>
       )}
 
-      {/* Testimonials */}
-      {isLoading ? (
+      {/* Testimonials — real customer reviews (GET /api/reviews/public/),
+          filtered server-side to is_published=True only; nothing disabled
+          ever reaches this component to hide client-side. */}
+      {reviewsLoading ? (
         <section className="bg-secondary py-20">
           <div className="container-page grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
@@ -377,25 +388,27 @@ export default function Home() {
           </div>
         </section>
       ) : (
-        data && data.testimonials.length > 0 && (
-          <section className="bg-secondary py-20">
-            <div className="container-page">
-              <div className="mx-auto max-w-2xl text-center">
-                <h2 className="text-3xl font-bold tracking-tight text-foreground">
-                  Loved by Professionals Everywhere
-                </h2>
-                <p className="mt-3 text-muted-foreground">
-                  Real stories from people who upgraded the way they network.
-                </p>
-              </div>
+        <section className="bg-secondary py-20">
+          <div className="container-page">
+            <div className="mx-auto max-w-2xl text-center">
+              <h2 className="text-3xl font-bold tracking-tight text-foreground">
+                Loved by Professionals Everywhere
+              </h2>
+              <p className="mt-3 text-muted-foreground">
+                Real stories from people who upgraded the way they network.
+              </p>
+            </div>
+            {reviews && reviews.length > 0 ? (
               <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {data.testimonials.map((t) => (
-                  <TestimonialCard key={t.id} testimonial={toTestimonial(t)} />
+                {reviews.map((r) => (
+                  <TestimonialCard key={r.id} testimonial={toReviewTestimonial(r)} />
                 ))}
               </div>
-            </div>
-          </section>
-        )
+            ) : (
+              <p className="mt-12 text-center text-muted-foreground">Be the first to share your experience.</p>
+            )}
+          </div>
+        </section>
       )}
 
       {/* FAQ preview */}

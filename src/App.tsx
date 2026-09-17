@@ -35,6 +35,7 @@ import AdminReports from "@/pages/admin/Reports"
 import AdminSettings from "@/pages/admin/Settings"
 import AdminSupport from "@/pages/admin/Support"
 import AdminWebsiteContent from "@/pages/admin/content"
+import AdminReviews from "@/pages/admin/Reviews"
 
 import Login from "@/pages/Login"
 import AdminLogin from "@/pages/admin/AdminLogin"
@@ -48,6 +49,7 @@ import CustomerQrCode from "@/pages/customer/QrCode"
 import CustomerAnalytics from "@/pages/customer/Analytics"
 import CustomerActivity from "@/pages/customer/Activity"
 import CustomerOrders from "@/pages/customer/Orders"
+import CustomerReviews from "@/pages/customer/Reviews"
 import CustomerSettings from "@/pages/customer/Settings"
 
 import PublicProfile from "@/pages/profile/PublicProfile"
@@ -119,6 +121,7 @@ function App() {
             <Route path="settings" element={<AdminSettings />} />
             <Route path="support" element={<AdminSupport />} />
             <Route path="content" element={<AdminWebsiteContent />} />
+            <Route path="reviews" element={<AdminReviews />} />
           </Route>
         </Route>
 
@@ -135,6 +138,7 @@ function App() {
             <Route path="/analytics" element={<CustomerAnalytics />} />
             <Route path="/activity" element={<CustomerActivity />} />
             <Route path="/orders" element={<CustomerOrders />} />
+            <Route path="/reviews" element={<CustomerReviews />} />
             <Route path="/settings" element={<CustomerSettings />} />
           </Route>
         </Route>

@@ -6,7 +6,7 @@ import { Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useCartStore } from "@/store/cart-store"
+import { useCartStore, sanitizeCartLines } from "@/store/cart-store"
 import { useCustomerAuthStore } from "@/store/auth-store"
 import { ordersApi, ApiError, type CreateOrderPayload } from "@/lib/api"
 import { formatCurrency } from "@/lib/mock-api"
@@ -107,9 +107,19 @@ export default function Checkout() {
     }
     if (!validate()) return
 
+    // Belt-and-braces alongside the cart store's own rehydration-time
+    // filter (cart-store.ts) — same VALID_CARD_TYPES check, not a second
+    // definition of it — so a retired card type can never reach the order
+    // API from this call site either, even in the same session.
+    const validLines = sanitizeCartLines(lines)
+    if (validLines.length === 0) {
+      toast.error("Your cart no longer contains any available products. Please add an item to continue.")
+      return
+    }
+
     placeOrderMutation.mutate({
       idempotency_key: idempotencyKey,
-      items: lines.map((l) => ({
+      items: validLines.map((l) => ({
         product_id: l.productId,
         name: l.name,
         card_type: l.cardType.toUpperCase(),

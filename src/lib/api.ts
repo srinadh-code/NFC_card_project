@@ -2071,3 +2071,87 @@ export interface ApiDashboard {
 export const dashboardApi = {
   get: () => request<ApiDashboard>("/customer/dashboard/"),
 }
+
+// ---------------------------------------------------------------------
+// Reviews — customer's own review, the public testimonial feed, and the
+// admin moderation list. Talks to the real Django `reviews`/`admin_api`
+// apps (see tracker-backend/reviews/). Distinct from Website Content's
+// admin-authored `Testimonial` CMS entries (contentApi.ts) — these are
+// genuine customer-submitted, order-gated, one-per-customer reviews.
+// ---------------------------------------------------------------------
+
+export interface ApiReview {
+  id: number
+  rating: number
+  review_text: string
+  is_published: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ApiPublicReview {
+  id: number
+  customer_name: string
+  rating: number
+  review_text: string
+  created_at: string
+}
+
+export interface ApiAdminReview {
+  id: number
+  customer_name: string
+  customer_email: string
+  rating: number
+  review_text: string
+  is_published: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface AdminReviewPage {
+  data: ApiAdminReview[]
+  count: number
+  page: number
+  numPages: number
+}
+
+export const reviewApi = {
+  // { has_review: false } | { has_review: true, review: ApiReview }
+  getMine: () => request<{ has_review: boolean; review?: ApiReview }>("/reviews/me/"),
+
+  submit: (data: { rating: number; review_text: string }) =>
+    request<ApiReview>("/reviews/me/", { method: "POST", body: data }),
+
+  update: (data: { rating?: number; review_text?: string }) =>
+    request<ApiReview>("/reviews/me/", { method: "PATCH", body: data }),
+}
+
+export const publicReviewsApi = {
+  list: () => request<ApiPublicReview[]>("/reviews/public/", { auth: false }),
+}
+
+export const adminReviewApi = {
+  list: async (params: {
+    page?: number
+    search?: string
+    status?: "All" | "Enabled" | "Disabled"
+  }): Promise<AdminReviewPage> => {
+    const qs = new URLSearchParams()
+    if (params.page) qs.set("page", String(params.page))
+    if (params.search) qs.set("search", params.search)
+    if (params.status && params.status !== "All") qs.set("status", params.status.toLowerCase())
+    const query = qs.toString()
+    const envelope = await requestRaw<ApiAdminReview[]>(`/admin/reviews/${query ? `?${query}` : ""}`)
+    return {
+      data: envelope.data ?? [],
+      count: envelope.pagination?.count ?? 0,
+      page: envelope.pagination?.page ?? 1,
+      numPages: envelope.pagination?.num_pages ?? 1,
+    }
+  },
+
+  detail: (id: number) => request<ApiAdminReview>(`/admin/reviews/${id}/`),
+
+  setPublished: (id: number, is_published: boolean) =>
+    request<ApiAdminReview>(`/admin/reviews/${id}/`, { method: "PATCH", body: { is_published } }),
+}
