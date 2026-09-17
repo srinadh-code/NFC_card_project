@@ -22,9 +22,26 @@ class GeneralSettingsSerializer(serializers.ModelSerializer):
             "site_address",
             "currency",
             "timezone",
+            "office_name",
+            "office_address_line1",
+            "office_address_line2",
+            "office_landmark",
+            "office_locality",
+            "office_city",
+            "office_district",
+            "office_state",
+            "office_pincode",
+            "office_country",
+            "office_phone",
             "updated_at",
         ]
         read_only_fields = ["id", "updated_at"]
+
+    def validate_office_pincode(self, value):
+        value = value.strip()
+        if value and not (value.isdigit() and len(value) == 6):
+            raise serializers.ValidationError("PIN code must contain exactly 6 digits.")
+        return value
 
 
 class PaymentSettingsSerializer(serializers.ModelSerializer):
@@ -99,4 +116,15 @@ class PublicGeneralSettingsSerializer(serializers.ModelSerializer):
             "site_address",
             "currency",
             "timezone",
+            "office_name",
+            "office_address_line1",
+            "office_address_line2",
+            "office_landmark",
+            "office_locality",
+            "office_city",
+            "office_district",
+            "office_state",
+            "office_pincode",
+            "office_country",
+            "office_phone",
         ]

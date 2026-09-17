@@ -19,11 +19,17 @@ urlpatterns = [
     # admin_api.dashboard, admin_api.transactions and admin_api.reports all
     # already use, so a customer's order is immediately visible to admin.
     path("api/customer/orders/", include("orders.urls")),
+    # Public, unauthenticated counterpart to the line above — same `orders`
+    # app/Order model, just a much narrower response (see
+    # PublicOrderTrackingSerializer) for the public /track-order page.
+    path("api/orders/", include("orders.public_urls")),
     path("api/customer/leads/", include("customer_management.customer_leads.urls")),
     path("api/customer/notifications/", include("customer_management.customer_notifications.urls")),
     path("api/customer/settings/", include("customer_management.customer_settings.urls")),
     path("api/customer/dashboard/", include("customer_management.customer_dashboard.urls")),
     path("api/customer/services/", include("customer_management.customer_services.urls")),
+    path("api/customer/addresses/", include("customer_management.customer_addresses.urls")),
+    path("api/customer/cart/", include("customer_management.customer_cart.urls")),
     path("api/website/",include("website_content.urls")),
 ]
 

@@ -3,6 +3,37 @@ from common.templates import CARD_TYPE_TO_PLAN, CUSTOM_PLAN, DEFAULT_PLAN, PLAN_
 from .models import Order
 
 
+def compose_shipping_snapshot(address):
+    """Flattens a customer_addresses.models.CustomerAddress's richer field
+    set (line1/line2/landmark/locality/district) into the single
+    shipping_line1 string Order actually has a column for — the same
+    composition the checkout frontend used to do client-side (see
+    Checkout.tsx's old buildShippingLine1) before addresses became a real,
+    server-owned address book. Returns a dict ready to spread into
+    Order.objects.create(...).
+
+    This is the ONE moment a CustomerAddress's data is copied onto an
+    Order — after this, the order's shipping_* columns are the sole,
+    independent, immutable record of "where this order shipped to", never
+    read from the address again. Editing or deleting the source
+    CustomerAddress afterward has zero effect on any existing order.
+    """
+    line1_parts = [
+        address.address_line1,
+        address.address_line2,
+        address.landmark,
+        address.locality,
+        f"Dist. {address.district}" if address.district else "",
+    ]
+    return {
+        "shipping_line1": ", ".join(p.strip() for p in line1_parts if p and p.strip()),
+        "shipping_city": address.city,
+        "shipping_state": address.state,
+        "shipping_pincode": address.pincode,
+        "shipping_country": address.country,
+    }
+
+
 def resolve_customer_plan(user):
     """The highest-tier plan implied by a customer's paid orders.
 

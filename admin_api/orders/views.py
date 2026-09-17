@@ -28,7 +28,11 @@ class AdminOrderListCreateView(APIView):
 
         search = request.query_params.get("search", "").strip()
         if search:
-            search_filter = Q(customer__full_name__icontains=search) | Q(customer__email__icontains=search)
+            search_filter = (
+                Q(customer__full_name__icontains=search)
+                | Q(customer__email__icontains=search)
+                | Q(order_number__icontains=search)
+            )
             if search.isdigit():
                 search_filter |= Q(id=int(search))
             qs = qs.filter(search_filter)

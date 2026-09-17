@@ -74,6 +74,8 @@ INSTALLED_APPS = [
     "customer_management.customer_settings",
     "customer_management.customer_dashboard",
     "customer_management.customer_services",
+    "customer_management.customer_addresses",
+    "customer_management.customer_cart",
     "website_content",
 ]
 

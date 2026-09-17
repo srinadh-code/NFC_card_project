@@ -1,3 +1,6 @@
+import random
+import string
+
 from django.conf import settings
 from django.db import models
 
@@ -12,6 +15,22 @@ TRACKING_STEPS = [
     ("out_for_delivery_at", "Out for Delivery"),
     ("delivered_at", "Delivered"),
 ]
+
+ORDER_NUMBER_PREFIX = "NXTRK"
+
+
+def generate_order_number():
+    """A short, public-safe order code (e.g. "NXTRK483920") — what a
+    customer types into the public /track-order page. Deliberately not
+    derived from the numeric `id` (so codes aren't sequentially guessable)
+    and never exposed to a lookup other than order_number itself. Retries
+    on the astronomically unlikely event of a collision across the
+    900,000 possible 6-digit suffixes."""
+    for _ in range(20):
+        candidate = ORDER_NUMBER_PREFIX + "".join(random.choices(string.digits, k=6))
+        if not Order.objects.filter(order_number=candidate).exists():
+            return candidate
+    raise RuntimeError("Could not generate a unique order number.")
 
 
 class Order(models.Model):
@@ -40,6 +59,13 @@ class Order(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders"
     )
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
+
+    # Public-facing order code (see generate_order_number above) — the
+    # identifier a customer types into the public /track-order page.
+    # Nullable at the DB level only so existing rows can be backfilled by
+    # migration; every order (new or backfilled) always ends up with one
+    # via save() below.
+    order_number = models.CharField(max_length=20, unique=True, null=True, blank=True, db_index=True)
 
     # One-per-submission-attempt token the client generates and resends on
     # every retry/double-click of the *same* checkout attempt (see
@@ -93,6 +119,11 @@ class Order(models.Model):
 
     def __str__(self):
         return f"Order #{self.id} ({self.customer.email})"
+
+    def save(self, *args, **kwargs):
+        if not self.order_number:
+            self.order_number = generate_order_number()
+        super().save(*args, **kwargs)
 
     @property
     def total(self):

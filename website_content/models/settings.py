@@ -23,6 +23,23 @@ class GeneralSettings(models.Model):
     # choices list — same convention as CustomerSettings.timezone.
     timezone = models.CharField(max_length=50, default="Asia/Kolkata")
 
+    # Office / Dispatch Address — where every order physically ships FROM
+    # (shown as "From" on tracking/shipping UI). Deliberately separate from
+    # `site_address` above (a single free-text line used for public contact
+    # info) because tracking/shipping displays need structured city/state/
+    # pincode to build a real "From" block, not just one opaque string.
+    office_name = models.CharField(max_length=150, blank=True, default="")
+    office_address_line1 = models.CharField(max_length=255, blank=True, default="")
+    office_address_line2 = models.CharField(max_length=255, blank=True, default="")
+    office_landmark = models.CharField(max_length=100, blank=True, default="")
+    office_locality = models.CharField(max_length=100, blank=True, default="")
+    office_city = models.CharField(max_length=100, blank=True, default="")
+    office_district = models.CharField(max_length=100, blank=True, default="")
+    office_state = models.CharField(max_length=100, blank=True, default="")
+    office_pincode = models.CharField(max_length=6, blank=True, default="")
+    office_country = models.CharField(max_length=100, blank=True, default="India")
+    office_phone = models.CharField(max_length=20, blank=True, default="")
+
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
