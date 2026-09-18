@@ -16,18 +16,6 @@ from .serializers import (
 )
 
 
-def _notify_card_activated(user, card):
-    from customer_management.customer_notifications.models import Notification
-    from customer_management.customer_notifications.services import notify
-
-    notify(
-        user,
-        "NFC card activated",
-        f"Card {card.serial_number} is now active on your account.",
-        type=Notification.Type.NFC_UPDATE,
-    )
-
-
 class MyCardsView(APIView):
     permission_classes = [IsCustomerRole]
 
@@ -66,7 +54,6 @@ class ActivateCardView(APIView):
         card.activated_on = now
         card.save(update_fields=["user", "status", "assigned_on", "activated_on", "updated_at"])
 
-        _notify_card_activated(request.user, card)
         return success(NfcCardSerializer(card).data, message="Card activated.")
 
 
@@ -88,7 +75,6 @@ class ActivateAssignedCardView(APIView):
         card.activated_on = timezone.now()
         card.save(update_fields=["status", "activated_on", "updated_at"])
 
-        _notify_card_activated(request.user, card)
         return success(NfcCardSerializer(card).data, message="Card activated.")
 
 

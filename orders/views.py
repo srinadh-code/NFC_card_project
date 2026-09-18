@@ -1,5 +1,7 @@
+import re
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
@@ -11,8 +13,16 @@ from customer_management.customer_addresses.models import CustomerAddress
 from customer_management.customer_cart.services import clear_cart, get_or_create_cart
 
 from .models import Order, OrderItem, Transaction
-from .serializers import CustomerOrderCreateSerializer, OrderSerializer, PublicOrderTrackingSerializer
+from .serializers import (
+    CustomerOrderCreateSerializer,
+    OrderSerializer,
+    OrderTrackingByTokenSerializer,
+    PublicOrderTrackingSerializer,
+)
 from .services import compose_shipping_snapshot
+
+_NON_DIGITS_RE = re.compile(r"\D+")
+ORDER_NOT_FOUND_MESSAGE = "Order not found. Please check your Order ID and try again."
 
 
 class CustomerOrderListCreateView(APIView):
@@ -148,3 +158,45 @@ class PublicOrderTrackingView(APIView):
         if order is None:
             return error("Order not found.", status=404)
         return success(PublicOrderTrackingSerializer(order).data)
+
+
+class OrderTrackingByTokenView(APIView):
+    """Public Track Order lookup — no authentication, reads the exact same
+    Order table admin_api.orders and the customer's own Orders page use
+    (see OrderTrackingByTokenSerializer for what's deliberately excluded).
+    Accepts either a bare numeric id ("13") or the "ORD000013"-formatted
+    identifier shown on the payment-success page — both resolve to the same
+    real row; this is not a second tracking system.
+
+    SECURITY: the order id alone is NOT treated as a secret — it's just the
+    row's sequential pk, trivially guessable/incrementable. A request must
+    also present the matching `Order.tracking_token` (an opaque UUID handed
+    to the customer once, on their own order's detail response, and baked
+    into the "Track Your Order" link on the payment-success page) — without
+    it, or with a token that doesn't belong to that exact order, this
+    returns the same 404 as an order that doesn't exist, so a caller can't
+    even confirm the order id itself is valid. A logged-in customer viewing
+    their *own* orders never uses this endpoint at all — that's
+    CustomerOrderDetailView, scoped by `customer=request.user`."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        raw = request.query_params.get("order", "").strip()
+        digits = _NON_DIGITS_RE.sub("", raw)
+        token = request.query_params.get("token", "").strip()
+        if not digits or not token:
+            return error(ORDER_NOT_FOUND_MESSAGE, status=404)
+
+        try:
+            order = Order.objects.filter(pk=int(digits), tracking_token=token).first()
+        except (ValueError, ValidationError):
+            # Malformed UUID in `token` — same "not found" response as any
+            # other invalid credential, so this never distinguishes "bad
+            # token format" from "no such order" for an attacker.
+            return error(ORDER_NOT_FOUND_MESSAGE, status=404)
+
+        if order is None:
+            return error(ORDER_NOT_FOUND_MESSAGE, status=404)
+
+        return success(OrderTrackingByTokenSerializer(order).data)

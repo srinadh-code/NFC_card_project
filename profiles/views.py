@@ -125,4 +125,20 @@ class PublicProfileView(APIView):
         if request.query_params.get("src") == "qr":
             record_event(profile.user, AnalyticsEvent.EventType.QR_SCAN, request=request, source="qr")
 
+        # notify() itself checks CustomerSettings.notify_profile_views before
+        # creating anything (see customer_notifications/services.py) — this
+        # call site only adds the one check notify() can't make on its own:
+        # never notify the owner for viewing their own public profile.
+        is_owner_viewing_self = request.user.is_authenticated and request.user == profile.user
+        if not is_owner_viewing_self:
+            from customer_management.customer_notifications.models import Notification
+            from customer_management.customer_notifications.services import notify
+
+            notify(
+                profile.user,
+                "Your profile received a new view",
+                "Someone just viewed your public profile.",
+                type=Notification.Type.PROFILE_VIEW,
+            )
+
         return success(PublicProfileSerializer(profile, context={"request": request}).data)

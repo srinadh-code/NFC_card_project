@@ -8,7 +8,9 @@ from rest_framework.test import APITestCase
 
 from common.test_utils import AuthenticatedAPITestCase, make_user
 from customer_management.customer_analytics.models import AnalyticsEvent
+from customer_management.customer_notifications.models import Notification
 from customer_management.customer_services.models import CustomerService
+from customer_management.customer_settings.models import CustomerSettings
 
 from .models import Profile
 
@@ -58,6 +60,26 @@ class PublicProfileViewTests(APITestCase):
             ).count(),
             1,
         )
+
+    def test_no_profile_view_notification_by_default(self):
+        """notify_profile_views defaults to False on CustomerSettings — this
+        is the deliberate, existing "opt-in" default, not something this
+        change introduces."""
+        self.client.get(reverse("profile-public", args=[self.profile.username]))
+        self.assertFalse(
+            Notification.objects.filter(user=self.user, type=Notification.Type.PROFILE_VIEW).exists()
+        )
+
+    def test_profile_view_notifies_once_customer_opts_in(self):
+        settings_obj = CustomerSettings.ensure_for_user(self.user)
+        settings_obj.notify_profile_views = True
+        settings_obj.save(update_fields=["notify_profile_views"])
+
+        self.client.get(reverse("profile-public", args=[self.profile.username]))
+
+        self.assertTrue(
+            Notification.objects.filter(user=self.user, type=Notification.Type.PROFILE_VIEW).exists()
+        )
         self.assertEqual(
             AnalyticsEvent.objects.filter(
                 user=self.user, event_type=AnalyticsEvent.EventType.PROFILE_VIEW
@@ -65,13 +87,100 @@ class PublicProfileViewTests(APITestCase):
             1,
         )
 
+    def test_owner_viewing_their_own_profile_does_not_notify_themselves(self):
+        settings_obj = CustomerSettings.ensure_for_user(self.user)
+        settings_obj.notify_profile_views = True
+        settings_obj.save(update_fields=["notify_profile_views"])
+
+        self.client.force_authenticate(user=self.user)
+        self.client.get(reverse("profile-public", args=[self.profile.username]))
+
+        self.assertFalse(
+            Notification.objects.filter(user=self.user, type=Notification.Type.PROFILE_VIEW).exists()
+        )
+
+    def test_a_different_logged_in_customer_viewing_still_notifies_the_owner(self):
+        settings_obj = CustomerSettings.ensure_for_user(self.user)
+        settings_obj.notify_profile_views = True
+        settings_obj.save(update_fields=["notify_profile_views"])
+
+        viewer = make_user(email="viewer@example.com", full_name="Viewer Person")
+        self.client.force_authenticate(user=viewer)
+        self.client.get(reverse("profile-public", args=[self.profile.username]))
+
+        self.assertTrue(
+            Notification.objects.filter(user=self.user, type=Notification.Type.PROFILE_VIEW).exists()
+        )
+
     def test_email_hidden_unless_owner_opted_in(self):
-        self.profile.show_contact_info = False
-        self.profile.save(update_fields=["show_contact_info"])
+        self.profile.show_email = False
+        self.profile.save(update_fields=["show_email"])
 
         response = self.client.get(reverse("profile-public", args=[self.profile.username]))
 
         self.assertIsNone(response.data["data"]["email"])
+
+    def test_field_level_privacy_each_field_gated_independently(self):
+        """The core of the upgrade: hiding phone/email must not hide
+        address/city/state, and vice versa — five independent switches,
+        not one broad flag."""
+        self.profile.address = "221B Baker Street"
+        self.profile.city = "Hyderabad"
+        self.profile.state = "Telangana"
+        self.profile.show_address = True
+        self.profile.show_city = True
+        self.profile.show_state = True
+        self.profile.show_phone = False
+        self.profile.show_email = False
+        self.profile.save()
+
+        response = self.client.get(reverse("profile-public", args=[self.profile.username]))
+        data = response.data["data"]
+
+        self.assertEqual(data["address"], "221B Baker Street")
+        self.assertEqual(data["city"], "Hyderabad")
+        self.assertEqual(data["state"], "Telangana")
+        self.assertIsNone(data["phone"])
+        self.assertIsNone(data["email"])
+
+    def test_field_level_privacy_inverse_combination(self):
+        self.user.phone = "+919876543210"
+        self.user.save(update_fields=["phone"])
+        self.profile.address = "221B Baker Street"
+        self.profile.city = "Hyderabad"
+        self.profile.state = "Telangana"
+        self.profile.show_address = False
+        self.profile.show_city = False
+        self.profile.show_state = False
+        self.profile.show_phone = True
+        self.profile.show_email = True
+        self.profile.save()
+
+        response = self.client.get(reverse("profile-public", args=[self.profile.username]))
+        data = response.data["data"]
+
+        self.assertIsNone(data["address"])
+        self.assertIsNone(data["city"])
+        self.assertIsNone(data["state"])
+        self.assertEqual(data["phone"], self.user.phone)
+        self.assertEqual(data["email"], self.user.email)
+
+    def test_customer_can_update_own_field_level_privacy_settings(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.patch(
+            reverse("profile-me"),
+            {"show_address": False, "show_city": False, "show_phone": False},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.profile.refresh_from_db()
+        self.assertFalse(self.profile.show_address)
+        self.assertFalse(self.profile.show_city)
+        self.assertFalse(self.profile.show_phone)
+        # Untouched fields keep their (default True) value — a PATCH here
+        # only changes what was actually sent.
+        self.assertTrue(self.profile.show_state)
+        self.assertTrue(self.profile.show_email)
 
     def test_cover_image_and_avatar_are_absolute_urls(self):
         """

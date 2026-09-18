@@ -6,6 +6,7 @@
 from django.urls import path
 
 from .analytics.views import AdminAnalyticsSummaryView
+from .announcements.views import AdminAnnouncementListCreateView
 from .cards.views import (
     AdminCardActivateView,
     AdminCardAssignView,
@@ -84,6 +85,8 @@ urlpatterns = [
     path("support/<int:pk>/status/", AdminTicketStatusView.as_view(), name="admin-support-ticket-status"),
     path("support/<int:pk>/priority/", AdminTicketPriorityView.as_view(), name="admin-support-ticket-priority"),
     path("support/<int:pk>/messages/", AdminTicketMessageView.as_view(), name="admin-support-ticket-messages"),
+    # Announcements (System Messages)
+    path("announcements/", AdminAnnouncementListCreateView.as_view(), name="admin-announcements"),
     # Analytics
     path("analytics/summary/", AdminAnalyticsSummaryView.as_view(), name="admin-analytics-summary"),
     # Reports

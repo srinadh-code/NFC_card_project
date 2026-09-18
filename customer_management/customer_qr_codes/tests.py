@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.urls import reverse
 from rest_framework import status
 
@@ -20,6 +21,21 @@ class CustomerQrCodeViewTests(AuthenticatedAPITestCase):
         self.assertIsNotNone(response.data["data"]["image"])
         profile = Profile.objects.get(user=self.user)
         self.assertIn(profile.username, response.data["data"]["target_url"])
+
+    def test_target_url_points_at_the_frontend_not_the_api_request_host(self):
+        """Regression test: target_url must be built from settings.FRONTEND_URL,
+        never from request.build_absolute_uri() — that bug encoded the
+        Django API host (e.g. http://localhost:8000) into the QR code
+        instead of the React app's own origin, which has no /u/<username>
+        route at all and 404s when scanned."""
+        response = self.client.post(reverse("customer-qr-generate"))
+
+        target_url = response.data["data"]["target_url"]
+        profile = Profile.objects.get(user=self.user)
+
+        self.assertTrue(target_url.startswith(settings.FRONTEND_URL))
+        self.assertEqual(target_url, f"{settings.FRONTEND_URL}/u/{profile.username}?src=qr")
+        self.assertNotIn("testserver", target_url)
 
     def test_generate_is_idempotent(self):
         self.client.post(reverse("customer-qr-generate"))

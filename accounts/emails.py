@@ -60,6 +60,49 @@ def send_registration_otp_email(user, raw_code):
     )
 
 
+def send_order_confirmation_email(user, order):
+    """Order confirmation — the one place a Track Order link is ever
+    emailed. Reuses the same Django-mail path/config as
+    send_registration_otp_email (admin-configured SMTP from Settings >
+    Email when set, console backend locally otherwise) rather than a new
+    email system. The link embeds order.tracking_token — the same secure,
+    backend-generated credential PublicOrderTrackingView requires (see
+    orders/models.py) — so the customer never sees or has to handle the
+    token itself, only a clickable link. Never raises: this fires
+    synchronously from orders/signals.py inside the same request/transaction
+    that creates the order, and a mail failure must never block placing it.
+    """
+    order_number = f"ORD{order.pk:06d}"
+    tracking_link = f"{settings.FRONTEND_URL}/track-order?order={order_number}&token={order.tracking_token}"
+    greeting = user.full_name or user.email
+
+    connection, from_email = _email_connection_and_sender()
+    try:
+        send_mail(
+            subject=f"Your VR's NEXORA order {order_number} is confirmed",
+            message=(
+                f"Hi {greeting},\n\n"
+                f"Thanks for your order — {order_number} has been placed.\n\n"
+                f"Track your order:\n{tracking_link}\n\n"
+                "This link is private to your order — please don't share it."
+            ),
+            from_email=from_email,
+            recipient_list=[user.email],
+            fail_silently=False,
+            connection=connection,
+            html_message=(
+                f"<p>Hi {greeting},</p>"
+                f"<p>Thanks for your order — <strong>{order_number}</strong> has been placed.</p>"
+                f'<p><a href="{tracking_link}">Track Your Order</a></p>'
+                "<p>This link is private to your order — please don't share it.</p>"
+            ),
+        )
+        return True
+    except Exception:
+        logger.exception("email.order_confirmation.send_failed order_id=%s", order.pk)
+        return False
+
+
 BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 
