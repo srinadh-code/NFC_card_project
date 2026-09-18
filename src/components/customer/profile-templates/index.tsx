@@ -2,12 +2,12 @@ import { DigitalCardPreview } from "@/components/customer/DigitalCardPreview"
 import type { Profile } from "@/types"
 import CreativeTemplate from "./CreativeTemplate"
 import ExecutiveTemplate from "./ExecutiveTemplate"
-import FutureTemplate from "./FutureTemplate"
 import GlassTemplate from "./GlassTemplate"
 import ImpactTemplate from "./ImpactTemplate"
 import LuxuryTemplate from "./LuxuryTemplate"
 import NatureTemplate from "./NatureTemplate"
 import SignatureTemplate from "./SignatureTemplate"
+import Template2 from "./Template2"
 import type { TemplateProps } from "./shared"
 
 // Template id -> renderer. "classic" reuses the pre-existing
@@ -22,7 +22,7 @@ export const PROFILE_TEMPLATE_COMPONENTS: Record<string, React.ComponentType<Tem
   creative: CreativeTemplate,
   executive: ExecutiveTemplate,
   luxury: LuxuryTemplate,
-  future: FutureTemplate,
+  future: Template2,
   nature: NatureTemplate,
   glass: GlassTemplate,
   impact: ImpactTemplate,

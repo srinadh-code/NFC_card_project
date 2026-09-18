@@ -325,6 +325,9 @@ interface ApiProfile {
   show_in_search: boolean
   selected_template: string
   luxury_theme: string
+  future_theme: string
+  impact_theme: string
+  glass_theme: string
   plan: string
   available_templates: string[]
   social_links: ApiSocialLink[]
@@ -384,6 +387,9 @@ interface ApiPublicProfile {
   cover_image: string | null
   selected_template: string
   luxury_theme: string
+  future_theme: string
+  impact_theme: string
+  glass_theme: string
   social_links: ApiSocialLink[]
   custom_links: ApiCustomLink[]
   custom_fields: ApiCustomField[]
@@ -432,6 +438,9 @@ function toFrontendProfile(p: ApiProfile): Profile {
     createdOn: p.created_at,
     selectedTemplate: p.selected_template,
     luxuryTheme: (p.luxury_theme as Profile["luxuryTheme"]) || "black",
+    futureTheme: (p.future_theme as Profile["futureTheme"]) || "green",
+    impactTheme: (p.impact_theme as Profile["impactTheme"]) || "red",
+    glassTheme: (p.glass_theme as Profile["glassTheme"]) || "blue",
     plan: p.plan,
     availableTemplates: p.available_templates,
     socialLinks: p.social_links
@@ -538,6 +547,25 @@ export const profileApi = {
     return profileApi.getMine()
   },
 
+  // Color variant for Template 2 ("future") only — same PATCH pattern as
+  // updateLuxuryTheme, just a different field on the same model.
+  updateFutureTheme: async (theme: string): Promise<Profile> => {
+    await request<ApiProfile>("/profiles/me/", { method: "PATCH", body: { future_theme: theme } })
+    return profileApi.getMine()
+  },
+
+  // Color variant for "Impact" only — same PATCH pattern as updateFutureTheme.
+  updateImpactTheme: async (theme: string): Promise<Profile> => {
+    await request<ApiProfile>("/profiles/me/", { method: "PATCH", body: { impact_theme: theme } })
+    return profileApi.getMine()
+  },
+
+  // Color variant for "Glass" only — same PATCH pattern as updateImpactTheme.
+  updateGlassTheme: async (theme: string): Promise<Profile> => {
+    await request<ApiProfile>("/profiles/me/", { method: "PATCH", body: { glass_theme: theme } })
+    return profileApi.getMine()
+  },
+
   getPrivacySettings: async () => {
     const p = await request<ApiProfile>("/profiles/me/")
     return {
@@ -603,6 +631,9 @@ export const profileApi = {
         createdOn: "",
         selectedTemplate: p.selected_template,
         luxuryTheme: (p.luxury_theme as Profile["luxuryTheme"]) || "black",
+        futureTheme: (p.future_theme as Profile["futureTheme"]) || "green",
+        impactTheme: (p.impact_theme as Profile["impactTheme"]) || "red",
+        glassTheme: (p.glass_theme as Profile["glassTheme"]) || "blue",
         socialLinks: p.social_links
           .slice()
           .sort((a, b) => a.display_order - b.display_order)
@@ -1913,6 +1944,9 @@ function toFrontendAdminProfile(p: ApiAdminProfile): Profile {
     // feature is customer-facing only, in /qr-code) — default is safe here.
     selectedTemplate: "classic",
     luxuryTheme: "black",
+    futureTheme: "green",
+    impactTheme: "red",
+    glassTheme: "blue",
     socialLinks: p.social_links
       .slice()
       .sort((a, b) => a.display_order - b.display_order)
@@ -2274,4 +2308,88 @@ export interface ApiDashboard {
 
 export const dashboardApi = {
   get: () => request<ApiDashboard>("/customer/dashboard/"),
+}
+
+// ---------------------------------------------------------------------
+// Reviews — customer's own review, the public testimonial feed, and the
+// admin moderation list. Talks to the real Django `reviews`/`admin_api`
+// apps (see tracker-backend/reviews/). Distinct from Website Content's
+// admin-authored `Testimonial` CMS entries (contentApi.ts) — these are
+// genuine customer-submitted, order-gated, one-per-customer reviews.
+// ---------------------------------------------------------------------
+
+export interface ApiReview {
+  id: number
+  rating: number
+  review_text: string
+  is_published: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ApiPublicReview {
+  id: number
+  customer_name: string
+  rating: number
+  review_text: string
+  created_at: string
+}
+
+export interface ApiAdminReview {
+  id: number
+  customer_name: string
+  customer_email: string
+  rating: number
+  review_text: string
+  is_published: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface AdminReviewPage {
+  data: ApiAdminReview[]
+  count: number
+  page: number
+  numPages: number
+}
+
+export const reviewApi = {
+  // { has_review: false } | { has_review: true, review: ApiReview }
+  getMine: () => request<{ has_review: boolean; review?: ApiReview }>("/reviews/me/"),
+
+  submit: (data: { rating: number; review_text: string }) =>
+    request<ApiReview>("/reviews/me/", { method: "POST", body: data }),
+
+  update: (data: { rating?: number; review_text?: string }) =>
+    request<ApiReview>("/reviews/me/", { method: "PATCH", body: data }),
+}
+
+export const publicReviewsApi = {
+  list: () => request<ApiPublicReview[]>("/reviews/public/", { auth: false }),
+}
+
+export const adminReviewApi = {
+  list: async (params: {
+    page?: number
+    search?: string
+    status?: "All" | "Enabled" | "Disabled"
+  }): Promise<AdminReviewPage> => {
+    const qs = new URLSearchParams()
+    if (params.page) qs.set("page", String(params.page))
+    if (params.search) qs.set("search", params.search)
+    if (params.status && params.status !== "All") qs.set("status", params.status.toLowerCase())
+    const query = qs.toString()
+    const envelope = await requestRaw<ApiAdminReview[]>(`/admin/reviews/${query ? `?${query}` : ""}`)
+    return {
+      data: envelope.data ?? [],
+      count: envelope.pagination?.count ?? 0,
+      page: envelope.pagination?.page ?? 1,
+      numPages: envelope.pagination?.num_pages ?? 1,
+    }
+  },
+
+  detail: (id: number) => request<ApiAdminReview>(`/admin/reviews/${id}/`),
+
+  setPublished: (id: number, is_published: boolean) =>
+    request<ApiAdminReview>(`/admin/reviews/${id}/`, { method: "PATCH", body: { is_published } }),
 }

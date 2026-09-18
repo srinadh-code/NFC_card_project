@@ -8,6 +8,7 @@ import {
   Link2,
   LogOut,
   MapPin,
+  MessageSquare,
   QrCode,
   Settings,
   ShoppingBag,
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
   { to: "/activity", label: "Activity", icon: Activity },
   { to: "/orders", label: "Orders", icon: ShoppingBag },
   { to: "/addresses", label: "Addresses", icon: MapPin },
+  { to: "/reviews", label: "Reviews", icon: MessageSquare },
   { to: "/settings", label: "Settings", icon: Settings },
 ]
 

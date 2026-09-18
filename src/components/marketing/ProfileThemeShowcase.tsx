@@ -22,7 +22,6 @@ function PhoneFrame({ bg, children }: { bg: string; children: React.ReactNode })
   return (
     <div className="relative mx-auto w-full max-w-[220px] rounded-[28px] border-[6px] border-[#0B0F1A] bg-[#0B0F1A] shadow-xl">
       <div className={cn("relative flex h-[340px] flex-col overflow-hidden rounded-[22px]", bg)}>
-        <div className="absolute left-1/2 top-1.5 z-10 h-3 w-16 -translate-x-1/2 rounded-full bg-[#0B0F1A]" />
         {children}
       </div>
     </div>

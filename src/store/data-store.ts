@@ -241,6 +241,9 @@ export const useDataStore = create<DataState>()(
             createdOn: now,
             selectedTemplate: "classic",
             luxuryTheme: "black",
+            futureTheme: "black",
+            impactTheme: "black",
+            glassTheme: "blue",
             services: [],
             socialLinks: DEFAULT_SOCIAL_PLATFORMS.map((platform, order) => ({
               platform,

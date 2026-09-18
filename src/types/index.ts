@@ -218,6 +218,13 @@ export interface Profile {
   // Color variant for Template 1 ("luxury") only — ignored by every other
   // template. Same component, same data; only styling changes per variant.
   luxuryTheme: "green" | "blue" | "black"
+  // Color variant for Template 2 ("future") only — same idea as
+  // luxuryTheme above, independent of it.
+  futureTheme: "green" | "blue" | "black"
+  // Color variant for "Impact" only — same idea as luxuryTheme/futureTheme.
+  impactTheme: "red" | "blue" | "black" | "white"
+  // Color variant for "Glass" only — same idea as the other *Theme fields.
+  glassTheme: "white" | "blue" | "green"
   plan?: string
   availableTemplates?: string[]
   socialLinks: SocialLink[]
