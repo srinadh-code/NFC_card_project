@@ -1,4 +1,5 @@
 ﻿import { useRef, useState, type ChangeEvent, type ReactNode } from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import {
   Settings as SettingsIcon,
@@ -10,16 +11,19 @@ import {
   Image as ImageIcon,
   ShieldCheck,
   Loader2,
+  Megaphone,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { useSingletonSection } from "@/components/admin/content/useSingletonSection"
+import { adminAnnouncementApi, ApiError } from "@/lib/api"
 import { emailSettingsApi, paymentSettingsApi, securitySettingsApi, settingsApi, shippingSettingsApi } from "@/lib/contentApi"
 import type { EmailSettings, GeneralSettings, PaymentSettings, SecuritySettings, ShippingSettings } from "@/types/content"
 import { useBrandingStore, type BrandingAsset } from "@/store/branding-store"
@@ -32,6 +36,7 @@ const SECTIONS = [
   { key: "shipping", label: "Shipping Settings", icon: Truck },
   { key: "email", label: "Email Settings", icon: Mail },
   { key: "security", label: "Security Settings", icon: ShieldCheck },
+  { key: "announcements", label: "Announcements", icon: Megaphone },
 ] as const
 
 type SectionKey = (typeof SECTIONS)[number]["key"]
@@ -176,6 +181,100 @@ function isValidUrlLoose(value: string) {
 
 function isValidPhoneLoose(value: string) {
   return /^[+]?[\d\s-]{7,15}$/.test(value)
+}
+
+function formatSentDate(iso: string) {
+  return new Date(iso).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  })
+}
+
+function AnnouncementsSection() {
+  const queryClient = useQueryClient()
+  const [title, setTitle] = useState("")
+  const [message, setMessage] = useState("")
+
+  const query = useQuery({
+    queryKey: ["admin-announcements"],
+    queryFn: () => adminAnnouncementApi.list(1),
+  })
+
+  const sendMutation = useMutation({
+    mutationFn: () => adminAnnouncementApi.send({ title: title.trim(), message: message.trim() }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-announcements"] })
+      toast.success("Announcement sent to your customers.")
+      setTitle("")
+      setMessage("")
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't send that announcement."),
+  })
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Announcements</CardTitle>
+        <CardDescription>
+          Send a System Message to every customer&apos;s notification bell — only customers who have
+          System Messages enabled in their own notification preferences receive it.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4">
+          <FieldRow label="Title">
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Scheduled maintenance" />
+          </FieldRow>
+          <FieldRow label="Message">
+            <Textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="What should customers know?"
+              rows={3}
+            />
+          </FieldRow>
+          <div>
+            <Button
+              onClick={() => sendMutation.mutate()}
+              disabled={sendMutation.isPending || !title.trim()}
+            >
+              {sendMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+              Send to All Customers
+            </Button>
+          </div>
+        </div>
+
+        <div className="border-t pt-4">
+          <p className="mb-3 text-sm font-medium">Previously sent</p>
+          {query.isLoading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-14 w-full" />
+              ))}
+            </div>
+          ) : query.data && query.data.items.length > 0 ? (
+            <ul className="flex flex-col gap-3">
+              {query.data.items.map((a) => (
+                <li key={a.id} className="rounded-lg border p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium">{a.title}</p>
+                    <p className="text-xs text-muted-foreground">{formatSentDate(a.created_at)}</p>
+                  </div>
+                  {a.message && <p className="mt-1 text-sm text-muted-foreground">{a.message}</p>}
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Delivered to {a.recipient_count} customer{a.recipient_count === 1 ? "" : "s"}
+                    {a.created_by_name ? ` · sent by ${a.created_by_name}` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">No announcements sent yet.</p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
 export default function AdminSettings() {
@@ -783,6 +882,8 @@ export default function AdminSettings() {
               </CardContent>
             </Card>
           )}
+
+          {active === "announcements" && <AnnouncementsSection />}
         </div>
       </div>
     </div>

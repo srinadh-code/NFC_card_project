@@ -103,7 +103,9 @@ export default function Checkout() {
     mutationFn: (payload: CreateOrderPayload) => ordersApi.create(payload),
     onSuccess: (order) => {
       clearCart()
-      navigate("/order-success", { state: { orderId: String(order.id) } })
+      navigate("/order-success", {
+        state: { orderId: String(order.id), trackingToken: order.tracking_token, customerName: customer?.name },
+      })
     },
     onError: (err) => {
       const message = err instanceof ApiError ? err.message : "Something went wrong placing your order."

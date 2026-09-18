@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Globe2, KeyRound, Mail, Moon, Search, Sun, Monitor, Users } from "lucide-react"
+import { Globe2, KeyRound, Mail, MapPin, Moon, Phone, Search, Sun, Monitor, Building2, Map } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -45,6 +45,19 @@ function PrivacySettingsCard() {
     onError: () => toast.error("Couldn't save that change. Please try again."),
   })
 
+  const contactItems: {
+    key: "showAddress" | "showCity" | "showState" | "showPhone" | "showEmail"
+    label: string
+    description: string
+    icon: typeof MapPin
+  }[] = [
+    { key: "showAddress", label: "Show Address", description: "Display your street address on your public profile.", icon: MapPin },
+    { key: "showCity", label: "Show City", description: "Display your city on your public profile.", icon: Building2 },
+    { key: "showState", label: "Show State", description: "Display your state on your public profile.", icon: Map },
+    { key: "showPhone", label: "Show Phone Number", description: "Display your phone number on your public profile.", icon: Phone },
+    { key: "showEmail", label: "Show Email", description: "Display your email address on your public profile.", icon: Mail },
+  ]
+
   return (
     <Card className="rounded-2xl">
       <CardHeader>
@@ -54,59 +67,83 @@ function PrivacySettingsCard() {
       <CardContent className="space-y-4">
         {query.isLoading ? (
           <div className="space-y-4">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
+            {Array.from({ length: 7 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
           </div>
         ) : query.isError ? (
           <ErrorState error={query.error} onRetry={() => query.refetch()} />
         ) : (
           <>
-            <div className="flex items-center justify-between">
-              <div className="flex items-start gap-2">
-                <Globe2 className="mt-0.5 size-4 text-primary" />
-                <div>
-                  <p className="text-sm font-medium">Make profile public</p>
-                  <p className="text-xs text-muted-foreground">
-                    Turn off to hide your public card behind a private message.
-                  </p>
+            <div>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Profile Visibility
+              </p>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-start gap-2">
+                    <Globe2 className="mt-0.5 size-4 text-primary" />
+                    <div>
+                      <p className="text-sm font-medium">Make profile public</p>
+                      <p className="text-xs text-muted-foreground">
+                        Turn off to hide your public card behind a private message.
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={query.data?.profilePublic ?? true}
+                    onCheckedChange={(v) => mutation.mutate({ profilePublic: v })}
+                    disabled={mutation.isPending}
+                  />
+                </div>
+                <Separator />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-start gap-2">
+                    <Search className="mt-0.5 size-4 text-primary" />
+                    <div>
+                      <p className="text-sm font-medium">Show in search results</p>
+                      <p className="text-xs text-muted-foreground">Allow your profile to be discoverable via search.</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={query.data?.showInSearch ?? true}
+                    onCheckedChange={(v) => mutation.mutate({ showInSearch: v })}
+                    disabled={mutation.isPending}
+                  />
                 </div>
               </div>
-              <Switch
-                checked={query.data?.profilePublic ?? true}
-                onCheckedChange={(v) => mutation.mutate({ profilePublic: v })}
-                disabled={mutation.isPending}
-              />
             </div>
+
             <Separator />
-            <div className="flex items-center justify-between">
-              <div className="flex items-start gap-2">
-                <Users className="mt-0.5 size-4 text-primary" />
-                <div>
-                  <p className="text-sm font-medium">Show contact info on public profile</p>
-                  <p className="text-xs text-muted-foreground">Hide your email and phone from visitors.</p>
-                </div>
+
+            <div>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Contact Information
+              </p>
+              <div className="space-y-4">
+                {contactItems.map((item, i) => {
+                  const Icon = item.icon
+                  return (
+                    <div key={item.key}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-start gap-2">
+                          <Icon className="mt-0.5 size-4 text-primary" />
+                          <div>
+                            <p className="text-sm font-medium">{item.label}</p>
+                            <p className="text-xs text-muted-foreground">{item.description}</p>
+                          </div>
+                        </div>
+                        <Switch
+                          checked={query.data?.[item.key] ?? true}
+                          onCheckedChange={(v) => mutation.mutate({ [item.key]: v })}
+                          disabled={mutation.isPending}
+                        />
+                      </div>
+                      {i < contactItems.length - 1 && <Separator className="mt-4" />}
+                    </div>
+                  )
+                })}
               </div>
-              <Switch
-                checked={query.data?.showContactInfo ?? true}
-                onCheckedChange={(v) => mutation.mutate({ showContactInfo: v })}
-                disabled={mutation.isPending}
-              />
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div className="flex items-start gap-2">
-                <Search className="mt-0.5 size-4 text-primary" />
-                <div>
-                  <p className="text-sm font-medium">Show in search results</p>
-                  <p className="text-xs text-muted-foreground">Allow your profile to be discoverable via search.</p>
-                </div>
-              </div>
-              <Switch
-                checked={query.data?.showInSearch ?? true}
-                onCheckedChange={(v) => mutation.mutate({ showInSearch: v })}
-                disabled={mutation.isPending}
-              />
             </div>
           </>
         )}
