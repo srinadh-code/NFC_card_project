@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Navigate, Link, useNavigate, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
+import { GoogleLogin, type CredentialResponse } from "@react-oauth/google"
 import { Check, Sparkles, X, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,6 +19,8 @@ import {
   sanitizeRedirect,
 } from "@/lib/utils"
 
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
+
 const CHECKLIST = [
   "Digital Business Profile",
   "Easy Sharing",
@@ -29,6 +32,7 @@ export default function CustomerRegister() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const customer = useCustomerAuthStore((s) => s.customer)
+  const customerGoogleLogin = useCustomerAuthStore((s) => s.googleLogin)
 
   // Mirrors Login.tsx: if we arrived via the "order a card while logged
   // out" redirect, send the new account straight back to finish checkout.
@@ -111,6 +115,32 @@ export default function CustomerRegister() {
         setFormError(message)
         toast.error(message)
       }
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // Same "verify with Google, then get-or-create the account" backend
+  // endpoint Login.tsx's Google button calls (accounts.views.GoogleLoginView)
+  // — there's no separate "register with Google" API: a Google account that
+  // doesn't exist yet is created here exactly like a brand-new sign-up, one
+  // that already exists just signs in, so this button is correct either way.
+  async function handleGoogleSuccess(credentialResponse: CredentialResponse) {
+    if (!credentialResponse.credential) {
+      toast.error("Google didn't return a credential. Please try again.")
+      return
+    }
+    setSubmitting(true)
+    setFormError(null)
+    try {
+      const result = await customerGoogleLogin(credentialResponse.credential)
+      if (result.success) {
+        toast.success("Welcome to VR's NEXORA!")
+        navigate(redirectTo)
+        return
+      }
+      setFormError(result.error)
+      toast.error(result.error)
     } finally {
       setSubmitting(false)
     }
@@ -298,6 +328,30 @@ export default function CustomerRegister() {
               {submitting ? "Signing up..." : "Sign Up"}
             </Button>
           </form>
+
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground">OR</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          {GOOGLE_CLIENT_ID ? (
+            <div className="flex justify-center">
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() => toast.error("Google sign-up failed. Please try again.")}
+                text="signup_with"
+                shape="rectangular"
+                width="320"
+              />
+            </div>
+          ) : (
+            // Mirrors GoogleLoginView's own 501 "not configured" response —
+            // no dead/broken button rendered when the client ID is unset.
+            <p className="text-center text-xs text-muted-foreground">
+              Google sign-up isn't configured on this deployment yet.
+            </p>
+          )}
 
           <p className="text-center text-sm text-muted-foreground">
             Already have an account?{" "}
