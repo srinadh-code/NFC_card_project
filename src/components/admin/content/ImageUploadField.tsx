@@ -4,23 +4,31 @@ import { ImageIcon, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ApiError } from "@/lib/api"
 
-const ACCEPTED_TYPES = "image/jpeg,image/png,image/webp,image/svg+xml"
+const DEFAULT_ACCEPTED_TYPES = "image/jpeg,image/png,image/webp,image/svg+xml"
+const DEFAULT_FORMATS_HELP = "JPEG, PNG, WEBP or SVG. Max 5MB."
 
 // Image upload/replace/remove control shared by every content section that
-// carries an image (Hero, Built From Experience, Testimonials, Companies).
-// Never assumes success — surfaces the real backend response/error via
-// toast, and only re-renders currentUrl once the parent's onUpload/onRemove
-// promise (driven by the real API response) resolves.
+// carries an image (Hero, Built From Experience, Testimonials, Companies,
+// General Settings > Branding). Never assumes success — surfaces the real
+// backend response/error via toast, and only re-renders currentUrl once the
+// parent's onUpload/onRemove promise (driven by the real API response)
+// resolves. `accept`/`formatsHelp` default to the common image set every
+// other caller uses — only overridden where the backend allows something
+// extra (e.g. Favicon's .ico, via common.image_storage.ALLOWED_CONTENT_TYPES).
 export function ImageUploadField({
   currentUrl,
   onUpload,
   onRemove,
   disabled,
+  accept = DEFAULT_ACCEPTED_TYPES,
+  formatsHelp = DEFAULT_FORMATS_HELP,
 }: {
   currentUrl?: string | null
   onUpload: (file: File) => Promise<void>
   onRemove: () => Promise<void>
   disabled?: boolean
+  accept?: string
+  formatsHelp?: string
 }) {
   const [busy, setBusy] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -86,11 +94,11 @@ export function ImageUploadField({
         <input
           ref={inputRef}
           type="file"
-          accept={ACCEPTED_TYPES}
+          accept={accept}
           className="hidden"
           onChange={handleFileChange}
         />
-        <p className="text-xs text-muted-foreground">JPEG, PNG, WEBP or SVG. Max 5MB.</p>
+        <p className="text-xs text-muted-foreground">{formatsHelp}</p>
       </div>
     </div>
   )

@@ -3,7 +3,7 @@ import { Route, Routes } from "react-router-dom"
 
 import { ScrollToTop } from "@/components/ScrollToTop"
 import { useAuthStore } from "@/store/auth-store"
-import { useBrandingStore } from "@/store/branding-store"
+import { usePublicSettings } from "@/hooks/usePublicSettings"
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute"
 import PublicLayout from "@/components/layout/PublicLayout"
 import AuthLayout from "@/components/layout/AuthLayout"
@@ -63,7 +63,7 @@ const DEFAULT_FAVICON_HREF = "/favicon.svg"
 
 function App() {
   const bootstrap = useAuthStore((s) => s.bootstrap)
-  const favicon = useBrandingStore((s) => s.favicon)
+  const { settings } = usePublicSettings()
 
   // Re-validates the persisted session against the server once on load, so
   // a revoked/expired token gets cleared instead of leaving a stale "logged
@@ -79,8 +79,8 @@ function App() {
   // from index.html rather than injecting a second one.
   useEffect(() => {
     const link = document.querySelector<HTMLLinkElement>("link[rel~='icon']")
-    if (link) link.href = favicon?.previewUrl ?? DEFAULT_FAVICON_HREF
-  }, [favicon])
+    if (link) link.href = settings.favicon_url ?? DEFAULT_FAVICON_HREF
+  }, [settings.favicon_url])
 
   return (
     <>

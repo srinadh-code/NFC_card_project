@@ -1,4 +1,4 @@
-﻿import { useRef, useState, type ChangeEvent, type ReactNode } from "react"
+﻿import { useState, type ReactNode } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import {
@@ -8,7 +8,6 @@ import {
   Mail,
   Phone,
   Globe,
-  Image as ImageIcon,
   ShieldCheck,
   Loader2,
   Megaphone,
@@ -23,11 +22,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { useSingletonSection } from "@/components/admin/content/useSingletonSection"
+import { ImageUploadField } from "@/components/admin/content/ImageUploadField"
 import { adminAnnouncementApi, ApiError } from "@/lib/api"
 import { emailSettingsApi, paymentSettingsApi, securitySettingsApi, settingsApi, shippingSettingsApi } from "@/lib/contentApi"
 import type { EmailSettings, GeneralSettings, PaymentSettings, SecuritySettings, ShippingSettings } from "@/types/content"
-import { useBrandingStore, type BrandingAsset } from "@/store/branding-store"
-import { useSupportSettingsStore } from "@/store/support-settings-store"
 import { INDIAN_STATES } from "@/data/indian-states"
 
 const SECTIONS = [
@@ -59,113 +57,9 @@ function SectionHeading({ title, description }: { title: string; description: st
   )
 }
 
-// -----------------------------------------------------------------------
-// Company Logo / Favicon — General Settings only. Reads/writes the
-// centralized useBrandingStore (src/store/branding-store.ts) — the single
-// source of truth for platform branding, so nothing here duplicates that
-// state locally. Deliberately not the shared ImageUploadField (components/
-// admin/content) used by Website Content's Hero/Testimonials/Companies
-// sections: that one always calls a real upload/remove API, and this task
-// is explicit that these two controls must never hit a backend/API — only
-// hold a local object-URL preview for the current session. Modeled on the
-// same interaction shape (preview box + hidden file input + Change/Remove)
-// so it still looks and behaves like the rest of the app, without touching
-// that shared, backend-backed component.
-// -----------------------------------------------------------------------
-
-// 1.5MB per file — data: URLs inflate ~33% over the raw file size once
-// base64-encoded, and this is stored in localStorage alongside auth/cart/
-// theme state, which has its own (browser-enforced, ~5-10MB) quota.
-const MAX_BRANDING_FILE_BYTES = 1.5 * 1024 * 1024
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
-}
-
-function LocalImageUploadField({
-  label,
-  subtitle,
-  accept,
-  acceptedExtensions,
-  formatsHelp,
-  value,
-  onChange,
-}: {
-  label: string
-  subtitle: string
-  accept: string
-  acceptedExtensions: string[]
-  formatsHelp: string
-  value: BrandingAsset | null
-  onChange: (value: BrandingAsset | null) => void
-}) {
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    e.target.value = ""
-    if (!file) return
-
-    const ext = file.name.split(".").pop()?.toLowerCase()
-    if (!ext || !acceptedExtensions.includes(ext)) {
-      toast.error(`Unsupported file type. ${formatsHelp}.`)
-      return
-    }
-    if (file.size > MAX_BRANDING_FILE_BYTES) {
-      toast.error(`${label} is too large. Please choose a file under 1.5MB.`)
-      return
-    }
-
-    try {
-      const previewUrl = await readFileAsDataUrl(file)
-      onChange({ name: file.name, previewUrl })
-    } catch {
-      toast.error(`Couldn't read that file. Please try a different one.`)
-    }
-  }
-
-  function handleRemove() {
-    onChange(null)
-  }
-
-  return (
-    <div className="flex flex-col gap-3 rounded-xl border border-border/70 p-4">
-      <div className="flex items-center gap-4">
-        <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/70 bg-muted">
-          {value ? (
-            <img src={value.previewUrl} alt={label} className="size-full object-contain" />
-          ) : (
-            <ImageIcon className="size-6 text-muted-foreground" />
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-foreground">{label}</p>
-          <p className="truncate text-xs text-muted-foreground">{value ? value.name : subtitle}</p>
-        </div>
-      </div>
-      <div className="flex gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
-          {value ? "Change" : `Upload ${label}`}
-        </Button>
-        {value && (
-          <Button type="button" variant="outline" size="sm" onClick={handleRemove}>
-            Remove
-          </Button>
-        )}
-      </div>
-      <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={handleFileChange} />
-      <p className="text-xs text-muted-foreground">{formatsHelp}</p>
-    </div>
-  )
-}
-
-// Loose, frontend-only validation — these three fields have no backend
-// counterpart in this task, so there's nothing server-side to defer to.
+// Loose, client-side validation for instant feedback — the backend
+// (GeneralSettingsSerializer) validates these same three fields for real on
+// save; this just avoids a round-trip for an obviously malformed value.
 function isValidEmailLoose(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 }
@@ -282,11 +176,10 @@ export default function AdminSettings() {
 
   // Every section here is a real, database-backed singleton — see
   // website_content.models.settings on the backend; every "Save Changes"
-  // button is a real PATCH. The one exception is the block of General-only
-  // UI state further down (Branding/Support & Website) — that part is
-  // frontend-only by explicit design for this iteration (no backend field
-  // exists for it yet), so it lives in local/store state instead of here
-  // (see useBrandingStore for Branding specifically).
+  // button is a real PATCH. Branding (logo/favicon) and Support & Website
+  // are also real GeneralSettings fields — logo/favicon upload through
+  // their own Cloudinary-backed endpoints, the rest are plain
+  // general.values fields saved by the same PATCH as Basic Information.
   const general = useSingletonSection<GeneralSettings>({
     queryKey: ["settings", "admin"],
     get: settingsApi.get,
@@ -318,27 +211,13 @@ export default function AdminSettings() {
     label: "Security Settings",
   })
 
-  // Company Logo / Favicon live in the centralized branding store (single
-  // source of truth — see src/store/branding-store.ts), not local state,
-  // so they survive navigating away from this page (and a refresh — that
-  // store persists to localStorage).
-  const companyLogo = useBrandingStore((s) => s.companyLogo)
-  const setCompanyLogo = useBrandingStore((s) => s.setCompanyLogo)
-  const favicon = useBrandingStore((s) => s.favicon)
-  const setFavicon = useBrandingStore((s) => s.setFavicon)
-
-  // Support Email / Support Phone / Website URL are the centralized
-  // source of truth for the public site (Contact.tsx, Footer.tsx) — see
-  // src/store/support-settings-store.ts. Editing keeps a local draft
-  // (exactly like Basic Information's `general.values` draft below) so
-  // half-typed input doesn't reach the public site until "Save Changes"
-  // is actually clicked; the draft is seeded from the store once on
-  // mount so a previously-saved value still shows when reopening this
-  // page, and committed back to the store on save.
-  const supportSettings = useSupportSettingsStore()
-  const [supportEmail, setSupportEmail] = useState(supportSettings.supportEmail)
-  const [supportPhone, setSupportPhone] = useState(supportSettings.supportPhone)
-  const [websiteUrl, setWebsiteUrl] = useState(supportSettings.websiteUrl)
+  // Company Logo / Favicon and Support Email / Support Phone / Website URL
+  // are all real GeneralSettings fields now (see
+  // website_content.models.settings.GeneralSettings) — the images upload
+  // through their own Cloudinary-backed endpoints (same
+  // AdminSingletonImageUploadAPIView pattern as every other admin image),
+  // and the three text fields are just more `general.values`/`setField`
+  // fields, saved by the same "Save Changes" PATCH as Basic Information.
   const [generalUiErrors, setGeneralUiErrors] = useState<{
     supportEmail?: string
     supportPhone?: string
@@ -347,6 +226,9 @@ export default function AdminSettings() {
 
   function handleSaveGeneral() {
     const errors: typeof generalUiErrors = {}
+    const supportEmail = general.values.support_email ?? ""
+    const supportPhone = general.values.support_phone ?? ""
+    const websiteUrl = general.values.website_url ?? ""
     if (supportEmail && !isValidEmailLoose(supportEmail)) {
       errors.supportEmail = "Enter a valid email address."
     }
@@ -362,13 +244,7 @@ export default function AdminSettings() {
       return
     }
 
-    // Basic Information still really persists (existing, unchanged
-    // behavior). Support & Website has no backend field/API in this task,
-    // so it commits to the centralized frontend store instead — this is
-    // what makes the public Contact page/Footer pick up the new values.
     general.save()
-    supportSettings.setSupportSettings({ supportEmail, supportPhone, websiteUrl })
-    toast.success("General settings saved successfully.")
   }
 
   return (
@@ -571,24 +447,28 @@ export default function AdminSettings() {
                         description="Your logo and favicon as they'll appear across the dashboard and public site."
                       />
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <LocalImageUploadField
-                          label="Company Logo"
-                          subtitle="Upload your company logo"
-                          accept=".png,.jpg,.jpeg,.svg"
-                          acceptedExtensions={["png", "jpg", "jpeg", "svg"]}
-                          formatsHelp="Supported formats: PNG, JPG, JPEG, SVG"
-                          value={companyLogo}
-                          onChange={setCompanyLogo}
-                        />
-                        <LocalImageUploadField
-                          label="Favicon"
-                          subtitle="Upload your website favicon"
-                          accept=".png,.ico,.svg"
-                          acceptedExtensions={["png", "ico", "svg"]}
-                          formatsHelp="Supported formats: PNG, ICO, SVG"
-                          value={favicon}
-                          onChange={setFavicon}
-                        />
+                        <div className="flex flex-col gap-1.5">
+                          <Label>Company Logo</Label>
+                          <ImageUploadField
+                            currentUrl={general.values.company_logo_url}
+                            disabled={!general.data}
+                            accept="image/png,image/jpeg,image/svg+xml,.png,.jpg,.jpeg,.svg"
+                            formatsHelp="Supported formats: PNG, JPG, JPEG, SVG. Max 5MB."
+                            onUpload={async (file) => general.applyServerUpdate(await settingsApi.uploadLogo(file))}
+                            onRemove={async () => general.applyServerUpdate(await settingsApi.removeLogo())}
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label>Favicon</Label>
+                          <ImageUploadField
+                            currentUrl={general.values.favicon_url}
+                            disabled={!general.data}
+                            accept="image/png,image/svg+xml,image/x-icon,image/vnd.microsoft.icon,.png,.ico,.svg"
+                            formatsHelp="Supported formats: PNG, ICO, SVG. Max 5MB."
+                            onUpload={async (file) => general.applyServerUpdate(await settingsApi.uploadFavicon(file))}
+                            onRemove={async () => general.applyServerUpdate(await settingsApi.removeFavicon())}
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -605,9 +485,9 @@ export default function AdminSettings() {
                               type="email"
                               className="pl-9"
                               placeholder="support@vrsnexora.com"
-                              value={supportEmail}
+                              value={general.values.support_email ?? ""}
                               onChange={(e) => {
-                                setSupportEmail(e.target.value)
+                                general.setField("support_email", e.target.value)
                                 setGeneralUiErrors((v) => ({ ...v, supportEmail: undefined }))
                               }}
                               aria-invalid={!!generalUiErrors.supportEmail}
@@ -624,9 +504,9 @@ export default function AdminSettings() {
                               type="tel"
                               className="pl-9"
                               placeholder="+91 90000 12345"
-                              value={supportPhone}
+                              value={general.values.support_phone ?? ""}
                               onChange={(e) => {
-                                setSupportPhone(e.target.value)
+                                general.setField("support_phone", e.target.value)
                                 setGeneralUiErrors((v) => ({ ...v, supportPhone: undefined }))
                               }}
                               aria-invalid={!!generalUiErrors.supportPhone}
@@ -643,9 +523,9 @@ export default function AdminSettings() {
                               type="url"
                               className="pl-9"
                               placeholder="https://vrsnexora.com"
-                              value={websiteUrl}
+                              value={general.values.website_url ?? ""}
                               onChange={(e) => {
-                                setWebsiteUrl(e.target.value)
+                                general.setField("website_url", e.target.value)
                                 setGeneralUiErrors((v) => ({ ...v, websiteUrl: undefined }))
                               }}
                               aria-invalid={!!generalUiErrors.websiteUrl}

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react"
 import { Check, Globe, Loader2, Mail, MessageCircle, Nfc, Phone, User } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { cardClass } from "@/components/marketing/PremiumCard"
@@ -441,11 +442,22 @@ export function PhoneMockup({ theme, imageUrl }: { theme: ProfileTheme; imageUrl
   // Templates) overrides the code-drawn mockup when present — same
   // "real image if set, else the code fallback" pattern this page already
   // uses for a product's own card photo (see NfcCardFace/selectedCard.image
-  // in Shop.tsx).
-  if (imageUrl) {
+  // in Shop.tsx). Also falls back if the URL is set but the asset itself
+  // fails to load (e.g. a Cloudinary upload later removed) — a customer
+  // should never see a blank/broken box here, same as they'd never see
+  // one for any other admin-managed image on the site.
+  const [imageFailed, setImageFailed] = useState(false)
+  useEffect(() => setImageFailed(false), [imageUrl])
+
+  if (imageUrl && !imageFailed) {
     return (
       <PhoneFrame bg="">
-        <img src={imageUrl} alt={theme.name} className="h-full w-full object-cover" />
+        <img
+          src={imageUrl}
+          alt={theme.name}
+          className="h-full w-full object-cover"
+          onError={() => setImageFailed(true)}
+        />
       </PhoneFrame>
     )
   }

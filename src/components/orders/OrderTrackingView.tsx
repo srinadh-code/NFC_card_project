@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { buildMailtoHref, cn } from "@/lib/utils"
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/mock-api"
-import { useSupportSettingsStore } from "@/store/support-settings-store"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
 import {
   COURIER_TRANSIT_LABEL,
@@ -50,8 +49,8 @@ export function OrderTrackingView({
    * caller except the customer Orders page. */
   showShippingDetails?: boolean
 }) {
-  const supportEmail = useSupportSettingsStore((s) => s.supportEmail)
   const { settings } = usePublicSettings()
+  const supportEmail = settings.support_email || settings.site_email
   const office = deriveOfficeAddress(settings)
   const current = deriveCurrentStatus(order)
   const deliveryWindow = estimateDeliveryWindow(order)

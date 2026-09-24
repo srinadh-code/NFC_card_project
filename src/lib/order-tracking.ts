@@ -89,18 +89,28 @@ export interface CurrentStatus {
 
 /** The one canonical "where is this order right now" derivation — every
  * view (customer, public, admin) should call this rather than each
- * re-deriving it slightly differently from order.status/tracking. */
+ * re-deriving it slightly differently from order.status/tracking.
+ *
+ * "Current" is the most recently *reached* step (the last one marked
+ * `done`), not the next upcoming one — an order the backend has marked
+ * Shipped is currently AT "Shipped" (✓ and Current together), not "in
+ * transit toward" the next pending step. Only once every step is done does
+ * it read as fully "delivered". */
 export function deriveCurrentStatus(order: Order): CurrentStatus {
   if (order.status === "Cancelled") {
     return { label: "Cancelled", kind: "cancelled", index: -1 }
   }
   const steps = order.tracking
-  const firstNotDone = steps.findIndex((s) => !s.done)
-  if (firstNotDone === -1) {
-    const lastIndex = steps.length - 1
-    return { label: steps[lastIndex]?.label ?? "Delivered", kind: "delivered", index: lastIndex }
+  const lastIndex = steps.length - 1
+  if (steps[lastIndex]?.done) {
+    return { label: steps[lastIndex].label, kind: "delivered", index: lastIndex }
   }
-  return { label: steps[firstNotDone].label, kind: "in-progress", index: firstNotDone }
+  let lastDoneIndex = -1
+  for (let i = 0; i < steps.length; i++) {
+    if (steps[i].done) lastDoneIndex = i
+  }
+  const index = lastDoneIndex === -1 ? 0 : lastDoneIndex
+  return { label: steps[index]?.label ?? "Order Placed", kind: "in-progress", index }
 }
 
 /** A real order date + a fixed, stated processing/transit policy window —

@@ -26,6 +26,11 @@ const FALLBACK_SETTINGS: PublicGeneralSettings = {
   office_pincode: "",
   office_country: "India",
   office_phone: "",
+  support_email: "",
+  support_phone: "",
+  website_url: "",
+  company_logo_url: null,
+  favicon_url: null,
 }
 
 /**

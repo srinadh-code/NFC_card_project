@@ -44,6 +44,12 @@ export interface HowItFeels extends WithId {
   badge: string
   heading: string
   description: string
+  image_url: string | null
+  is_active: boolean
+}
+
+export interface HomeOurStory extends WithId {
+  image_url: string | null
   is_active: boolean
 }
 
@@ -341,6 +347,7 @@ export interface PublicHomePayload {
   hero_features: HeroFeature[]
   bottom_bar: BottomBarItem[]
   how_it_feels: (HowItFeels & { points: HowItFeelsPoint[] }) | null
+  our_story: HomeOurStory | null
   companies: Company[]
   statistics: Statistic[]
   values: Value[]
@@ -385,6 +392,11 @@ export interface GeneralSettings extends WithId {
   office_pincode: string
   office_country: string
   office_phone: string
+  support_email: string
+  support_phone: string
+  website_url: string
+  company_logo_url: string | null
+  favicon_url: string | null
   updated_at: string
 }
 

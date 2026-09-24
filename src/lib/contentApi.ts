@@ -24,6 +24,7 @@ import type {
   GeneralSettings,
   Hero,
   HeroFeature,
+  HomeOurStory,
   HowItFeels,
   HowItFeelsPoint,
   HowItWorksStep,
@@ -163,8 +164,15 @@ export const heroApi = {
 }
 export const heroFeaturesApi = makeCrudApi<HeroFeature>(`${ADMIN}/home/hero-features`)
 export const bottomBarApi = makeCrudApi<BottomBarItem>(`${ADMIN}/home/bottom-bar`)
-export const howItFeelsApi = makeSingletonApi<HowItFeels>(`${ADMIN}/home/how-it-feels`)
+export const howItFeelsApi = {
+  ...makeSingletonApi<HowItFeels>(`${ADMIN}/home/how-it-feels`),
+  ...makeSingletonImageApi<HowItFeels>(`${ADMIN}/home/how-it-feels`),
+}
 export const howItFeelsPointsApi = makeCrudApi<HowItFeelsPoint>(`${ADMIN}/home/how-it-feels-points`)
+export const homeOurStoryApi = {
+  ...makeSingletonApi<HomeOurStory>(`${ADMIN}/home/our-story`),
+  ...makeSingletonImageApi<HomeOurStory>(`${ADMIN}/home/our-story`),
+}
 export const ctaApi = makeSingletonApi<Cta>(`${ADMIN}/home/cta`)
 
 // ---------------------------------------------------------------------
@@ -278,7 +286,15 @@ export const statisticsApi = makeCrudApi<Statistic>(`${ADMIN}/statistics`)
 // General Settings (singleton) — Admin Settings > General
 // ---------------------------------------------------------------------
 
-export const settingsApi = makeSingletonApi<GeneralSettings>(`${ADMIN}/settings`)
+const settingsLogoImageApi = makeExactImageApi<GeneralSettings>(`${ADMIN}/settings/logo/`)
+const settingsFaviconImageApi = makeExactImageApi<GeneralSettings>(`${ADMIN}/settings/favicon/`)
+export const settingsApi = {
+  ...makeSingletonApi<GeneralSettings>(`${ADMIN}/settings`),
+  uploadLogo: settingsLogoImageApi.uploadImage,
+  removeLogo: settingsLogoImageApi.removeImage,
+  uploadFavicon: settingsFaviconImageApi.uploadImage,
+  removeFavicon: settingsFaviconImageApi.removeImage,
+}
 export const paymentSettingsApi = makeSingletonApi<PaymentSettings>(`${ADMIN}/payment-settings`)
 export const shippingSettingsApi = makeSingletonApi<ShippingSettings>(`${ADMIN}/shipping-settings`)
 export const emailSettingsApi = makeSingletonApi<EmailSettings>(`${ADMIN}/email-settings`)

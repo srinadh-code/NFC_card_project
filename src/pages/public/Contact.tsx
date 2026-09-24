@@ -12,7 +12,6 @@ import { buildMailtoHref, buildTelHref, cn } from "@/lib/utils"
 import { publicWebsiteApi } from "@/lib/contentApi"
 import { ApiError } from "@/lib/api"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
-import { useSupportSettingsStore } from "@/store/support-settings-store"
 
 const INITIAL_FORM = { fullName: "", email: "", subject: "", message: "" }
 
@@ -23,8 +22,8 @@ export default function Contact() {
   // of truth for these two; falling back to Site Email/Phone (Basic
   // Information) only for a site that hasn't configured Support & Website
   // yet, so this never regresses to a blank card.
-  const supportEmail = useSupportSettingsStore((s) => s.supportEmail) || settings.site_email
-  const supportPhone = useSupportSettingsStore((s) => s.supportPhone) || settings.site_phone
+  const supportEmail = settings.support_email || settings.site_email
+  const supportPhone = settings.support_phone || settings.site_phone
 
   const INFO = [
     { icon: Mail, label: "Email", value: supportEmail, href: buildMailtoHref(supportEmail) },

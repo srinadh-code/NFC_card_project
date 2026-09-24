@@ -248,6 +248,7 @@ export default function Home() {
             heading={data.how_it_feels.heading}
             description={data.how_it_feels.description}
             points={data.how_it_feels.points}
+            imageUrl={data.how_it_feels.image_url}
           />
         )
       )}
@@ -327,7 +328,13 @@ export default function Home() {
             </div>
             <div className="relative flex items-center justify-center">
               <div className="absolute size-72 rounded-full bg-gradient-to-br from-[#4F46E5]/10 via-[#7C3AED]/10 to-[#EC4899]/10 blur-3xl" />
-              <img src={heroImg} alt="VR's NEXORA story" className="relative z-10 w-full max-w-sm" />
+              {/* Admin-managed via Website Content → Home → Our Story Image,
+                  falls back to the bundled illustration when unset. */}
+              <img
+                src={data?.our_story?.image_url || heroImg}
+                alt="VR's NEXORA story"
+                className="relative z-10 w-full max-w-sm"
+              />
             </div>
           </div>
           {isLoading ? (

@@ -16,7 +16,6 @@ import { toast } from "sonner"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
 import { buildMailtoHref, buildTelHref } from "@/lib/utils"
 import { BrandMark } from "@/components/layout/BrandMark"
-import { useSupportSettingsStore } from "@/store/support-settings-store"
 
 const QUICK_LINKS = [
   { to: "/", label: "Home" },
@@ -58,8 +57,8 @@ export default function Footer() {
   // of truth here — falling back to Site Email/Phone (Basic Information)
   // only for a site that hasn't configured Support & Website yet, same as
   // Contact.tsx, so this never regresses to a blank footer row.
-  const supportEmail = useSupportSettingsStore((s) => s.supportEmail) || settings.site_email
-  const supportPhone = useSupportSettingsStore((s) => s.supportPhone) || settings.site_phone
+  const supportEmail = settings.support_email || settings.site_email
+  const supportPhone = settings.support_phone || settings.site_phone
   const mailtoHref = buildMailtoHref(supportEmail)
   const telHref = buildTelHref(supportPhone)
 

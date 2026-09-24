@@ -13,10 +13,20 @@ import {
   featuresApi,
   heroApi,
   heroFeaturesApi,
+  homeOurStoryApi,
   howItFeelsApi,
   howItFeelsPointsApi,
 } from "@/lib/contentApi"
-import type { BottomBarItem, Cta, Feature, Hero, HeroFeature, HowItFeels, HowItFeelsPoint } from "@/types/content"
+import type {
+  BottomBarItem,
+  Cta,
+  Feature,
+  Hero,
+  HeroFeature,
+  HomeOurStory,
+  HowItFeels,
+  HowItFeelsPoint,
+} from "@/types/content"
 
 // Small uppercase divider that groups the fields below it under the actual
 // visual section of the public Home page they control — the Home tab
@@ -213,6 +223,15 @@ function HowItFeelsSection() {
       onSave={howItFeels.save}
     >
       <div className="flex flex-col gap-1.5 sm:col-span-2">
+        <Label>Showcase Illustration Image</Label>
+        <ImageUploadField
+          currentUrl={howItFeels.values.image_url}
+          disabled={!howItFeels.data}
+          onUpload={async (file) => howItFeels.applyServerUpdate(await howItFeelsApi.uploadImage(file))}
+          onRemove={async () => howItFeels.applyServerUpdate(await howItFeelsApi.removeImage())}
+        />
+      </div>
+      <div className="flex flex-col gap-1.5 sm:col-span-2">
         <Label htmlFor="hif-badge">Badge</Label>
         <Input id="hif-badge" value={howItFeels.values.badge ?? ""} onChange={(e) => howItFeels.setField("badge", e.target.value)} />
       </div>
@@ -254,6 +273,35 @@ function HowItFeelsPointsSection() {
         </>
       )}
     />
+  )
+}
+
+function OurStorySection() {
+  const ourStory = useSingletonSection<HomeOurStory>({
+    queryKey: ["content", "home", "our-story"],
+    get: homeOurStoryApi.get,
+    update: homeOurStoryApi.update,
+    label: "Our Story Image",
+  })
+
+  return (
+    <SingletonSectionCard
+      title="Our Story Image"
+      description='The layered NFC card illustration next to the "Our Story" copy, further down the Home page.'
+      isLoading={ourStory.isLoading}
+      isSaving={ourStory.isSaving}
+      onSave={ourStory.save}
+    >
+      <div className="flex flex-col gap-1.5 sm:col-span-2">
+        <Label>Illustration Image</Label>
+        <ImageUploadField
+          currentUrl={ourStory.values.image_url}
+          disabled={!ourStory.data}
+          onUpload={async (file) => ourStory.applyServerUpdate(await homeOurStoryApi.uploadImage(file))}
+          onRemove={async () => ourStory.applyServerUpdate(await homeOurStoryApi.removeImage())}
+        />
+      </div>
+    </SingletonSectionCard>
   )
 }
 
@@ -366,7 +414,8 @@ function OtherHomeSectionsNote() {
         <p className="text-xs text-muted-foreground">
           Two more bits of Home page text ("Our Story" paragraphs and the final "Ready to
           Experience..." banner) are still hardcoded in the page itself and aren't editable from
-          here yet.
+          here yet — only the "Our Story" illustration image is (see the Our Story Image section
+          above).
         </p>
       </CardContent>
     </Card>
@@ -381,6 +430,7 @@ export default function HomeTab() {
       <BottomBarSection />
       <HowItFeelsSection />
       <HowItFeelsPointsSection />
+      <OurStorySection />
       <WhyChooseHighlightsSection />
       <CtaSection />
       <OtherHomeSectionsNote />
