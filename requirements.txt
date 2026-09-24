@@ -15,6 +15,11 @@ cloudinary==1.44.2
 # already installed transitively via djangorestframework-simplejwt; pinned
 # explicitly here now that accounts/ imports both directly.
 PyJWT==2.12.1
+# PyJWT's RS256 verification (used for Google's ID tokens — Google always
+# signs with RS256, never HS256) needs this to be installed too; simplejwt's
+# own tokens use HS256 and never needed it, which is why this was missing
+# until accounts/google_oauth.py started verifying real RS256 signatures.
+cryptography==44.0.0
 requests==2.33.1
 
 # Production server + Render-specific plumbing. Harmless locally — gunicorn
