@@ -7,6 +7,7 @@ from website_content.models import (
     HomeHeroFeatureHighlight,
     HomeHowItFeels,
     HomeHowItFeelsPoint,
+    HomeOurStory,
 )
 
 
@@ -45,9 +46,19 @@ class HomeBottomBarItemSerializer(serializers.ModelSerializer):
 
 
 class HomeHowItFeelsSerializer(serializers.ModelSerializer):
+    image_url = serializers.CharField(read_only=True)
+
     class Meta:
         model = HomeHowItFeels
-        fields = ["id", "badge", "heading", "description", "is_active"]
+        fields = ["id", "badge", "heading", "description", "image_url", "is_active"]
+
+
+class HomeOurStorySerializer(serializers.ModelSerializer):
+    image_url = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = HomeOurStory
+        fields = ["id", "image_url", "is_active"]
 
 
 class HomeHowItFeelsPointSerializer(serializers.ModelSerializer):

@@ -4,6 +4,7 @@ from .home import (
     HomeBottomBarItem,
     HomeHowItFeels,
     HomeHowItFeelsPoint,
+    HomeOurStory,
     HomeCTA,
 )
 from .about import (
@@ -48,6 +49,7 @@ __all__ = [
     "HomeBottomBarItem",
     "HomeHowItFeels",
     "HomeHowItFeelsPoint",
+    "HomeOurStory",
     "HomeCTA",
     "AboutPage",
     "AboutFeatureHighlight",

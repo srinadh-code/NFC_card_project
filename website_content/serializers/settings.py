@@ -1,3 +1,5 @@
+import re
+
 from rest_framework import serializers
 
 from website_content.models import (
@@ -8,9 +10,18 @@ from website_content.models import (
     ShippingSettings,
 )
 
+_SUPPORT_PHONE_RE = re.compile(r"^[+]?[\d\s-]{7,15}$")
+
 
 class GeneralSettingsSerializer(serializers.ModelSerializer):
-    """Admin read/write — includes bookkeeping fields."""
+    """Admin read/write — includes bookkeeping fields. `company_logo_url`/
+    `favicon_url` are read-only here: they're set via the dedicated
+    upload/remove image endpoints (GeneralSettingsLogoAdminView/
+    GeneralSettingsFaviconAdminView), same convention as every other
+    admin-managed image in this app — never through this PATCH body."""
+
+    company_logo_url = serializers.CharField(read_only=True)
+    favicon_url = serializers.CharField(read_only=True)
 
     class Meta:
         model = GeneralSettings
@@ -33,6 +44,11 @@ class GeneralSettingsSerializer(serializers.ModelSerializer):
             "office_pincode",
             "office_country",
             "office_phone",
+            "support_email",
+            "support_phone",
+            "website_url",
+            "company_logo_url",
+            "favicon_url",
             "updated_at",
         ]
         read_only_fields = ["id", "updated_at"]
@@ -41,6 +57,12 @@ class GeneralSettingsSerializer(serializers.ModelSerializer):
         value = value.strip()
         if value and not (value.isdigit() and len(value) == 6):
             raise serializers.ValidationError("PIN code must contain exactly 6 digits.")
+        return value
+
+    def validate_support_phone(self, value):
+        value = value.strip()
+        if value and not _SUPPORT_PHONE_RE.match(value):
+            raise serializers.ValidationError("Enter a valid phone number.")
         return value
 
 
@@ -127,4 +149,9 @@ class PublicGeneralSettingsSerializer(serializers.ModelSerializer):
             "office_pincode",
             "office_country",
             "office_phone",
+            "support_email",
+            "support_phone",
+            "website_url",
+            "company_logo_url",
+            "favicon_url",
         ]

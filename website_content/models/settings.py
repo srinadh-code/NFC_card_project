@@ -23,6 +23,23 @@ class GeneralSettings(models.Model):
     # choices list — same convention as CustomerSettings.timezone.
     timezone = models.CharField(max_length=50, default="Asia/Kolkata")
 
+    # Support & Website — how customers reach support, and the public site
+    # link. Read by the public site's Footer/Contact/order-tracking "Contact
+    # Support" action (see website_content/views/public.py).
+    support_email = models.EmailField(blank=True, default="")
+    support_phone = models.CharField(max_length=30, blank=True, default="")
+    website_url = models.URLField(max_length=255, blank=True, default="")
+
+    # Branding — Company Logo / Favicon, same admin-managed
+    # upload/replace/remove image pattern as every other Website Content
+    # image (see AdminSingletonImageUploadAPIView), stored in Cloudinary via
+    # common.image_storage. Read by BrandMark (logo) and the public site's
+    # <link rel="icon"> (favicon).
+    company_logo_url = models.URLField(max_length=500, blank=True, default="")
+    company_logo_public_id = models.CharField(max_length=255, blank=True, default="")
+    favicon_url = models.URLField(max_length=500, blank=True, default="")
+    favicon_public_id = models.CharField(max_length=255, blank=True, default="")
+
     # Office / Dispatch Address — where every order physically ships FROM
     # (shown as "From" on tracking/shipping UI). Deliberately separate from
     # `site_address` above (a single free-text line used for public contact

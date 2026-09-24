@@ -24,7 +24,17 @@ structurally different flow and is left as-is.
 import cloudinary.uploader
 from rest_framework.exceptions import ValidationError
 
-ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/svg+xml"}
+ALLOWED_CONTENT_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/svg+xml",
+    # .ico — needed for Website Content > Settings > General > Favicon,
+    # which the admin UI explicitly supports alongside PNG/SVG. Browsers
+    # report .ico files under either MIME type depending on OS/browser.
+    "image/x-icon",
+    "image/vnd.microsoft.icon",
+}
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5MB
 
 

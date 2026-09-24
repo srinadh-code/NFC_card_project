@@ -4,6 +4,7 @@ from .home import (
     HomeBottomBarItemSerializer,
     HomeHowItFeelsSerializer,
     HomeHowItFeelsPointSerializer,
+    HomeOurStorySerializer,
     HomeCTASerializer,
 )
 from .about import (
@@ -54,6 +55,7 @@ __all__ = [
     "HomeBottomBarItemSerializer",
     "HomeHowItFeelsSerializer",
     "HomeHowItFeelsPointSerializer",
+    "HomeOurStorySerializer",
     "HomeCTASerializer",
     "AboutPageSerializer",
     "AboutFeatureHighlightSerializer",

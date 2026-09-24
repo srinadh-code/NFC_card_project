@@ -35,6 +35,7 @@ from website_content.models import (
     HomeHeroFeatureHighlight,
     HomeHowItFeels,
     HomeHowItFeelsPoint,
+    HomeOurStory,
     HowItWorksStep,
     OrderCardPageSettings,
     OrderCardProduct,
@@ -65,6 +66,7 @@ from website_content.serializers import (
     HomeHeroSerializer,
     HomeHowItFeelsPointSerializer,
     HomeHowItFeelsSerializer,
+    HomeOurStorySerializer,
     HowItWorksStepSerializer,
     OrderCardPageSettingsSerializer,
     OrderCardProductSerializer,
@@ -87,6 +89,7 @@ class HomePublicView(APIView):
     def get(self, request):
         hero = HomeHero.objects.filter(is_active=True).first()
         how_it_feels = HomeHowItFeels.objects.filter(is_active=True).first()
+        our_story = HomeOurStory.objects.filter(is_active=True).first()
         cta = HomeCTA.objects.filter(is_active=True).first()
 
         data = {
@@ -107,6 +110,7 @@ class HomePublicView(APIView):
                 if how_it_feels
                 else None
             ),
+            "our_story": HomeOurStorySerializer(our_story).data if our_story else None,
             "companies": CompanySerializer(Company.objects.filter(is_active=True), many=True).data,
             "statistics": StatisticSerializer(
                 Statistic.objects.filter(is_active=True, page=Statistic.Page.HOME), many=True
