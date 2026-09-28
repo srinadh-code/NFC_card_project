@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     "nfc_cards",
     "orders",
     "reviews",
+    "testimonials",
     "support",
     "analytics",
     "reports",
@@ -312,6 +313,7 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "otp": "5/min",
         "lead_submit": "10/min",
+        "testimonial_submit": "10/hour",
     },
 }
 

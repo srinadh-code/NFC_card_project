@@ -45,7 +45,6 @@ from website_content.models import (
     SecuritySettings,
     ShippingSettings,
     Statistic,
-    Testimonial,
     Value,
 )
 from website_content.serializers import (
@@ -82,7 +81,6 @@ from website_content.serializers import (
     SecuritySettingsSerializer,
     ShippingSettingsSerializer,
     StatisticSerializer,
-    TestimonialSerializer,
     ValueSerializer,
 )
 
@@ -422,7 +420,7 @@ class ProfileTemplatePreviewImageAdminView(AdminImageUploadAPIView):
 
 
 # ---------------------------------------------------------------------------
-# Shared: Values, Features, How It Works, FAQs, Testimonials, Companies, Stats
+# Shared: Values, Features, How It Works, FAQs, Companies, Stats
 # ---------------------------------------------------------------------------
 
 
@@ -480,29 +478,6 @@ class FaqAdminDetailView(AdminDetailAPIView):
 
 class FaqAdminReorderView(AdminReorderAPIView):
     model = Faq
-
-
-class TestimonialAdminListView(AdminListCreateAPIView):
-    model = Testimonial
-    serializer_class = TestimonialSerializer
-
-
-class TestimonialAdminDetailView(AdminDetailAPIView):
-    model = Testimonial
-    serializer_class = TestimonialSerializer
-    image_public_id_field = "image_public_id"
-
-
-class TestimonialAdminReorderView(AdminReorderAPIView):
-    model = Testimonial
-
-
-class TestimonialImageAdminView(AdminImageUploadAPIView):
-    model = Testimonial
-    serializer_class = TestimonialSerializer
-    url_field = "image_url"
-    public_id_field = "image_public_id"
-    folder = "website/testimonials"
 
 
 class CompanyAdminListView(AdminListCreateAPIView):

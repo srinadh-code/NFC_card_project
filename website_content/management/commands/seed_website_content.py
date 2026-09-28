@@ -29,7 +29,6 @@ from website_content.models import (
     HomeHowItFeelsPoint,
     HowItWorksStep,
     Statistic,
-    Testimonial,
     Value,
 )
 
@@ -44,7 +43,6 @@ class Command(BaseCommand):
         self._seed_features()
         self._seed_how_it_works()
         self._seed_faqs()
-        self._seed_testimonials()
         self._seed_companies()
         self._seed_statistics()
         self.stdout.write(self.style.SUCCESS("Website content seeded."))
@@ -357,81 +355,6 @@ class Command(BaseCommand):
         ]
         for order, (question, answer) in enumerate(faqs):
             Faq.objects.get_or_create(question=question, defaults=dict(answer=answer, display_order=order))
-
-    def _seed_testimonials(self):
-        testimonials = [
-            (
-                "Ananya Reddy",
-                "Founder & CEO",
-                "Nimbus Growth Studio",
-                5,
-                "https://api.dicebear.com/9.x/notionists/svg?seed=ananya-reddy",
-                "VR's NEXORA replaced an entire box of paper cards. I tap my phone at "
-                "every event now and my whole profile — portfolio, socials, contact — "
-                "opens instantly for the other person.",
-            ),
-            (
-                "Rahul Menon",
-                "VP of Sales",
-                "Orbital Systems",
-                5,
-                "https://api.dicebear.com/9.x/notionists/svg?seed=rahul-menon",
-                "Our field sales team activated 40 cards in a day. The analytics "
-                "dashboard alone justified the switch — we finally know which "
-                "conversations turn into leads.",
-            ),
-            (
-                "Priya Nair",
-                "Freelance Designer",
-                "Studio Nair",
-                5,
-                "https://api.dicebear.com/9.x/notionists/svg?seed=priya-nair",
-                "Clients are always impressed when I tap my card on their phone. "
-                "Updating my portfolio link takes ten seconds and everyone who has "
-                "my card automatically sees the latest version.",
-            ),
-            (
-                "Karthik Iyer",
-                "Co-Founder",
-                "Ledgerly",
-                4,
-                "https://api.dicebear.com/9.x/notionists/svg?seed=karthik-iyer",
-                "Setup took less than five minutes. The QR fallback is a nice touch "
-                "for people whose phones don't support NFC — nobody gets left out.",
-            ),
-            (
-                "Sneha Kulkarni",
-                "HR Business Partner",
-                "Vertex Retail",
-                5,
-                "https://api.dicebear.com/9.x/notionists/svg?seed=sneha-kulkarni",
-                "We rolled out VR's NEXORA cards to the whole leadership team. "
-                "Managing everyone's cards from one admin panel makes onboarding new "
-                "hires painless.",
-            ),
-            (
-                "Arjun Desai",
-                "Business Development Manager",
-                "Skyline Exports",
-                4,
-                "https://api.dicebear.com/9.x/notionists/svg?seed=arjun-desai",
-                "I travel constantly for trade shows. Being able to update my number "
-                "and email from my phone the moment they change — without "
-                "reprinting anything — has saved me real money.",
-            ),
-        ]
-        for order, (name, designation, company, rating, avatar, review) in enumerate(testimonials):
-            Testimonial.objects.get_or_create(
-                name=name,
-                defaults=dict(
-                    designation=designation,
-                    company=company,
-                    rating=rating,
-                    image_url=avatar,
-                    review=review,
-                    display_order=order,
-                ),
-            )
 
     def _seed_companies(self):
         companies = ["Google", "Microsoft", "Amazon", "Airtel", "Tata", "Flipkart"]

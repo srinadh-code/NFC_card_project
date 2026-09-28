@@ -31,7 +31,6 @@ from .order_card import (
 )
 from .how_it_works import HowItWorksStepSerializer
 from .faqs import FaqSerializer
-from .testimonials import TestimonialSerializer
 from .companies import CompanySerializer
 from .statistics import StatisticSerializer
 from .contact import (
@@ -75,7 +74,6 @@ __all__ = [
     "ProfileTemplatePreviewSerializer",
     "HowItWorksStepSerializer",
     "FaqSerializer",
-    "TestimonialSerializer",
     "CompanySerializer",
     "StatisticSerializer",
     "ContactMessageSerializer",
