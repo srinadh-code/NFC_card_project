@@ -31,6 +31,7 @@ class AdminOrderSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             "id",
+            "order_number",
             "customer_id",
             "customer_name",
             "customer_email",

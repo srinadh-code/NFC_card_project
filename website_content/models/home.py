@@ -86,6 +86,13 @@ class HomeHowItFeels(models.Model):
     badge = models.CharField(max_length=150, blank=True, default="")
     heading = models.CharField(max_length=255, blank=True, default="")
     description = models.TextField(blank=True, default="")
+
+    # The NFC card / phone showcase illustration — same admin-managed image
+    # pattern as HomeHero.phone_image_url. Falls back to the code-built
+    # phone+card mockup on the public page when unset (see NfcShowcase).
+    image_url = models.URLField(max_length=500, blank=True, default="")
+    image_public_id = models.CharField(max_length=255, blank=True, default="")
+
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -110,6 +117,26 @@ class HomeHowItFeelsPoint(models.Model):
 
     def __str__(self):
         return self.text
+
+
+class HomeOurStory(models.Model):
+    """Singleton — the image for the Home page's "Our Story" section.
+    The section's copy is still hardcoded in the page itself (see
+    HomeTab's OtherHomeSectionsNote); only the illustration is admin-managed
+    here, same pattern as every other admin-managed section image. Falls
+    back to the code-bundled hero.png illustration on the public page when
+    unset."""
+
+    image_url = models.URLField(max_length=500, blank=True, default="")
+    image_public_id = models.CharField(max_length=255, blank=True, default="")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Home Our Story"
+        verbose_name_plural = "Home Our Story"
+
+    def __str__(self):
+        return "Our Story Image"
 
 
 class HomeCTA(models.Model):

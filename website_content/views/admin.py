@@ -35,6 +35,7 @@ from website_content.models import (
     HomeHeroFeatureHighlight,
     HomeHowItFeels,
     HomeHowItFeelsPoint,
+    HomeOurStory,
     HowItWorksStep,
     OrderCardPageSettings,
     OrderCardProduct,
@@ -71,6 +72,7 @@ from website_content.serializers import (
     HomeHeroSerializer,
     HomeHowItFeelsPointSerializer,
     HomeHowItFeelsSerializer,
+    HomeOurStorySerializer,
     HowItWorksStepSerializer,
     OrderCardPageSettingsSerializer,
     OrderCardProductSerializer,
@@ -152,6 +154,14 @@ class HomeHowItFeelsAdminView(AdminSingletonAPIView):
     serializer_class = HomeHowItFeelsSerializer
 
 
+class HomeHowItFeelsImageAdminView(AdminSingletonImageUploadAPIView):
+    model = HomeHowItFeels
+    serializer_class = HomeHowItFeelsSerializer
+    url_field = "image_url"
+    public_id_field = "image_public_id"
+    folder = "website/home"
+
+
 class HomeHowItFeelsPointAdminListView(AdminListCreateAPIView):
     model = HomeHowItFeelsPoint
     serializer_class = HomeHowItFeelsPointSerializer
@@ -164,6 +174,19 @@ class HomeHowItFeelsPointAdminDetailView(AdminDetailAPIView):
 
 class HomeHowItFeelsPointAdminReorderView(AdminReorderAPIView):
     model = HomeHowItFeelsPoint
+
+
+class HomeOurStoryAdminView(AdminSingletonAPIView):
+    model = HomeOurStory
+    serializer_class = HomeOurStorySerializer
+
+
+class HomeOurStoryImageAdminView(AdminSingletonImageUploadAPIView):
+    model = HomeOurStory
+    serializer_class = HomeOurStorySerializer
+    url_field = "image_url"
+    public_id_field = "image_public_id"
+    folder = "website/home"
 
 
 class HomeCTAAdminView(AdminSingletonAPIView):
@@ -598,6 +621,22 @@ class ContactMessageReplyAdminView(APIView):
 class GeneralSettingsAdminView(AdminSingletonAPIView):
     model = GeneralSettings
     serializer_class = GeneralSettingsSerializer
+
+
+class GeneralSettingsLogoAdminView(AdminSingletonImageUploadAPIView):
+    model = GeneralSettings
+    serializer_class = GeneralSettingsSerializer
+    url_field = "company_logo_url"
+    public_id_field = "company_logo_public_id"
+    folder = "website/settings"
+
+
+class GeneralSettingsFaviconAdminView(AdminSingletonImageUploadAPIView):
+    model = GeneralSettings
+    serializer_class = GeneralSettingsSerializer
+    url_field = "favicon_url"
+    public_id_field = "favicon_public_id"
+    folder = "website/settings"
 
 
 class PaymentSettingsAdminView(AdminSingletonAPIView):
