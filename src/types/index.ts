@@ -307,14 +307,4 @@ export interface CustomerUser {
   avatar: string
 }
 
-export interface Testimonial {
-  id: string
-  name: string
-  role: string
-  company: string
-  avatar: string
-  rating: number
-  quote: string
-}
-
 export type ThemeMode = "light" | "dark" | "system"

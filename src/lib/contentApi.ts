@@ -43,7 +43,6 @@ import type {
   ShippingSettings,
   Statistic,
   StatisticPage,
-  Testimonial,
   Value,
   WhyChoose,
   WithId,
@@ -90,8 +89,8 @@ interface ImageApi<T> {
   removeImage: (id: number) => Promise<T>
 }
 
-// Per-row image upload/remove, for collection resources (testimonials,
-// companies) whose rows each carry their own image.
+// Per-row image upload/remove, for collection resources (companies,
+// profile templates) whose rows each carry their own image.
 function makeImageApi<T>(basePath: string): ImageApi<T> {
   return {
     uploadImage: (id, file) => {
@@ -272,10 +271,6 @@ export const valuesApi = makeCrudApi<Value>(`${ADMIN}/values`)
 export const featuresApi = makeCrudApi<Feature>(`${ADMIN}/features`)
 export const howItWorksApi = makeCrudApi<HowItWorksStep>(`${ADMIN}/how-it-works`)
 export const faqsApi = makeCrudApi<Faq>(`${ADMIN}/faqs`)
-export const testimonialsApi = {
-  ...makeCrudApi<Testimonial>(`${ADMIN}/testimonials`),
-  ...makeImageApi<Testimonial>(`${ADMIN}/testimonials`),
-}
 export const companiesApi = {
   ...makeCrudApi<Company>(`${ADMIN}/companies`),
   ...makeImageApi<Company>(`${ADMIN}/companies`),
@@ -355,7 +350,6 @@ export const publicWebsiteApi = {
   getHowItWorks: () => request<HowItWorksStep[]>(`${PUBLIC}/how-it-works/`, { auth: false }),
   getFaqs: () => request<Faq[]>(`${PUBLIC}/faqs/`, { auth: false }),
   getValues: () => request<Value[]>(`${PUBLIC}/values/`, { auth: false }),
-  getTestimonials: () => request<Testimonial[]>(`${PUBLIC}/testimonials/`, { auth: false }),
   getCompanies: () => request<Company[]>(`${PUBLIC}/companies/`, { auth: false }),
   getStatistics: (page?: StatisticPage) => request<Statistic[]>(`${PUBLIC}/statistics/${buildQuery({ page })}`, { auth: false }),
   submitContactMessage: (body: { name: string; email: string; subject: string; message: string }) =>

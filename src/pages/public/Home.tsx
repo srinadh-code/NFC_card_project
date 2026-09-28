@@ -16,27 +16,7 @@ import { cardClass } from "@/components/marketing/PremiumCard"
 import { cn } from "@/lib/utils"
 import { resolveIcon } from "@/lib/icon-map"
 import { publicWebsiteApi } from "@/lib/contentApi"
-import { publicReviewsApi, type ApiPublicReview } from "@/lib/api"
-import type { Testimonial } from "@/types"
-
-const AVATAR_SEEDS = ["ananya-reddy", "rahul-menon", "priya-nair", "karthik-iyer"]
-
-// Real, customer-submitted reviews (see tracker-backend/reviews/) — not
-// website_content.Testimonial, which is admin-authored marketing copy with
-// no customer/order link. Same TestimonialCard UI either way; only the
-// data source changed. role/company are left blank (a review has no job
-// title) — TestimonialCard skips that line entirely when both are empty.
-function toReviewTestimonial(r: ApiPublicReview): Testimonial {
-  return {
-    id: String(r.id),
-    name: r.customer_name,
-    role: "",
-    company: "",
-    avatar: `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(r.customer_name)}`,
-    rating: r.rating,
-    quote: r.review_text,
-  }
-}
+import { usePublicTestimonials } from "@/hooks/useTestimonials"
 
 function ErrorMessage() {
   return (
@@ -58,10 +38,10 @@ export default function Home() {
     queryKey: ["content", "public-features"],
     queryFn: publicWebsiteApi.getFeatures,
   })
-  const { data: reviews, isLoading: reviewsLoading } = useQuery({
-    queryKey: ["reviews", "public"],
-    queryFn: publicReviewsApi.list,
-  })
+  // Real, customer-submitted testimonials — the API only ever returns
+  // APPROVED + active ones, so nothing needs filtering client-side.
+  const { data: testimonials, isLoading: testimonialsLoading } = usePublicTestimonials()
+  const customerPhotos = (testimonials ?? []).filter((t) => t.profile_image).slice(0, 3)
 
   const hero = data?.hero ?? null
 
@@ -199,12 +179,12 @@ export default function Home() {
                       </span>
                     ) : (
                       <div className="flex shrink-0 -space-x-3">
-                        {AVATAR_SEEDS.slice(0, 3).map((seed) => (
+                        {customerPhotos.map((t) => (
                           <img
-                            key={seed}
-                            src={`https://api.dicebear.com/9.x/notionists/svg?seed=${seed}`}
+                            key={t.id}
+                            src={t.profile_image}
                             alt=""
-                            className="size-10 rounded-full border-2 border-card bg-secondary"
+                            className="size-10 rounded-full border-2 border-card bg-secondary object-cover"
                           />
                         ))}
                         <span className="flex size-10 items-center justify-center rounded-full border-2 border-card bg-gradient-brand text-xs font-bold text-white">
@@ -383,10 +363,8 @@ export default function Home() {
         </section>
       )}
 
-      {/* Testimonials — real customer reviews (GET /api/reviews/public/),
-          filtered server-side to is_published=True only; nothing disabled
-          ever reaches this component to hide client-side. */}
-      {reviewsLoading ? (
+      {/* Testimonials — GET /api/testimonials/ (approved + active only). */}
+      {testimonialsLoading ? (
         <section className="bg-secondary py-20">
           <div className="container-page grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
@@ -405,10 +383,10 @@ export default function Home() {
                 Real stories from people who upgraded the way they network.
               </p>
             </div>
-            {reviews && reviews.length > 0 ? (
+            {testimonials && testimonials.length > 0 ? (
               <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {reviews.map((r) => (
-                  <TestimonialCard key={r.id} testimonial={toReviewTestimonial(r)} />
+                {testimonials.map((t) => (
+                  <TestimonialCard key={t.id} testimonial={t} />
                 ))}
               </div>
             ) : (

@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import HomeTab from "./HomeTab"
 import AboutTab from "./AboutTab"
@@ -12,6 +13,10 @@ import ValuesTab from "./ValuesTab"
 import ContactMessagesTab from "./ContactMessagesTab"
 
 export default function AdminWebsiteContent() {
+  // ?tab=<value> deep-links a tab (e.g. /admin/reviews redirects to ?tab=testimonials).
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = searchParams.get("tab") || "home"
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -19,7 +24,7 @@ export default function AdminWebsiteContent() {
         <p className="text-sm text-muted-foreground">Manage the content shown on the public marketing site.</p>
       </div>
 
-      <Tabs defaultValue="home">
+      <Tabs value={tab} onValueChange={(value) => setSearchParams({ tab: value }, { replace: true })}>
         <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="home">Home</TabsTrigger>
           <TabsTrigger value="about">About</TabsTrigger>

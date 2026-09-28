@@ -22,8 +22,8 @@ import ProfilePhonePreview from "@/components/marketing/ProfilePhonePreview"
 import { Reveal } from "@/components/marketing/Reveal"
 import { resolveIcon } from "@/lib/icon-map"
 import { publicWebsiteApi } from "@/lib/contentApi"
+import { usePublicTestimonials } from "@/hooks/useTestimonials"
 
-const AVATAR_SEEDS = ["ananya-reddy", "rahul-menon", "priya-nair", "karthik-iyer"]
 
 // Fallback only for a card that has neither an admin-uploaded image nor a
 // saved gradient — keeps the grid from ever showing a blank icon badge.
@@ -31,6 +31,8 @@ const FALLBACK_GRADIENT = "linear-gradient(135deg,#4F46E5,#7C3AED)"
 
 export default function Features() {
   const navigate = useNavigate()
+  const { data: testimonials } = usePublicTestimonials()
+  const customerPhotos = (testimonials ?? []).filter((t) => t.profile_image).slice(0, 4)
   const [demoOpen, setDemoOpen] = useState(false)
 
   const { data, isLoading, isError } = useQuery({
@@ -105,16 +107,18 @@ export default function Features() {
 
             {page?.trusted_users_count && (
               <div className="mt-8 flex flex-wrap items-center gap-4">
-                <div className="flex -space-x-3">
-                  {AVATAR_SEEDS.map((seed) => (
-                    <img
-                      key={seed}
-                      src={`https://api.dicebear.com/9.x/notionists/svg?seed=${seed}`}
-                      alt=""
-                      className="size-10 rounded-full border-2 border-white bg-secondary shadow-sm"
-                    />
-                  ))}
-                </div>
+                {customerPhotos.length > 0 && (
+                  <div className="flex -space-x-3">
+                    {customerPhotos.map((t) => (
+                      <img
+                        key={t.id}
+                        src={t.profile_image}
+                        alt=""
+                        className="size-10 rounded-full border-2 border-white bg-secondary object-cover shadow-sm"
+                      />
+                    ))}
+                  </div>
+                )}
                 <div>
                   <div className="flex items-center gap-0.5">
                     {Array.from({ length: 5 }).map((_, i) => (
