@@ -75,6 +75,9 @@ def _blacklist_all_tokens_for_user(user):
         BlacklistedToken.objects.get_or_create(token=outstanding)
 
 
+    
+
+
 class RegisterView(APIView):
     permission_classes = [AllowAny]
 
@@ -97,6 +100,8 @@ class RegisterView(APIView):
             Profile.ensure_for_user(user)
 
         return success(_auth_payload(user), message="Account created.", status=201)
+    
+    
 
 
 class VerifyEmailView(APIView):
@@ -465,3 +470,11 @@ class MeView(APIView):
 
     def get(self, request):
         return success(UserSerializer(request.user).data)
+    
+    
+    
+    
+
+
+
+
