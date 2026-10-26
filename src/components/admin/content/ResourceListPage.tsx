@@ -62,6 +62,7 @@ export interface ResourceListPageProps<T extends WithId & { is_active: boolean }
   headerExtra?: ReactNode
 }
 
+
 // Generic list-management screen every simple collection tab (Values,
 // Features, HowItWorks, FAQs, Testimonials, Companies, Statistics, and the
 // various mini feature-highlight collections) configures instead of
