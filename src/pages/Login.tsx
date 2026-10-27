@@ -2,7 +2,7 @@ import { useState } from "react"
 import { Navigate, Link, useNavigate, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 import { GoogleLogin, type CredentialResponse } from "@react-oauth/google"
-import { Fingerprint, Sparkles, Zap } from "lucide-react"
+import { ArrowLeft, Fingerprint, Sparkles, Zap } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
@@ -242,6 +242,16 @@ export default function Login() {
               Admin? Sign in here
             </Link>
           </p>
+
+          <div className="flex justify-center pt-2">
+            <Link
+              to="/"
+              className="group inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-muted-foreground outline-none ring-primary/40 transition-colors hover:text-primary focus-visible:ring-2"
+            >
+              <ArrowLeft className="size-4 transition-transform group-hover:-translate-x-0.5" aria-hidden="true" />
+              Back to Website
+            </Link>
+          </div>
         </div>
       </div>
 

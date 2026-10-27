@@ -1,6 +1,9 @@
 import { useEffect } from "react"
 import { Navigate, Route, Routes } from "react-router-dom"
 
+
+
+
 import { ScrollToTop } from "@/components/ScrollToTop"
 import { useAuthStore } from "@/store/auth-store"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
@@ -24,6 +27,10 @@ import Contact from "@/pages/public/Contact"
 import Privacy from "@/pages/public/Privacy"
 import Terms from "@/pages/public/Terms"
 
+
+
+
+
 import AdminDashboard from "@/pages/admin/Dashboard"
 import AdminCustomers from "@/pages/admin/Customers"
 import AdminCustomerDetails from "@/pages/admin/CustomerDetails"
@@ -36,6 +43,10 @@ import AdminReports from "@/pages/admin/Reports"
 import AdminSettings from "@/pages/admin/Settings"
 import AdminSupport from "@/pages/admin/Support"
 import AdminWebsiteContent from "@/pages/admin/content"
+
+
+
+
 
 import Login from "@/pages/Login"
 import AdminLogin from "@/pages/admin/AdminLogin"
@@ -55,6 +66,7 @@ import CustomerSettings from "@/pages/customer/Settings"
 
 import PublicProfile from "@/pages/profile/PublicProfile"
 import NotFound from "@/pages/NotFound"
+
 
 // The favicon actually shipped in index.html — restored here the moment
 // an Admin-uploaded favicon (Settings → General → Branding) is removed.
