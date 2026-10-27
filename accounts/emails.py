@@ -46,7 +46,7 @@ def send_registration_otp_email(user, raw_code):
     it through directly rather than reading it back off the row."""
     connection, from_email = _email_connection_and_sender()
     send_mail(
-        subject="Verify your VR's NEXORA account",
+        subject="Verify your VR's GATEWAY account",
         message=(
             f"Hi {user.full_name or user.email},\n\n"
             f"Your verification code is: {raw_code}\n"
@@ -79,7 +79,7 @@ def send_order_confirmation_email(user, order):
     connection, from_email = _email_connection_and_sender()
     try:
         send_mail(
-            subject=f"Your VR's NEXORA order {order_number} is confirmed",
+            subject=f"Your VR's GATEWAY order {order_number} is confirmed",
             message=(
                 f"Hi {greeting},\n\n"
                 f"Thanks for your order — {order_number} has been placed.\n\n"
@@ -153,7 +153,7 @@ def send_password_reset_otp_email(user, raw_code, lifetime_minutes):
             json={
                 "sender": sender,
                 "to": [{"email": user.email}],
-                "subject": "Reset your VR's NEXORA password",
+                "subject": "Reset your VR's GATEWAY password",
                 "textContent": body,
             },
             timeout=10,
