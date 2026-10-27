@@ -178,7 +178,7 @@ export function AddressFormDialog({
       <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{address ? "Edit Address" : "Add New Address"}</DialogTitle>
-          <DialogDescription>Used for delivering your NEXORA NFC card orders.</DialogDescription>
+          <DialogDescription>Used for delivering your VR's GATEWAY NFC card orders.</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 sm:grid-cols-2">

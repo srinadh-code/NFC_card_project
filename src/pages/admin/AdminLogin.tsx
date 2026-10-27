@@ -69,7 +69,7 @@ export default function AdminLogin() {
           <div className="space-y-1">
             <h1 className="flex items-center justify-center gap-1.5 text-xl font-bold tracking-tight">
               <BrandMark className="size-4 rounded-sm" fallback={<Zap className="size-4" fill="currentColor" />} />
-              <span>VR&apos;s NEXORA</span>
+              <span>VR&apos;s GATEWAY</span>
             </h1>
             <p className="text-sm text-muted-foreground">Admin Portal sign-in</p>
           </div>

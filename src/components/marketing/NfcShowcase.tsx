@@ -26,8 +26,8 @@ export default function NfcShowcase({ badge, heading, description, points, image
           {imageUrl ? (
             <img
               src={imageUrl}
-              alt="VR's NEXORA — how it works"
-              className="relative z-10 max-h-[460px] w-full max-w-sm object-contain drop-shadow-2xl"
+              alt="VR's GATEWAY — how it works"
+              className="hero-image-soft-edges relative z-10 max-h-[460px] w-full max-w-sm object-contain"
             />
           ) : (
             <>
@@ -37,7 +37,7 @@ export default function NfcShowcase({ badge, heading, description, points, image
                 <div className="flex h-full w-full flex-col items-center justify-center gap-4 overflow-hidden rounded-[2rem] bg-gradient-to-b from-[#4F46E5] via-[#7C3AED] to-[#EC4899] p-6 text-center">
                   <Nfc className="size-10 text-white" />
                   <p className="text-sm font-medium text-white/90">
-                    Hold a VR's NEXORA card near this phone to share a profile
+                    Hold a VR's GATEWAY card near this phone to share a profile
                   </p>
                 </div>
               </div>

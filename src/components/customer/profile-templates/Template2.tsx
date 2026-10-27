@@ -90,7 +90,7 @@ const FOOTER_MESSAGE = "Let's Grow Together"
 export default function Template2({ profile, onShare, showContactInfo = true }: TemplateProps) {
   const theme = TEMPLATE2_THEMES[profile.futureTheme] ?? TEMPLATE2_THEMES.green
   const { enabledSocial, showPhone, showEmail } = useProfileSections(profile, showContactInfo)
-  const companyLabel = profile.company || "VR's NEXORA"
+  const companyLabel = profile.company || "VR's GATEWAY"
 
   const contactActions = [
     showPhone && { key: "call", label: "Call", icon: Phone, color: CONTACT_ACTION_COLORS.call, href: `tel:${profile.phone}` },

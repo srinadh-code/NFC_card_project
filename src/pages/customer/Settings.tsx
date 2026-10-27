@@ -345,7 +345,7 @@ export default function CustomerSettings() {
       <Card className="rounded-2xl">
         <CardHeader>
           <CardTitle>Appearance</CardTitle>
-          <CardDescription>Choose how VR's NEXORA looks on this device.</CardDescription>
+          <CardDescription>Choose how VR's GATEWAY looks on this device.</CardDescription>
         </CardHeader>
         <CardContent>
           <RadioGroup

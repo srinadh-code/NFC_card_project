@@ -153,7 +153,7 @@ export default function CustomerMyCard() {
 
   async function handleShareProfile() {
     if (!profileUrl || !profile) return
-    const result = await shareOrCopyLink(profileUrl, `${profile.fullName} — VR's NEXORA`)
+    const result = await shareOrCopyLink(profileUrl, `${profile.fullName} — VR's GATEWAY`)
     if (result === "shared") toast.success("Shared!")
     else if (result === "copied") toast.success("Sharing isn't supported here — link copied instead!")
     else if (result === "failed") toast.error("Couldn't share or copy the link.")
@@ -208,7 +208,7 @@ export default function CustomerMyCard() {
           <div className="relative flex items-start justify-between">
             <div className="flex items-center gap-2">
               <Wifi className="size-6 -rotate-90" strokeWidth={2.5} />
-              <span className="text-lg font-bold tracking-wide">VR's NEXORA</span>
+              <span className="text-lg font-bold tracking-wide">VR's GATEWAY</span>
             </div>
             <Badge className="border-white/30 bg-white/15 text-white backdrop-blur">{activeCard.status}</Badge>
           </div>
@@ -425,7 +425,7 @@ export default function CustomerMyCard() {
         <div className="space-y-1">
           <h1 className="text-2xl font-bold tracking-tight">No NFC Card Assigned Yet</h1>
           <p className="text-sm text-muted-foreground">
-            Order your VR's NEXORA card to get started, or activate one below if you already have one.
+            Order your VR's GATEWAY card to get started, or activate one below if you already have one.
           </p>
           <Button asChild className="mt-2">
             <Link to="/shop">

@@ -57,7 +57,7 @@ export default function Home() {
     <div>
       {/* Hero */}
       <section className="relative overflow-hidden bg-background pb-16 pt-16 sm:pt-20">
-        <div className="container-page grid items-center gap-12 lg:grid-cols-2">
+        <div className="container-page grid items-center gap-12 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] xl:gap-8">
           <div>
             {isLoading ? (
               <div className="space-y-4">
@@ -140,7 +140,7 @@ export default function Home() {
             {hero?.nfc_card_image_url && (
               <img
                 src={hero.nfc_card_image_url}
-                alt="VR's NEXORA NFC card"
+                alt="VR's GATEWAY NFC card"
                 className="absolute right-0 top-1/2 z-0 w-64 max-h-[380px] -translate-y-1/2 translate-x-12 rotate-6 animate-float-slower object-contain drop-shadow-2xl sm:w-80 sm:max-h-[420px] lg:w-96 lg:translate-x-16"
               />
             )}
@@ -149,8 +149,8 @@ export default function Home() {
             {hero?.phone_image_url ? (
               <img
                 src={hero.phone_image_url}
-                alt="VR's NEXORA digital profile preview"
-                className="relative z-10 w-[320px] max-h-[560px] object-contain drop-shadow-2xl sm:w-[400px] sm:max-h-[620px] lg:w-[440px] xl:w-[480px]"
+                alt="VR's GATEWAY digital profile preview"
+                className="hero-image-soft-edges relative z-10 w-full max-w-[560px] max-h-[560px] object-contain sm:max-h-[620px] lg:max-w-none xl:max-w-[760px]"
               />
             ) : (
               <div className="relative z-10 flex h-[500px] w-[300px] items-center justify-center rounded-[2.5rem] border-[6px] border-[#0F172A] bg-[#0F172A] p-6 text-center shadow-2xl sm:h-[560px] sm:w-[340px] lg:h-[620px] lg:w-[380px]">
@@ -296,12 +296,12 @@ export default function Home() {
             <div>
               <h2 className="text-3xl font-bold tracking-tight text-foreground">Our Story</h2>
               <p className="mt-4 text-muted-foreground">
-                VR's NEXORA was born from a simple frustration — running out of paper business cards
+                VR's GATEWAY was born from a simple frustration — running out of paper business cards
                 at the exact moment a great connection was made. We set out to build a smarter,
                 greener, and more memorable way to network.
               </p>
               <p className="mt-4 text-muted-foreground">
-                Today, thousands of professionals across the globe use VR's NEXORA to share their
+                Today, thousands of professionals across the globe use VR's GATEWAY to share their
                 identity in an instant, track every interaction, and keep their profile fresh
                 without ever reprinting a card.
               </p>
@@ -312,8 +312,8 @@ export default function Home() {
                   falls back to the bundled illustration when unset. */}
               <img
                 src={data?.our_story?.image_url || heroImg}
-                alt="VR's NEXORA story"
-                className="relative z-10 w-full max-w-sm"
+                alt="VR's GATEWAY story"
+                className="hero-image-soft-edges relative z-10 w-full max-w-sm"
               />
             </div>
           </div>
@@ -349,7 +349,7 @@ export default function Home() {
         <section className="bg-background py-20">
           <div className="container-page">
             <div className="mx-auto max-w-2xl text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-foreground">Why Choose VR's NEXORA?</h2>
+              <h2 className="text-3xl font-bold tracking-tight text-foreground">Why Choose VR's GATEWAY?</h2>
               <p className="mt-3 text-muted-foreground">
                 Everything you need to network smarter, in one tiny card.
               </p>
@@ -469,7 +469,7 @@ export default function Home() {
         </section>
       )}
 
-      <CtaBanner title="Ready to Experience the Power of VR's NEXORA?" />
+      <CtaBanner title="Ready to Experience the Power of VR's GATEWAY?" />
     </div>
   )
 }

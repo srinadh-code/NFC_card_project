@@ -14,7 +14,7 @@ import type { OrderCardPageSettings, OrderCardProduct, OrderCardTone, OrderCardT
 
 const PROFILE_TEMPLATE_ID_OPTIONS = CARD_THEME_IDS.custom.map((id) => ({
   value: id,
-  label: PROFILE_THEMES.find((t) => t.id === id)?.name.replace("NEXORA ", "") ?? id,
+  label: PROFILE_THEMES.find((t) => t.id === id)?.name.replace(/^(NEXORA|GATEWAY) /, "") ?? id,
 }))
 
 function templateLabel(templateId: string): string {
@@ -84,7 +84,7 @@ function ProductsSection() {
       api={orderCardProductsApi}
       queryKey={["content", "order-card", "products"]}
       resourceLabel="Product"
-      description='The purchasable cards shown on /shop (e.g. "NEXORA Custom", "Google Review Card").'
+      description='The purchasable cards shown on /shop (e.g. "GATEWAY Custom", "Google Review Card").'
       getRowLabel={(item) => item.name}
       searchPredicate={(item, q) => item.name.toLowerCase().includes(q) || item.slug.toLowerCase().includes(q)}
       createDefaults={(existing) => ({

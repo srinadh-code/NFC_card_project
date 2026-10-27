@@ -52,7 +52,7 @@ export default function MyTestimonials() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">My Testimonials</h1>
-          <p className="text-sm text-muted-foreground">Share your experience with VR&apos;s NEXORA.</p>
+          <p className="text-sm text-muted-foreground">Share your experience with VR&apos;s GATEWAY.</p>
         </div>
         {eligibility?.can_submit && (
           <Button onClick={openCreate}>

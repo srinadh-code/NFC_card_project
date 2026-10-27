@@ -35,7 +35,7 @@ export default function HowItWorks() {
   return (
     <div>
       <PageHeader
-        title="How VR's NEXORA Works"
+        title="How VR's GATEWAY Works"
         subtitle="Get from unboxing to your first tap in five simple steps."
       />
 
@@ -78,7 +78,7 @@ export default function HowItWorks() {
         </div>
       </section>
 
-      <CtaBanner title="Ready to get your VR's NEXORA Card?" buttonLabel="Order Now" />
+      <CtaBanner title="Ready to get your VR's GATEWAY Card?" buttonLabel="Order Now" />
     </div>
   )
 }

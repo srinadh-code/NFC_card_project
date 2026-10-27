@@ -36,7 +36,7 @@ function ClassicMockup() {
     <PhoneFrame bg="bg-white p-4">
       <div className="mt-4 flex items-center justify-center gap-1.5">
         {BRAND_MARK}
-        <span className="text-[9px] font-bold tracking-wide text-[#0B0F1A]">VR&apos;s NEXORA</span>
+        <span className="text-[9px] font-bold tracking-wide text-[#0B0F1A]">VR&apos;s GATEWAY</span>
       </div>
 
       <div className="mt-5 flex justify-center">
@@ -75,7 +75,7 @@ function SignatureMockup() {
 
       <div className="relative mt-4 flex items-center gap-1.5">
         {BRAND_MARK}
-        <span className="text-[8px] font-bold tracking-wide text-[#7C2D12]">VR&apos;s NEXORA</span>
+        <span className="text-[8px] font-bold tracking-wide text-[#7C2D12]">VR&apos;s GATEWAY</span>
       </div>
 
       <div className="relative mt-4 flex items-start justify-between gap-2">
@@ -195,7 +195,7 @@ function LuxuryMockup() {
   return (
     <PhoneFrame bg="bg-gradient-to-b from-[#0B0B0F] to-[#151515] p-4">
       <div className="relative mt-4 flex items-center justify-between">
-        <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-[#FBBF24]">Nexora</span>
+        <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-[#FBBF24]">Gateway</span>
         <div className="flex size-9 items-center justify-center rounded-md border border-[#FBBF24]/50">
           <User className="size-4 text-[#FBBF24]/70" />
         </div>
@@ -237,7 +237,7 @@ function FutureMockup() {
       />
 
       <div className="relative mt-4 flex items-center justify-between">
-        <span className="font-mono text-[8px] font-bold tracking-widest text-[#7DD3FC]">VR&apos;S_NEXORA</span>
+        <span className="font-mono text-[8px] font-bold tracking-widest text-[#7DD3FC]">VR&apos;S_GATEWAY</span>
         <span className="rounded-sm border border-[#38BDF8]/50 bg-[#38BDF8]/10 px-1.5 py-0.5 font-mono text-[6px] text-[#7DD3FC]">
           ● ONLINE
         </span>
@@ -295,7 +295,7 @@ function NatureMockup() {
 
       <div className="relative mt-4 flex justify-center gap-1.5">
         {BRAND_MARK}
-        <span className="text-[8px] font-bold tracking-wide text-[#166534]">VR&apos;s NEXORA</span>
+        <span className="text-[8px] font-bold tracking-wide text-[#166534]">VR&apos;s GATEWAY</span>
       </div>
 
       <div className="relative mt-5 flex justify-center">
@@ -395,7 +395,7 @@ function ImpactMockup() {
       />
       <div className="relative flex items-center gap-1.5 p-4">
         {BRAND_MARK}
-        <span className="text-[8px] font-bold tracking-wide text-white">VR&apos;s NEXORA</span>
+        <span className="text-[8px] font-bold tracking-wide text-white">VR&apos;s GATEWAY</span>
       </div>
 
       <div className="relative mt-8 px-4">
@@ -523,7 +523,7 @@ export default function ProfileThemeShowcase({ themes, selectedId, onSelect, pen
 
             <PhoneMockup theme={theme} imageUrl={imagesByThemeId?.[theme.id]} />
 
-            <p className="mt-5 text-lg font-bold text-foreground">{theme.name.replace("NEXORA ", "")}</p>
+            <p className="mt-5 text-lg font-bold text-foreground">{theme.name.replace(/^(NEXORA|GATEWAY) /, "")}</p>
             <p className="mt-1 text-sm text-muted-foreground">{theme.tagline}</p>
             {interactive && !isSelected && (
               <p className="mt-3 text-xs font-semibold text-primary">Select this template</p>

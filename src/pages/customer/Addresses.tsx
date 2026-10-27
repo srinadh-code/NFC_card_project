@@ -107,7 +107,7 @@ export default function CustomerAddresses() {
         <div className="space-y-1">
           <h1 className="text-2xl font-bold tracking-tight">Delivery Addresses</h1>
           <p className="text-sm text-muted-foreground">
-            Manage the addresses used to deliver your NEXORA NFC card orders.
+            Manage the addresses used to deliver your VR's GATEWAY NFC card orders.
           </p>
         </div>
         <Button

@@ -1,4 +1,4 @@
-﻿// Shared domain types for the VR's NEXORA platform.
+﻿// Shared domain types for the VR's GATEWAY platform.
 // This is the single source of truth for shapes used across the public site,
 // admin portal and customer portal so a future Django backend can map 1:1.
 

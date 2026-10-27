@@ -256,7 +256,7 @@ export default function Shop() {
             >
               <div>
                 <p className="text-xs text-muted-foreground">Selected Card</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{selectedCard.name.replace("NEXORA ", "")}</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{selectedCard.name.replace(/^(NEXORA|GATEWAY) /, "")}</p>
               </div>
               <div className={cn(selectedCard.templateCount ? "border-x" : "border-l", "border-[#E2E8F0]")}>
                 <p className="text-xs text-muted-foreground">Price</p>
@@ -344,10 +344,10 @@ export default function Shop() {
               (e.g. Google Review Card) renders that image instead — same
               frame, same sizing, just a different visual inside it. */}
           <div className="flex flex-col items-center justify-center">
-            <div className="relative flex h-80 w-full max-w-sm items-center justify-center overflow-hidden rounded-[32px] bg-gradient-to-br from-[#0B0F1A] via-[#12142B] to-[#1A0F2E] p-8 shadow-2xl">
+            <div className="relative flex h-80 w-full max-w-sm items-center justify-center overflow-hidden rounded-[32px] sm:h-[26rem] sm:max-w-lg lg:h-[28rem] lg:max-w-xl bg-gradient-to-br from-[#0B0F1A] via-[#12142B] to-[#1A0F2E] p-8 shadow-2xl">
               <div className="pointer-events-none absolute left-1/4 top-1/5 size-56 rounded-full bg-[#7C3AED]/30 blur-[90px]" />
               <div className="pointer-events-none absolute bottom-1/5 right-1/4 size-56 rounded-full bg-[#2563EB]/30 blur-[90px]" />
-              <div className="relative h-44 w-full max-w-xs animate-float-slow">
+              <div className="relative h-44 w-full max-w-xs animate-float-slow sm:h-56 sm:max-w-sm lg:h-64 lg:max-w-md">
                 <div className="h-full w-full -rotate-3 cursor-pointer transition-transform duration-500 ease-out hover:-rotate-1 hover:scale-[1.04]">
                   {selectedCard.image ? (
                     <img
@@ -396,7 +396,7 @@ export default function Shop() {
                   </p>
                 ) : (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Purchase NEXORA Custom above to unlock template selection.
+                    Purchase GATEWAY Custom above to unlock template selection.
                   </p>
                 )
               ) : (

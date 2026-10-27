@@ -21,7 +21,7 @@ function EmptyShell({ title, description }: { title: string; description: string
         <h1 className="text-xl font-bold">{title}</h1>
         <p className="text-sm text-muted-foreground">{description}</p>
         <Button asChild>
-          <Link to="/">Go to VR's NEXORA Home</Link>
+          <Link to="/">Go to VR's GATEWAY Home</Link>
         </Button>
       </div>
     </div>
@@ -87,7 +87,7 @@ export default function PublicProfile() {
             <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <Zap className="size-4" fill="currentColor" />
             </div>
-            <span className="font-bold tracking-tight">VR's NEXORA</span>
+            <span className="font-bold tracking-tight">VR's GATEWAY</span>
           </Link>
         </div>
 
@@ -100,7 +100,7 @@ export default function PublicProfile() {
         <p className="pt-6 text-center text-xs text-muted-foreground">
           Powered by{" "}
           <Link to="/" className="font-medium text-primary hover:underline">
-            VR's NEXORA
+            VR's GATEWAY
           </Link>
         </p>
       </div>

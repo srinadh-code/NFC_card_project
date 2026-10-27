@@ -1,7 +1,7 @@
 ﻿const SECTIONS = [
   {
     title: "Introduction",
-    body: "VR's NEXORA Technologies Pvt. Ltd. (\"VR's NEXORA\", \"we\", \"us\") provides NFC-enabled digital business cards and profile hosting services. This Privacy Policy explains how we collect, use, and protect your information when you purchase a card, create a profile, or otherwise use our website and services.",
+    body: "VR's NEXORA Technologies Pvt. Ltd. (\"VR's GATEWAY\", \"we\", \"us\") provides NFC-enabled digital business cards and profile hosting services. This Privacy Policy explains how we collect, use, and protect your information when you purchase a card, create a profile, or otherwise use our website and services.",
   },
   {
     title: "Information We Collect",

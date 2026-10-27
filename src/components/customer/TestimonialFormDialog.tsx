@@ -170,7 +170,7 @@ export function TestimonialFormDialog({ open, onOpenChange, testimonial, orders 
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit Testimonial" : "Share Your Experience"}</DialogTitle>
           <DialogDescription>
-            Your testimonial will appear on the VR&apos;s NEXORA website once an admin approves it. You can edit
+            Your testimonial will appear on the VR&apos;s GATEWAY website once an admin approves it. You can edit
             or delete it while it&apos;s pending.
           </DialogDescription>
         </DialogHeader>
@@ -292,7 +292,7 @@ export function TestimonialFormDialog({ open, onOpenChange, testimonial, orders 
             <Textarea
               id="t-review"
               rows={5}
-              placeholder="Tell others how VR's NEXORA has helped you..."
+              placeholder="Tell others how VR's GATEWAY has helped you..."
               value={review}
               maxLength={TESTIMONIAL_REVIEW_MAX}
               aria-invalid={!!errors.review}

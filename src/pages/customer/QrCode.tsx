@@ -144,7 +144,7 @@ export default function CustomerQrCode() {
     try {
       if (kind === "png") await downloadQrPng(realUrl, `${username}-qr-code.png`)
       else if (kind === "svg") await downloadQrSvg(realUrl, `${username}-qr-code.svg`)
-      else await downloadQrPdf(realUrl, `${username}-qr-code.pdf`, `${fullName} — VR's NEXORA`)
+      else await downloadQrPdf(realUrl, `${username}-qr-code.pdf`, `${fullName} — VR's GATEWAY`)
       toast.success(`QR code downloaded as ${kind.toUpperCase()}.`)
     } catch {
       toast.error("Couldn't generate that file right now.")
@@ -154,7 +154,7 @@ export default function CustomerQrCode() {
   }
 
   async function handleShare() {
-    const result = await shareOrCopyLink(realUrl, `${fullName} — VR's NEXORA`)
+    const result = await shareOrCopyLink(realUrl, `${fullName} — VR's GATEWAY`)
     if (result === "shared") toast.success("Shared!")
     else if (result === "copied") toast.success("Sharing isn't supported here — link copied instead!")
     else if (result === "failed") toast.error("Couldn't share or copy the link.")

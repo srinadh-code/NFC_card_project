@@ -103,7 +103,7 @@ export default function Login() {
               </div>
             }
           />
-          <span className="text-lg font-bold tracking-tight">VR's NEXORA</span>
+          <span className="text-lg font-bold tracking-tight">VR's GATEWAY</span>
         </div>
 
         <div className="relative z-10 space-y-6">
@@ -148,7 +148,7 @@ export default function Login() {
                   </div>
                 }
               />
-              <span className="text-lg font-bold tracking-tight">VR's NEXORA</span>
+              <span className="text-lg font-bold tracking-tight">VR's GATEWAY</span>
             </div>
           </div>
 

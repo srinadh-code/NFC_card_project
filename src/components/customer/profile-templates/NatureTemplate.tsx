@@ -26,7 +26,7 @@ function findCustomFieldValue(fields: CustomField[], label: string): string | un
 
 export default function NatureTemplate({ profile, onShare, showContactInfo = true }: TemplateProps) {
   const { enabledSocial, showPhone, showEmail } = useProfileSections(profile, showContactInfo)
-  const companyLabel = profile.company || "VR's NEXORA"
+  const companyLabel = profile.company || "VR's GATEWAY"
   const tagline = findCustomFieldValue(profile.customFields, "Tagline")
 
   const quickActions = [

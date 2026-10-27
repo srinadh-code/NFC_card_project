@@ -150,7 +150,7 @@ export function CardFormDialog({
                         className="size-2 shrink-0 rounded-full"
                         style={{ backgroundColor: accent ?? "#94A3B8" }}
                       />
-                      {plan ? plan.name.replace("NEXORA ", "") : cardType}
+                      {plan ? plan.name.replace(/^(NEXORA|GATEWAY) /, "") : cardType}
                     </span>
                     <span className="text-[11px] leading-tight text-muted-foreground">
                       {plan ? plan.bestFor : cardType}
@@ -188,7 +188,7 @@ export function CardFormDialog({
                   <>
                     <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: accent ?? "#94A3B8" }} />
                     <span className="font-semibold text-foreground">
-                      {plan ? plan.name.replace("NEXORA ", "") : values.cardType}
+                      {plan ? plan.name.replace(/^(NEXORA|GATEWAY) /, "") : values.cardType}
                     </span>
                     <span className="text-xs text-muted-foreground">selected</span>
                   </>

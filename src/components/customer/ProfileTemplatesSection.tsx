@@ -157,9 +157,9 @@ export function ProfileTemplatesSection({ profile, unlocked }: ProfileTemplatesS
             "Choose a profile template for your digital business profile."
           ) : (
             <>
-              Purchase the NEXORA Custom NFC card to unlock and select one of these templates.{" "}
+              Purchase the GATEWAY Custom NFC card to unlock and select one of these templates.{" "}
               <Link to="/shop" className="font-medium text-primary hover:underline">
-                Order NEXORA Custom
+                Order GATEWAY Custom
               </Link>
             </>
           )}
@@ -184,7 +184,7 @@ export function ProfileTemplatesSection({ profile, unlocked }: ProfileTemplatesS
                   onClick={() => unlocked && !isSelected && mutation.mutate(theme.id)}
                   disabled={!unlocked || mutation.isPending}
                   aria-disabled={!unlocked}
-                  title={unlocked ? undefined : "Purchase NEXORA Custom to unlock profile templates"}
+                  title={unlocked ? undefined : "Purchase GATEWAY Custom to unlock profile templates"}
                   className={cn(
                     "group relative flex flex-col items-center rounded-2xl border-2 p-5 text-center transition-all disabled:cursor-not-allowed",
                     isSelected
@@ -211,7 +211,7 @@ export function ProfileTemplatesSection({ profile, unlocked }: ProfileTemplatesS
 
                   <PhoneMockup theme={theme} imageUrl={templateImagesById[theme.id]} />
 
-                  <p className="mt-4 text-sm font-bold text-foreground">{theme.name.replace("NEXORA ", "")}</p>
+                  <p className="mt-4 text-sm font-bold text-foreground">{theme.name.replace(/^(NEXORA|GATEWAY) /, "")}</p>
                   <p className="text-xs text-muted-foreground">{theme.tagline}</p>
                 </button>
 

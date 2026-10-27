@@ -70,7 +70,7 @@ export default function Features() {
         />
         <div className="pointer-events-none absolute right-0 top-0 size-[32rem] rounded-full bg-gradient-to-br from-[#7C3AED]/20 to-[#EC4899]/10 blur-[100px]" />
 
-        <div className="relative container-page grid items-center gap-16 lg:grid-cols-2">
+        <div className="relative container-page grid items-center gap-16 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] xl:gap-10">
           <div>
             {isLoading ? (
               <div className="space-y-4">
@@ -138,11 +138,17 @@ export default function Features() {
             <div className="pointer-events-none absolute size-96 rounded-full bg-gradient-to-br from-[#7C3AED]/20 via-[#EC4899]/15 to-transparent blur-3xl" />
 
             {page?.hero_image_url ? (
-              <img
-                src={page.hero_image_url}
-                alt=""
-                className="relative z-10 w-full max-w-md object-contain drop-shadow-2xl"
-              />
+              <div className="relative z-10 w-full max-w-lg animate-hero-enter sm:max-w-xl lg:max-w-[42rem]">
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-[6%] rounded-full bg-gradient-to-br from-[#1E3A8A]/50 via-[#22C55E]/30 to-transparent blur-3xl animate-hero-glow"
+                />
+                <img
+                  src={page.hero_image_url}
+                  alt=""
+                  className="hero-image-soft-edges relative w-full object-contain animate-hero-float"
+                />
+              </div>
             ) : (
               <>
                 <p className="absolute left-1/2 -top-10 hidden w-max max-w-[220px] -translate-x-1/2 rotate-1 text-center font-serif text-xs italic text-muted-foreground sm:block">
