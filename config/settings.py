@@ -6,6 +6,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 import os
 
@@ -117,16 +118,40 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 
 # Database
-# SQLite by default for local dev; set DATABASE_URL (e.g. a postgres:// URL)
-# to point at Postgres in staging/production. No code changes needed.
-DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+# Selected explicitly by DJANGO_ENV — never just by whether DATABASE_URL
+# happens to be set, so a production URL left in a local .env can't point
+# local development at live data:
+#   development — always local SQLite (BASE_DIR/db.sqlite3). DATABASE_URL is
+#                 ignored entirely.
+#   production  — always PostgreSQL from DATABASE_URL (Render injects it).
+#                 Refuses to start if it's missing or isn't Postgres, rather
+#                 than silently falling back to an empty SQLite file.
+# If DJANGO_ENV is unset, Render's own RENDER=true variable (set on every
+# Render service) selects production, so an existing deploy keeps working
+# even before DJANGO_ENV is added to its environment.
+DJANGO_ENV = os.environ.get("DJANGO_ENV", "").strip().lower()
+if not DJANGO_ENV:
+    DJANGO_ENV = "production" if env_bool("RENDER") else "development"
+if DJANGO_ENV not in ("development", "production"):
+    raise ImproperlyConfigured(
+        f"DJANGO_ENV must be 'development' or 'production', got {DJANGO_ENV!r}."
+    )
 
-if DATABASE_URL:
+if DJANGO_ENV == "production":
+    DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+    if not DATABASE_URL:
+        raise ImproperlyConfigured(
+            "DJANGO_ENV=production requires DATABASE_URL (the Render PostgreSQL URL)."
+        )
     DATABASES = {
         "default": dj_database_url.parse(
             DATABASE_URL, conn_max_age=600, conn_health_checks=True
         )
     }
+    if DATABASES["default"]["ENGINE"] != "django.db.backends.postgresql":
+        raise ImproperlyConfigured(
+            "DJANGO_ENV=production requires a PostgreSQL DATABASE_URL."
+        )
 else:
     DATABASES = {
         "default": {
