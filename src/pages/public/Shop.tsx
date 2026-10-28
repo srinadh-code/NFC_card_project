@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { CheckCircle2, Minus, LayoutTemplate, Plus } from "lucide-react"
+import { ArrowDown, CheckCircle2, Minus, Plus } from "lucide-react"
 import { toast } from "sonner"
 import PageHeader from "@/components/marketing/PageHeader"
 import NexoraCardSelector from "@/components/marketing/NexoraCardSelector"
@@ -52,6 +52,21 @@ export default function Shop() {
   const navigate = useNavigate()
   const { addLine } = useCart()
   const [selectedId, setSelectedId] = useState<string>("")
+  // The single "selected card" details section below — choosing a card
+  // (even the already-selected one) brings it into view.
+  const detailsRef = useRef<HTMLElement>(null)
+  // The "Choose Your Profile Theme" section, target of "View N Templates".
+  const themesRef = useRef<HTMLElement>(null)
+  function scrollToSection(ref: React.RefObject<HTMLElement | null>) {
+    const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    requestAnimationFrame(() =>
+      ref.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" }),
+    )
+  }
+  function handleSelectCard(id: string) {
+    setSelectedId(id)
+    scrollToSection(detailsRef)
+  }
   const { settings } = usePublicSettings()
   const [qty, setQty] = useState(1)
   const queryClient = useQueryClient()
@@ -185,40 +200,17 @@ export default function Shop() {
       <PageHeader title={data?.page.page_title ?? ""} subtitle={data?.page.page_subtitle} />
 
       {/* 1. Choose Your NEXORA Card */}
-      <section className="bg-[#F8FAFC] px-4 py-16">
+      <section className="bg-[#F8FAFC] px-4 pb-8 pt-10 sm:pb-10 sm:pt-12">
         <div className="mx-auto max-w-[1320px]">
-          <NexoraCardSelector cardTypes={cardTypes} selectedId={selectedId} onSelect={setSelectedId} />
-
-          {/* Template count summary strip — visually integrated, not a
-              plain table, reading straight off the same card config. */}
-          <div className={cn(cardClass, "mt-8 flex flex-col divide-y divide-[#E2E8F0] p-0 hover:translate-y-0 hover:shadow-[0_10px_30px_rgba(15,23,42,0.06)] sm:flex-row sm:divide-x sm:divide-y-0")}>
-            {cardTypes.map((card) => (
-              <div key={card.id} className="flex flex-1 items-center gap-3 p-5">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <LayoutTemplate className="size-5" />
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{card.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatCurrency(card.price, settings.currency)}
-                    {/* No profile-template entitlement (e.g. Google Review
-                        Card) means there's nothing to count here. */}
-                    {!!card.templateCount && (
-                      <>
-                        {" "}· {card.templateCount} {card.templateCount === 1 ? "Template" : "Templates"}
-                      </>
-                    )}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
+          <NexoraCardSelector cardTypes={cardTypes} selectedId={selectedId} onSelect={handleSelectCard} />
         </div>
       </section>
 
       {/* 2. Selected card + detailed ordering — appears exactly once, at
           the end of the page. */}
-      <section className="bg-secondary px-4 py-16">
+      {/* scroll-mt clears the sticky navbar (~78px tall) on scrollIntoView,
+          plus extra room so the card heading settles well below it. */}
+      <section ref={detailsRef} id="card-details" className="scroll-mt-28 bg-secondary px-4 py-8 sm:py-10">
         <div
           className={cn(
             cardClass,
@@ -236,9 +228,25 @@ export default function Shop() {
                   </span>
                 )}
               </div>
-              <p className={cn("mt-3 bg-gradient-to-r bg-clip-text text-3xl font-bold text-transparent", gradientClass)}>
-                {formatCurrency(selectedCard.price, settings.currency)}
-              </p>
+              {/* A card that includes profile templates gets a jump to the
+                  theme section here instead of repeating its price (still
+                  shown on its selection card and in the summary below);
+                  any other card keeps its price. */}
+              {availableThemes.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="mt-3 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 focus-visible:ring-blue-400/50 dark:bg-blue-500/15 dark:text-blue-300 dark:hover:bg-blue-500/25 dark:hover:text-blue-200"
+                  onClick={() => scrollToSection(themesRef)}
+                >
+                  View {availableThemes.length} Templates
+                  <ArrowDown className="size-4" aria-hidden="true" />
+                </Button>
+              ) : (
+                <p className={cn("mt-3 bg-gradient-to-r bg-clip-text text-3xl font-bold text-transparent", gradientClass)}>
+                  {formatCurrency(selectedCard.price, settings.currency)}
+                </p>
+              )}
               <p className="mt-3 max-w-lg text-muted-foreground">{selectedCard.design}</p>
             </div>
 
@@ -376,7 +384,7 @@ export default function Shop() {
           for a product with no profile-template entitlement (e.g. Google
           Review Card) rather than showing an empty theme grid. */}
       {availableThemes.length > 0 && (
-        <section className="px-4 py-16">
+        <section ref={themesRef} id="profile-themes" className="scroll-mt-20 px-4 pb-14 pt-10 sm:pb-16 sm:pt-12">
           <div className="mx-auto max-w-[1320px]">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
@@ -409,7 +417,7 @@ export default function Shop() {
               )}
             </div>
 
-            <div className="mt-10">
+            <div className="mt-8">
               <ProfileThemeShowcase
                 themes={availableThemes}
                 selectedId={customer && profile && hasCustomCard ? profile.selectedTemplate : undefined}
