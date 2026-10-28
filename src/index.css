@@ -333,10 +333,46 @@ body {
   mask-composite: intersect;
 }
 
+/* Shop theme preview popup (ProfileThemeShowcase). Animates only `scale`
+   and opacity — the dialog's centering uses the separate `translate`
+   property, so the two never fight. Radix waits for the closing animation
+   before unmounting. The overlay is targeted through its content sibling so
+   no other dialog changes. */
+@keyframes theme-preview-in {
+  from { opacity: 0; scale: 0.92; }
+  to { opacity: 1; scale: 1; }
+}
+@keyframes theme-preview-out {
+  from { opacity: 1; scale: 1; }
+  to { opacity: 0; scale: 0.95; }
+}
+@keyframes theme-preview-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes theme-preview-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.theme-preview-dialog[data-state="open"] {
+  animation: theme-preview-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.theme-preview-dialog[data-state="closed"] {
+  animation: theme-preview-out 180ms ease-in forwards;
+}
+[data-slot="dialog-overlay"]:has(+ .theme-preview-dialog)[data-state="open"] {
+  animation: theme-preview-fade-in 260ms ease-out;
+}
+[data-slot="dialog-overlay"]:has(+ .theme-preview-dialog)[data-state="closed"] {
+  animation: theme-preview-fade-out 180ms ease-in forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-hero-enter,
   .animate-hero-float,
-  .animate-hero-glow {
+  .animate-hero-glow,
+  .theme-preview-dialog,
+  [data-slot="dialog-overlay"]:has(+ .theme-preview-dialog) {
     animation: none;
   }
 }

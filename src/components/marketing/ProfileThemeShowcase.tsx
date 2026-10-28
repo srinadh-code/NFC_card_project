@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react"
-import { Check, Globe, Loader2, Mail, MessageCircle, Nfc, Phone, User } from "lucide-react"
+import { Check, Globe, Loader2, Mail, MessageCircle, Nfc, Phone, User, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { cardClass } from "@/components/marketing/PremiumCard"
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import type { ProfileTheme } from "@/data/constants"
 
 // Code-built phone mockups — one genuinely different composition per
@@ -484,8 +486,15 @@ interface ProfileThemeShowcaseProps {
 
 export default function ProfileThemeShowcase({ themes, selectedId, onSelect, pendingId, imagesByThemeId }: ProfileThemeShowcaseProps) {
   const interactive = Boolean(onSelect)
+  // Clicking a card opens a centered preview; selection (when available)
+  // happens from the preview's own button. The theme is kept separately
+  // from `previewOpen` so the popup's content stays put while it animates out.
+  const [previewTheme, setPreviewTheme] = useState<ProfileTheme | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const previewSelected = interactive && previewTheme != null && selectedId === previewTheme.id
 
   return (
+    <>
     <div
       className={cn(
         "grid grid-cols-1 gap-6",
@@ -500,13 +509,18 @@ export default function ProfileThemeShowcase({ themes, selectedId, onSelect, pen
           <button
             key={theme.id}
             type="button"
-            disabled={!interactive || isSelected || pendingId != null}
-            onClick={() => onSelect?.(theme.id)}
+            aria-haspopup="dialog"
+            onClick={() => {
+              setPreviewTheme(theme)
+              setPreviewOpen(true)
+            }}
             className={cn(
               cardClass,
               "relative flex flex-col items-center p-6 text-center",
-              interactive && "cursor-pointer disabled:cursor-not-allowed",
-              !interactive && "cursor-default hover:translate-y-0 hover:shadow-none",
+              // Whole-card pop on hover (image, name, tagline, border and
+              // shadow move as one) — same for every card, selectable or not.
+              "transform-gpu ease-out hover:z-10 hover:-translate-y-2 hover:scale-[1.02] hover:shadow-[0_24px_48px_rgba(79,70,229,0.18)] dark:hover:shadow-[0_24px_48px_rgba(139,92,246,0.4)]",
+              "cursor-pointer",
               isSelected && "border-primary ring-2 ring-primary/50",
             )}
           >
@@ -532,5 +546,54 @@ export default function ProfileThemeShowcase({ themes, selectedId, onSelect, pen
         )
       })}
     </div>
+
+    <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+      <DialogContent
+        showCloseButton={false}
+        className="theme-preview-dialog z-[60] max-h-[calc(100dvh-2rem)] justify-items-center overflow-y-auto rounded-[24px] p-6 text-center sm:max-w-md sm:p-8"
+      >
+        {previewTheme && (
+          <>
+            <DialogClose className="absolute right-3 top-3 z-10 flex size-9 items-center justify-center rounded-full bg-secondary text-foreground outline-none ring-primary/40 transition-colors hover:bg-accent focus-visible:ring-2">
+              <X className="size-5" />
+              <span className="sr-only">Close preview</span>
+            </DialogClose>
+
+            {/* Enlarged with CSS zoom (not transform) so the drawn mockups
+                re-lay out crisply and the dialog sizes around them. */}
+            <div className="mt-4 [zoom:1.15] sm:[zoom:1.45]">
+              <PhoneMockup theme={previewTheme} imageUrl={imagesByThemeId?.[previewTheme.id]} />
+            </div>
+
+            <div>
+              <DialogTitle className="text-xl font-bold text-foreground">
+                {previewTheme.name.replace(/^(NEXORA|GATEWAY) /, "")}
+              </DialogTitle>
+              <DialogDescription className="mt-1 text-sm text-muted-foreground">
+                {previewTheme.tagline}
+              </DialogDescription>
+            </div>
+
+            {interactive &&
+              (previewSelected ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">
+                  <Check className="size-3.5" /> Selected
+                </span>
+              ) : (
+                <Button
+                  disabled={pendingId != null}
+                  onClick={() => {
+                    onSelect?.(previewTheme.id)
+                    setPreviewOpen(false)
+                  }}
+                >
+                  Select this template
+                </Button>
+              ))}
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }
