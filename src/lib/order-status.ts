@@ -1,10 +1,11 @@
 // Maps backend/orders/models.py's Order.Status enum (PENDING/PROCESSING/
-// SHIPPED/DELIVERED/COMPLETED/CANCELLED) to a display label shared by every
+// SHIPPED/OUT_FOR_DELIVERY/DELIVERED/COMPLETED/CANCELLED) to a display label shared by every
 // page that renders an order status badge.
 export const ORDER_STATUS_LABEL: Record<string, string> = {
   PENDING: "Pending",
   PROCESSING: "Processing",
   SHIPPED: "Shipped",
+  OUT_FOR_DELIVERY: "Out for Delivery",
   DELIVERED: "Delivered",
   COMPLETED: "Completed",
   CANCELLED: "Cancelled",

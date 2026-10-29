@@ -39,7 +39,7 @@ import { orderStatusLabel } from "@/lib/order-status"
 import { downloadQrPng, shareOrCopyLink } from "@/components/customer/qr-utils"
 import { analyticsApi, nfcApi, ordersApi } from "@/lib/api"
 
-const IN_PROGRESS_ORDER_STATUSES = ["PENDING", "PROCESSING", "SHIPPED"]
+const IN_PROGRESS_ORDER_STATUSES = ["PENDING", "PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY"]
 
 // Known demo UIDs seeded by `python manage.py seed_demo_cards` on the
 // backend — used only to prefill the manual-entry/"simulate scan" demo

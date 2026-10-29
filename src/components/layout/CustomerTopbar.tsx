@@ -163,9 +163,19 @@ export function CustomerTopbar({ onMenuClick }: CustomerTopbarProps) {
               ) : (
                 notifications.map((n, i) => (
                   <div key={n.id} className="group relative">
-                    <button
-                      type="button"
+                    {/* A <div>, not a <button> — it needs to contain the
+                        CTA button below, and <button> can't nest inside
+                        <button> (invalid HTML, breaks click handling). */}
+                    <div
+                      role="button"
+                      tabIndex={0}
                       onClick={() => !n.is_read && markOneReadMutation.mutate(n.id)}
+                      onKeyDown={(e) => {
+                        if ((e.key === "Enter" || e.key === " ") && !n.is_read) {
+                          e.preventDefault()
+                          markOneReadMutation.mutate(n.id)
+                        }
+                      }}
                       className={cn(
                         "flex w-full items-start gap-2.5 px-4 py-3 pr-9 text-left transition-colors hover:bg-accent/50",
                         !n.is_read && "cursor-pointer"
@@ -184,8 +194,24 @@ export function CustomerTopbar({ onMenuClick }: CustomerTopbarProps) {
                         </p>
                         {n.message && <p className="mt-0.5 text-xs text-muted-foreground">{n.message}</p>}
                         <p className="mt-1 text-[11px] text-muted-foreground">{formatTimeAgo(n.created_at)}</p>
+                        {/* Only set when this came from a published Offer/Promotion
+                            announcement (see ApiNotification.cta_text/cta_link) —
+                            never rendered for a plain order/NFC/profile notification. */}
+                        {n.cta_text && n.cta_link && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (n.cta_link.startsWith("/")) navigate(n.cta_link)
+                              else window.open(n.cta_link, "_blank", "noopener,noreferrer")
+                            }}
+                            className="mt-2 inline-block rounded-full bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+                          >
+                            {n.cta_text}
+                          </button>
+                        )}
                       </div>
-                    </button>
+                    </div>
                     <button
                       type="button"
                       onClick={(e) => {

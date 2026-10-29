@@ -56,7 +56,7 @@ export default function Home() {
   return (
     <div>
       {/* Hero */}
-      <section className="relative overflow-hidden bg-background pb-16 pt-16 sm:pt-20">
+      <section className="relative overflow-hidden bg-background pb-12 pt-12 sm:pt-15 lg:pt-12">
         <div className="container-page grid items-center gap-12 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] xl:gap-8">
           <div>
             {isLoading ? (
@@ -104,7 +104,7 @@ export default function Home() {
               </Button>
             </div>
             {data && data.hero_features.length > 0 && (
-              <div className="mt-12 grid grid-cols-2 gap-6 sm:grid-cols-4">
+              <div className="mt-10 grid grid-cols-2 gap-6 sm:grid-cols-4">
                 {data.hero_features.map((item) => {
                   const Icon = resolveIcon(item.icon)
                   return (
@@ -121,7 +121,7 @@ export default function Home() {
             )}
           </div>
 
-          <div className="relative flex items-center justify-center py-10 lg:min-h-[560px] lg:justify-end lg:py-6">
+          <div className="relative flex items-center justify-center py-8 lg:min-h-[520px] lg:justify-end lg:py-0">
             {/* Decorative floating gesture caption */}
             <div className="absolute -top-2 right-4 z-20 hidden -rotate-6 flex-col items-end gap-1 text-right sm:flex">
               <ArrowUpLeft className="size-5 text-primary" />
@@ -164,7 +164,7 @@ export default function Home() {
 
         {/* Bottom info bar — glassmorphism strip */}
         {data && data.bottom_bar.length > 0 && (
-          <div className="container-page mt-16">
+          <div className="container-page mt-12">
             <div className="glass-panel grid grid-cols-1 divide-y divide-border rounded-[24px] p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.5)] sm:grid-cols-3 sm:divide-x sm:divide-y-0 sm:p-8">
               {data.bottom_bar.map((item) => {
                 const Icon = item.icon ? resolveIcon(item.icon) : null
@@ -235,14 +235,14 @@ export default function Home() {
 
       {/* Trusted by */}
       {isLoading ? (
-        <section className="border-y border-border bg-secondary py-10">
+        <section className="border-y border-border bg-secondary py-8">
           <div className="container-page">
             <Skeleton className="mx-auto h-4 w-48" />
           </div>
         </section>
       ) : (
         data && data.companies.length > 0 && (
-          <section className="border-y border-border bg-secondary py-10">
+          <section className="border-y border-border bg-secondary py-8">
             <div className="container-page">
               <p className="text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                 Trusted by professionals at
@@ -270,7 +270,7 @@ export default function Home() {
 
       {/* Stats */}
       {isLoading ? (
-        <section className="bg-background px-4 py-16">
+        <section className="bg-background px-4 py-12">
           <div className="mx-auto grid max-w-5xl grid-cols-2 gap-8 sm:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-16 w-full" />
@@ -279,7 +279,7 @@ export default function Home() {
         </section>
       ) : (
         data && data.statistics.length > 0 && (
-          <section className="bg-background px-4 py-16">
+          <section className="bg-background px-4 py-12">
             <div className="mx-auto grid max-w-5xl grid-cols-2 gap-8 sm:grid-cols-4">
               {data.statistics.map((s) => (
                 <StatCounter key={s.id} value={s.value} label={s.label} />
@@ -290,17 +290,17 @@ export default function Home() {
       )}
 
       {/* Our Story */}
-      <section className="bg-secondary py-20">
+      <section className="bg-secondary py-14 sm:py-16">
         <div className="container-page">
           <div className="grid items-center gap-12 lg:grid-cols-2">
             <div>
-              <h2 className="text-3xl font-bold tracking-tight text-foreground">Our Story</h2>
-              <p className="mt-4 text-muted-foreground">
+              <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Our Story</h2>
+              <p className="mt-5 text-base leading-relaxed text-muted-foreground sm:text-[17px] lg:text-lg">
                 VR's GATEWAY was born from a simple frustration — running out of paper business cards
                 at the exact moment a great connection was made. We set out to build a smarter,
                 greener, and more memorable way to network.
               </p>
-              <p className="mt-4 text-muted-foreground">
+              <p className="mt-4 text-base leading-relaxed text-muted-foreground sm:text-[17px] lg:text-lg">
                 Today, thousands of professionals across the globe use VR's GATEWAY to share their
                 identity in an instant, track every interaction, and keep their profile fresh
                 without ever reprinting a card.
@@ -318,14 +318,14 @@ export default function Home() {
             </div>
           </div>
           {isLoading ? (
-            <div className="mt-16 grid grid-cols-2 gap-6 lg:grid-cols-4">
+            <div className="mt-12 grid grid-cols-2 gap-6 lg:grid-cols-4">
               {Array.from({ length: 4 }).map((_, i) => (
                 <Skeleton key={i} className="h-32 w-full" />
               ))}
             </div>
           ) : (
             data && data.values.length > 0 && (
-              <div className="mt-16 grid grid-cols-2 gap-6 lg:grid-cols-4">
+              <div className="mt-12 grid grid-cols-2 gap-6 lg:grid-cols-4">
                 {data.values.map((v) => {
                   const Icon = resolveIcon(v.icon)
                   return (
@@ -346,7 +346,7 @@ export default function Home() {
 
       {/* Why choose */}
       {features && features.length > 0 && (
-        <section className="bg-background py-20">
+        <section className="bg-background py-14 sm:py-16">
           <div className="container-page">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="text-3xl font-bold tracking-tight text-foreground">Why Choose VR's GATEWAY?</h2>
@@ -354,7 +354,7 @@ export default function Home() {
                 Everything you need to network smarter, in one tiny card.
               </p>
             </div>
-            <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
               {features.slice(0, 4).map((f) => (
                 <FeatureCard key={f.id} icon={resolveIcon(f.icon)} title={f.title} description={f.description} />
               ))}
@@ -365,7 +365,7 @@ export default function Home() {
 
       {/* Testimonials — GET /api/testimonials/ (approved + active only). */}
       {testimonialsLoading ? (
-        <section className="bg-secondary py-20">
+        <section className="bg-secondary py-14 sm:py-16">
           <div className="container-page grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-56 w-full" />
@@ -373,7 +373,7 @@ export default function Home() {
           </div>
         </section>
       ) : (
-        <section className="bg-secondary py-20">
+        <section className="bg-secondary py-14 sm:py-16">
           <div className="container-page">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="text-3xl font-bold tracking-tight text-foreground">
@@ -384,13 +384,18 @@ export default function Home() {
               </p>
             </div>
             {testimonials && testimonials.length > 0 ? (
-              <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              // Same 1/2/3-column widths as a grid, but an incomplete last
+              // row (e.g. a single testimonial) is centered instead of
+              // hugging the left edge.
+              <div className="mt-10 flex flex-wrap justify-center gap-6">
                 {testimonials.map((t) => (
-                  <TestimonialCard key={t.id} testimonial={t} />
+                  <div key={t.id} className="w-full sm:w-[calc((100%-1.5rem)/2)] lg:w-[calc((100%-3rem)/3)]">
+                    <TestimonialCard testimonial={t} />
+                  </div>
                 ))}
               </div>
             ) : (
-              <p className="mt-12 text-center text-muted-foreground">Be the first to share your experience.</p>
+              <p className="mt-10 text-center text-muted-foreground">Be the first to share your experience.</p>
             )}
           </div>
         </section>
@@ -398,7 +403,7 @@ export default function Home() {
 
       {/* FAQ preview */}
       {isLoading ? (
-        <section className="bg-background px-4 py-20">
+        <section className="bg-background px-4 py-14 sm:py-16">
           <div className="mx-auto max-w-3xl space-y-3">
             <Skeleton className="mx-auto h-8 w-72" />
             <Skeleton className="h-64 w-full" />
@@ -406,7 +411,7 @@ export default function Home() {
         </section>
       ) : (
         data && data.faqs_preview.length > 0 && (
-          <section className="bg-background px-4 py-20">
+          <section className="bg-background px-4 py-14 sm:py-16">
             <div className="mx-auto max-w-3xl">
               <div className="mx-auto max-w-2xl text-center">
                 <h2 className="text-3xl font-bold tracking-tight text-foreground">
@@ -419,7 +424,7 @@ export default function Home() {
               <Accordion
                 type="single"
                 collapsible
-                className={cn(cardClass, "mt-10 px-6 hover:translate-y-0 hover:shadow-[0_10px_30px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_10px_30px_rgba(0,0,0,0.5)]")}
+                className={cn(cardClass, "mt-8 px-6 hover:translate-y-0 hover:shadow-[0_10px_30px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_10px_30px_rgba(0,0,0,0.5)]")}
               >
                 {data.faqs_preview.map((faq) => (
                   <AccordionItem key={faq.id} value={`item-${faq.id}`} className="border-border">
@@ -428,7 +433,7 @@ export default function Home() {
                   </AccordionItem>
                 ))}
               </Accordion>
-              <div className="mt-8 text-center">
+              <div className="mt-6 text-center">
                 <Button
                   variant="ghost"
                   className="text-primary hover:bg-primary/5 hover:text-primary"
@@ -445,21 +450,21 @@ export default function Home() {
 
       {/* Contact CTA */}
       {data?.cta && (
-        <section className="bg-secondary px-4 py-20">
+        <section className="bg-secondary px-4 py-14 sm:py-16">
           <div className="mx-auto max-w-4xl">
-            <div className="relative overflow-hidden rounded-[24px] border border-border bg-card p-10 text-center shadow-[0_10px_30px_rgba(0,0,0,0.06)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:p-14">
+            <div className="relative overflow-hidden rounded-[24px] border border-border bg-card p-10 text-center shadow-[0_10px_30px_rgba(0,0,0,0.06)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:p-12">
               <div className="pointer-events-none absolute -left-16 -top-16 size-56 rounded-full bg-[#4F46E5]/10 blur-3xl" />
               <div className="pointer-events-none absolute -bottom-16 -right-16 size-56 rounded-full bg-[#EC4899]/10 blur-3xl" />
               <div className="relative mx-auto flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-[0_4px_14px_rgba(79,70,229,0.4)]">
                 <MessageCircle className="size-7" />
               </div>
-              <h2 className="relative mt-6 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+              <h2 className="relative mt-5 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
                 {data.cta.heading}
               </h2>
               <p className="relative mx-auto mt-3 max-w-lg text-muted-foreground">{data.cta.description}</p>
               <Button
                 size="lg"
-                className="relative mt-8 rounded-xl bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-[0_10px_30px_rgba(79,70,229,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_15px_35px_rgba(79,70,229,0.45)]"
+                className="relative mt-6 rounded-xl bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-[0_10px_30px_rgba(79,70,229,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_15px_35px_rgba(79,70,229,0.45)]"
                 onClick={() => navigate(data.cta?.button_link || "/contact")}
               >
                 {data.cta.button_text}
@@ -469,7 +474,7 @@ export default function Home() {
         </section>
       )}
 
-      <CtaBanner title="Ready to Experience the Power of VR's GATEWAY?" />
+      <CtaBanner title="Ready to Experience the Power of VR's GATEWAY?" className="py-8 sm:py-11" />
     </div>
   )
 }

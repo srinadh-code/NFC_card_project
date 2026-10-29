@@ -59,7 +59,7 @@ export default function Features() {
   return (
     <div className="overflow-x-hidden">
       {/* ============ HERO ============ */}
-      <section className="relative overflow-hidden bg-background pb-24 pt-16 sm:pt-20">
+      <section className="relative overflow-hidden bg-background pb-16 pt-16 sm:pt-20">
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.35]"
           style={{
@@ -134,7 +134,7 @@ export default function Features() {
           </div>
 
           {/* Right: hero image if uploaded, else the built-in NFC card render + floating widgets */}
-          <div className="relative flex items-center justify-center py-10 lg:py-0">
+          <div className="relative flex items-center justify-center pb-6 pt-10 lg:py-0">
             <div className="pointer-events-none absolute size-96 rounded-full bg-gradient-to-br from-[#7C3AED]/20 via-[#EC4899]/15 to-transparent blur-3xl" />
 
             {page?.hero_image_url ? (
@@ -225,7 +225,7 @@ export default function Features() {
       </Dialog>
 
       {/* ============ FEATURE GRID ============ */}
-      <section className="bg-secondary py-20">
+      <section className="bg-secondary pb-20 pt-14">
         <div className="container-page">
           {isLoading ? (
             <div className="mx-auto max-w-2xl space-y-3 text-center">
@@ -401,7 +401,10 @@ export default function Features() {
 
       {/* ============ STATS ============ */}
       {data && data.statistics.length > 0 && (
-        <section className="relative overflow-hidden bg-gradient-brand px-4 py-14">
+        <section className="relative overflow-hidden bg-gradient-brand px-4 py-10 sm:py-12">
+          {/* Hairline boundary — the CTA below shares this same gradient, so
+              without it the two sections blur into one tall block. */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-white/20" />
           <div className="pointer-events-none absolute -top-24 left-1/4 size-64 rounded-full bg-white/10 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-24 right-1/4 size-64 rounded-full bg-white/10 blur-3xl" />
           <div className="relative mx-auto grid max-w-5xl grid-cols-2 gap-8 sm:grid-cols-4">
@@ -428,6 +431,7 @@ export default function Features() {
           buttonLabel={data.cta.button_text}
           to={data.cta.button_url || "/shop"}
           backgroundImageUrl={data.cta.background_image_url}
+          className="py-8 sm:py-11"
         />
       )}
     </div>

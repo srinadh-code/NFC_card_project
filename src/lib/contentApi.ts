@@ -13,7 +13,6 @@ import type {
   Company,
   ContactMessage,
   Cta,
-  EmailSettings,
   Faq,
   Feature,
   FeaturesAnalyticsSection,
@@ -40,7 +39,6 @@ import type {
   PublicHomePayload,
   PublicOrderCardPayload,
   SecuritySettings,
-  ShippingSettings,
   Statistic,
   StatisticPage,
   Value,
@@ -291,8 +289,6 @@ export const settingsApi = {
   removeFavicon: settingsFaviconImageApi.removeImage,
 }
 export const paymentSettingsApi = makeSingletonApi<PaymentSettings>(`${ADMIN}/payment-settings`)
-export const shippingSettingsApi = makeSingletonApi<ShippingSettings>(`${ADMIN}/shipping-settings`)
-export const emailSettingsApi = makeSingletonApi<EmailSettings>(`${ADMIN}/email-settings`)
 export const securitySettingsApi = makeSingletonApi<SecuritySettings>(`${ADMIN}/security-settings`)
 
 export function listStatisticsByPage(page: StatisticPage) {

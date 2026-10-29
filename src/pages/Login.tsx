@@ -243,10 +243,12 @@ export default function Login() {
             </Link>
           </p>
 
+          {/* "/" is the public Home route (PublicLayout in App.tsx) — unguarded,
+              so it works whether or not a customer session exists. */}
           <div className="flex justify-center pt-2">
             <Link
               to="/"
-              className="group inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-muted-foreground outline-none ring-primary/40 transition-colors hover:text-primary focus-visible:ring-2"
+              className="group inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <ArrowLeft className="size-4 transition-transform group-hover:-translate-x-0.5" aria-hidden="true" />
               Back to Website

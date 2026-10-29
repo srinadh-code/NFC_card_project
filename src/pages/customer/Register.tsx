@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PasswordInput, PasswordRequirements } from "@/components/ui/password-input"
 import { BrandMark } from "@/components/layout/BrandMark"
-import { useCustomerAuthStore, useAuthStore } from "@/store/auth-store"
+import { useCustomerAuthStore, useCustomerSessionStore } from "@/store/auth-store"
 import { ApiError, authApi, fieldErrorMessage, setTokens } from "@/lib/api"
 import {
   PASSWORD_MAX_LENGTH,
@@ -99,7 +99,7 @@ export default function CustomerRegister() {
         password: form.password,
       })
       setTokens(payload.access, payload.refresh)
-      useAuthStore.getState().setUser(payload.user)
+      useCustomerSessionStore.getState().setUser(payload.user)
       toast.success(`Welcome to VR's GATEWAY, ${form.name.split(" ")[0]}!`)
       navigate(redirectTo)
     } catch (err) {

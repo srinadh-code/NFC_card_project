@@ -266,6 +266,14 @@ export interface OrderCardProduct extends WithId {
   slug: string
   name: string
   price: string
+  // Real, backend-computed automatic-offer pricing (common/discounts.py on
+  // the backend) — null unless an active, automatic_apply offer currently
+  // applies to this card_type. Never computed on the frontend; a promo
+  // code's discount is only ever known once a customer enters one (see
+  // cartApi.applyPromoCode), so it never appears here.
+  discounted_price: number | null
+  discount_amount: number | null
+  offer_title: string | null
   design: string
   best_for: string
   template_count: number | null
@@ -403,19 +411,6 @@ export interface PaymentSettings extends WithId {
   razorpay_secret?: string
   has_secret: boolean
   cod_enabled: boolean
-  updated_at: string
-}
-
-export interface ShippingSettings extends WithId {
-  flat_rate: string
-  free_shipping_threshold: string
-  updated_at: string
-}
-
-export interface EmailSettings extends WithId {
-  smtp_host: string
-  smtp_port: number | null
-  from_address: string
   updated_at: string
 }
 

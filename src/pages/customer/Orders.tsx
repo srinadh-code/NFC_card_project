@@ -1,7 +1,7 @@
 import { useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Download, Mail, PackageSearch, Truck } from "lucide-react"
+import { Download, Mail, PackageSearch, Truck, XCircle } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -14,14 +14,20 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { ConfirmDialog } from "@/components/admin/ConfirmDialog"
 import { StatusBadge } from "@/components/admin/StatusBadge"
 import { ErrorState } from "@/components/customer/ErrorState"
 import { OrderTrackingView } from "@/components/orders/OrderTrackingView"
 import { useCustomerAuthStore } from "@/store/auth-store"
-import { ordersApi, toFrontendOrder, type ApiOrder } from "@/lib/api"
+import { ApiError, ordersApi, toFrontendOrder, type ApiOrder } from "@/lib/api"
 import { formatCurrency, formatDate } from "@/lib/mock-api"
 import { deriveCurrentStatus, estimateDeliveryWindow } from "@/lib/order-tracking"
-import type { Order } from "@/types"
+import type { Order, OrderStatus } from "@/types"
+
+// Mirrors the backend's CustomerOrderCancelView rules — the backend is the
+// real gate; these only decide what the card shows.
+const CANCELLABLE_STATUSES: OrderStatus[] = ["Pending", "Processing"]
+const SHIPPED_STATUSES: OrderStatus[] = ["Shipped", "Out for Delivery"]
 
 function downloadInvoice(order: ApiOrder) {
   const orderNumber = order.order_number ?? String(order.id)
@@ -57,7 +63,7 @@ function downloadInvoice(order: ApiOrder) {
  * plain table row — real data only (ApiOrder → the same normalized Order
  * shape admin's orders and the public Track Order page already use, via
  * the shared toFrontendOrder adapter), no fields invented per card. */
-function OrderCard({ order, onTrack }: { order: Order; onTrack: () => void }) {
+function OrderCard({ order, onTrack, onCancel }: { order: Order; onTrack: () => void; onCancel: () => void }) {
   const current = deriveCurrentStatus(order)
   const deliveryWindow = estimateDeliveryWindow(order)
   const [first, ...rest] = order.items
@@ -112,7 +118,20 @@ function OrderCard({ order, onTrack }: { order: Order; onTrack: () => void }) {
         <Button variant="outline" size="sm" onClick={onTrack}>
           View Details
         </Button>
+        {CANCELLABLE_STATUSES.includes(order.status) && (
+          <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={onCancel}>
+            <XCircle className="size-3.5" /> Cancel Order
+          </Button>
+        )}
+        {SHIPPED_STATUSES.includes(order.status) && (
+          <Button variant="outline" size="sm" disabled>
+            <XCircle className="size-3.5" /> Cancel Order
+          </Button>
+        )}
       </div>
+      {SHIPPED_STATUSES.includes(order.status) && (
+        <p className="mt-2 text-xs text-muted-foreground">Unable to cancel this order because it has been shipped.</p>
+      )}
     </div>
   )
 }
@@ -121,11 +140,23 @@ export default function CustomerOrders() {
   const customer = useCustomerAuthStore((s) => s.customer)
   const [page, setPage] = useState(1)
   const [trackingApiOrder, setTrackingApiOrder] = useState<ApiOrder | null>(null)
+  const [cancellingOrder, setCancellingOrder] = useState<ApiOrder | null>(null)
+  const queryClient = useQueryClient()
 
   const ordersQuery = useQuery({
     queryKey: ["customer-orders", page],
     queryFn: () => ordersApi.list(page),
     enabled: Boolean(customer),
+  })
+
+  const cancelMutation = useMutation({
+    mutationFn: (id: number) => ordersApi.cancel(id),
+    onSuccess: () => toast.success("Your order has been cancelled."),
+    onError: (err) =>
+      toast.error(err instanceof ApiError ? err.message : "Couldn't cancel the order. Please try again."),
+    // Refetch either way — on failure the status may have changed (e.g.
+    // admin just shipped it), so the card should show the real state.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["customer-orders"] }),
   })
 
   if (!customer) return null
@@ -172,7 +203,12 @@ export default function CustomerOrders() {
         <>
           <div className="flex flex-col gap-4">
             {orders.map((order) => (
-              <OrderCard key={order.id} order={toFrontendOrder(order)} onTrack={() => setTrackingApiOrder(order)} />
+              <OrderCard
+                key={order.id}
+                order={toFrontendOrder(order)}
+                onTrack={() => setTrackingApiOrder(order)}
+                onCancel={() => setCancellingOrder(order)}
+              />
             ))}
           </div>
 
@@ -235,6 +271,18 @@ export default function CustomerOrders() {
           )}
         </>
       )}
+
+      <ConfirmDialog
+        open={Boolean(cancellingOrder)}
+        onOpenChange={(open) => !open && setCancellingOrder(null)}
+        title="Cancel this order?"
+        description={`Order #${cancellingOrder?.order_number ?? cancellingOrder?.id ?? ""} will be cancelled. This can't be undone.`}
+        confirmLabel="Cancel Order"
+        cancelLabel="Keep Order"
+        onConfirm={() => {
+          if (cancellingOrder) cancelMutation.mutate(cancellingOrder.id)
+        }}
+      />
 
       {/* Track order dialog — the full shared tracking experience */}
       <Dialog open={Boolean(trackingApiOrder)} onOpenChange={(open) => !open && setTrackingApiOrder(null)}>

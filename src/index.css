@@ -340,6 +340,26 @@ body {
   animation: blob-pulse 8s ease-in-out infinite;
 }
 
+/* AnnouncementBanner's marquee — the track renders its content twice back
+   to back (see the component) and scrolls exactly -50%, so the seam
+   between the first and second copy is invisible and the loop never
+   jumps. Paused on hover so a customer can actually read/click it. */
+@keyframes marquee-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-marquee {
+  animation: marquee-scroll 28s linear infinite;
+}
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee {
+    animation: none;
+  }
+}
+
 /* Features page hero image: one-off entrance on the wrapper, then a slow
    float + subtle 3D tilt on the image itself (kept on separate elements so
    the two transforms never fight), with a navy/green glow pulsing behind. */

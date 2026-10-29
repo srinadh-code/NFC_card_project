@@ -5,7 +5,7 @@ import { Navigate, Route, Routes } from "react-router-dom"
 
 
 import { ScrollToTop } from "@/components/ScrollToTop"
-import { useAuthStore } from "@/store/auth-store"
+import { useAdminSessionStore, useCustomerSessionStore } from "@/store/auth-store"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute"
 import PublicLayout from "@/components/layout/PublicLayout"
@@ -73,14 +73,17 @@ import NotFound from "@/pages/NotFound"
 const DEFAULT_FAVICON_HREF = "/favicon.svg"
 
 function App() {
-  const bootstrap = useAuthStore((s) => s.bootstrap)
+  const bootstrapAdmin = useAdminSessionStore((s) => s.bootstrap)
+  const bootstrapCustomer = useCustomerSessionStore((s) => s.bootstrap)
   const { settings } = usePublicSettings()
 
-  // Re-validates the persisted session against the server once on load, so
-  // a revoked/expired token gets cleared instead of leaving a stale "logged
-  // in" UI state around.
+  // Re-validates both portals' persisted sessions against the server once
+  // on load, so a revoked/expired token gets cleared instead of leaving a
+  // stale "logged in" UI state around — independently, since each portal
+  // now has its own token pair (see auth-store.ts).
   useEffect(() => {
-    bootstrap()
+    bootstrapAdmin()
+    bootstrapCustomer()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

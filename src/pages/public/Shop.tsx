@@ -31,6 +31,8 @@ function toNexoraCardType(p: OrderCardProduct): NexoraCardType {
     id: p.slug,
     name: p.name,
     price: Number(p.price),
+    discountedPrice: p.discounted_price ?? undefined,
+    offerTitle: p.offer_title ?? undefined,
     design: p.design,
     bestFor: p.best_for,
     templateCount: p.template_count ?? undefined,
@@ -254,9 +256,27 @@ export default function Shop() {
                   <ArrowDown className="size-4" aria-hidden="true" />
                 </Button>
               ) : (
-                <p className={cn("mt-3 bg-gradient-to-r bg-clip-text text-3xl font-bold text-transparent", gradientClass)}>
-                  {formatCurrency(selectedCard.price, settings.currency)}
-                </p>
+                <div className="mt-3 flex flex-wrap items-baseline gap-3">
+                  <p
+                    className={cn(
+                      "bg-gradient-to-r bg-clip-text text-3xl font-bold text-transparent",
+                      gradientClass,
+                    )}
+                  >
+                    {formatCurrency(selectedCard.discountedPrice ?? selectedCard.price, settings.currency)}
+                  </p>
+                  {selectedCard.discountedPrice != null && (
+                    <>
+                      <p className="text-lg text-muted-foreground line-through">
+                        {formatCurrency(selectedCard.price, settings.currency)}
+                      </p>
+                      <span className="rounded-full bg-success/10 px-2.5 py-1 text-xs font-bold text-success">
+                        {Math.round((1 - selectedCard.discountedPrice / selectedCard.price) * 100)}% OFF
+                        {selectedCard.offerTitle ? ` · ${selectedCard.offerTitle}` : ""}
+                      </span>
+                    </>
+                  )}
+                </div>
               )}
               <p className="mt-3 max-w-lg text-muted-foreground">{selectedCard.design}</p>
             </div>
@@ -279,7 +299,9 @@ export default function Shop() {
               </div>
               <div className={cn(selectedCard.templateCount ? "border-x" : "border-l", "border-[#E2E8F0]")}>
                 <p className="text-xs text-muted-foreground">Price</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{formatCurrency(selectedCard.price, settings.currency)}</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">
+                  {formatCurrency(selectedCard.discountedPrice ?? selectedCard.price, settings.currency)}
+                </p>
               </div>
               {!!selectedCard.templateCount && (
                 <div>
@@ -320,7 +342,7 @@ export default function Shop() {
               <div>
                 <p className="text-sm text-muted-foreground">Total Price</p>
                 <p className={cn("bg-gradient-to-r bg-clip-text text-2xl font-bold text-transparent", gradientClass)}>
-                  {formatCurrency(selectedCard.price * qty, settings.currency)}
+                  {formatCurrency((selectedCard.discountedPrice ?? selectedCard.price) * qty, settings.currency)}
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">

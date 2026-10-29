@@ -23,29 +23,44 @@ import type {
 
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || "http://localhost:8000/api"
 
-const ACCESS_KEY = "nexora_access_token"
-const REFRESH_KEY = "nexora_refresh_token"
+// Admin and Customer are two entirely separate sessions — each portal gets
+// its own token pair under its own localStorage keys, so logging into one
+// in one browser tab can never silently log out or role-swap the other
+// portal open in a different tab of the same browser (the previous single
+// shared token pair meant exactly that: an admin mid-session in one tab
+// would start sending a customer's token — and get real, correct 403s from
+// every admin endpoint — the moment a customer logged in from another tab).
+export type SessionArea = "admin" | "customer"
 
-export function getAccessToken(): string | null {
-  return localStorage.getItem(ACCESS_KEY)
-}
-export function getRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_KEY)
-}
-export function setTokens(access: string, refresh: string) {
-  localStorage.setItem(ACCESS_KEY, access)
-  localStorage.setItem(REFRESH_KEY, refresh)
-}
-export function clearTokens() {
-  localStorage.removeItem(ACCESS_KEY)
-  localStorage.removeItem(REFRESH_KEY)
+function currentArea(): SessionArea {
+  return window.location.pathname.startsWith("/admin") ? "admin" : "customer"
 }
 
-// Lets auth-store.ts react when a request discovers the session is
+function tokenKey(area: SessionArea, kind: "access" | "refresh"): string {
+  return `nexora_${area}_${kind}_token`
+}
+
+export function getAccessToken(area: SessionArea = currentArea()): string | null {
+  return localStorage.getItem(tokenKey(area, "access"))
+}
+export function getRefreshToken(area: SessionArea = currentArea()): string | null {
+  return localStorage.getItem(tokenKey(area, "refresh"))
+}
+export function setTokens(access: string, refresh: string, area: SessionArea = currentArea()) {
+  localStorage.setItem(tokenKey(area, "access"), access)
+  localStorage.setItem(tokenKey(area, "refresh"), refresh)
+}
+export function clearTokens(area: SessionArea = currentArea()) {
+  localStorage.removeItem(tokenKey(area, "access"))
+  localStorage.removeItem(tokenKey(area, "refresh"))
+}
+
+// Lets auth-store.ts react when a request discovers a session is
 // unrecoverable (refresh token also expired/invalid) without api.ts having
 // to import the store directly (which would create a circular import,
-// since auth-store.ts already imports from here).
-type UnauthorizedHandler = () => void
+// since auth-store.ts already imports from here). Takes the area the
+// failure happened in, so only that portal's session gets cleared.
+type UnauthorizedHandler = (area: SessionArea) => void
 let unauthorizedHandler: UnauthorizedHandler | null = null
 export function setUnauthorizedHandler(handler: UnauthorizedHandler) {
   unauthorizedHandler = handler
@@ -95,12 +110,14 @@ interface Envelope<T> {
   pagination?: Pagination
 }
 
-let refreshInFlight: Promise<boolean> | null = null
+// Keyed per area — an admin-tab refresh and a customer-tab refresh must
+// never share (or block on) the same in-flight promise.
+const refreshInFlight: Partial<Record<SessionArea, Promise<boolean>>> = {}
 
-async function refreshAccessToken(): Promise<boolean> {
-  if (refreshInFlight) return refreshInFlight
-  refreshInFlight = (async () => {
-    const refresh = getRefreshToken()
+async function refreshAccessToken(area: SessionArea): Promise<boolean> {
+  if (refreshInFlight[area]) return refreshInFlight[area]!
+  refreshInFlight[area] = (async () => {
+    const refresh = getRefreshToken(area)
     if (!refresh) return false
     try {
       const res = await fetch(`${API_BASE_URL}/auth/token/refresh/`, {
@@ -110,15 +127,15 @@ async function refreshAccessToken(): Promise<boolean> {
       })
       if (!res.ok) return false
       const data = (await res.json()) as { access: string; refresh?: string }
-      setTokens(data.access, data.refresh ?? refresh)
+      setTokens(data.access, data.refresh ?? refresh, area)
       return true
     } catch {
       return false
     } finally {
-      refreshInFlight = null
+      refreshInFlight[area] = undefined
     }
   })()
-  return refreshInFlight
+  return refreshInFlight[area]!
 }
 
 interface RequestOptions {
@@ -126,6 +143,10 @@ interface RequestOptions {
   body?: unknown
   auth?: boolean
   isFormData?: boolean
+  // Overrides the path-inferred session area (see currentArea()) — only
+  // needed by authApi.me(area), which bootstrap() calls once per portal
+  // regardless of which portal's page happens to be currently mounted.
+  area?: SessionArea
 }
 
 /** Network-level failure (server unreachable, DNS, offline, CORS) — distinct
@@ -137,12 +158,12 @@ export class NetworkError extends Error {
 }
 
 async function rawRequest<T>(path: string, options: RequestOptions = {}, retried = false): Promise<Envelope<T>> {
-  const { method = "GET", body, auth = true, isFormData = false } = options
+  const { method = "GET", body, auth = true, isFormData = false, area = currentArea() } = options
 
   const headers: Record<string, string> = {}
   if (!isFormData) headers["Content-Type"] = "application/json"
   if (auth) {
-    const token = getAccessToken()
+    const token = getAccessToken(area)
     if (token) headers.Authorization = `Bearer ${token}`
   }
 
@@ -158,12 +179,12 @@ async function rawRequest<T>(path: string, options: RequestOptions = {}, retried
   }
 
   if (res.status === 401 && auth) {
-    if (!retried && getRefreshToken()) {
-      const refreshed = await refreshAccessToken()
+    if (!retried && getRefreshToken(area)) {
+      const refreshed = await refreshAccessToken(area)
       if (refreshed) return rawRequest<T>(path, options, true)
     }
-    clearTokens()
-    unauthorizedHandler?.()
+    clearTokens(area)
+    unauthorizedHandler?.(area)
   }
 
   let json: Envelope<T> | null = null
@@ -246,7 +267,8 @@ export const authApi = {
   login: (data: { email: string; password: string }) =>
     request<AuthPayload>("/auth/login/", { method: "POST", body: data, auth: false }),
 
-  logout: (refresh: string) => request<null>("/auth/logout/", { method: "POST", body: { refresh } }),
+  logout: (refresh: string, area?: SessionArea) =>
+    request<null>("/auth/logout/", { method: "POST", body: { refresh }, area }),
 
   // `expires_at` is when the just-issued OTP stops being valid (backend-
   // authoritative — see accounts/views.py's ForgotPasswordView) — always
@@ -268,7 +290,10 @@ export const authApi = {
   changePassword: (data: { current_password: string; new_password: string; confirm_password: string }) =>
     request<null>("/auth/change-password/", { method: "POST", body: data }),
 
-  me: () => request<ApiUser>("/auth/me/"),
+  // `area` lets bootstrap() (auth-store.ts) check each portal's own session
+  // regardless of which portal's page is currently mounted — see
+  // RequestOptions.area.
+  me: (area?: SessionArea) => request<ApiUser>("/auth/me/", { area }),
 
   // `credential` is the raw Google ID token from the frontend's Google
   // Identity Services button (@react-oauth/google's GoogleLogin
@@ -917,11 +942,34 @@ export interface ApiCartItem {
   color_hex: string
   qty: number
   price: string
+  // Real, backend-computed pricing (common/discounts.py) — original_price/
+  // discount_amount/final_price are only ever null when this card_type has
+  // no matching catalog product at all. Never derived on the frontend.
+  original_price: number | null
+  discount_amount: number | null
+  final_price: number
+  offer_title: string | null
   updated_at: string
 }
 export interface ApiCart {
   id: number
   items: ApiCartItem[]
+  promo_code: string
+  promo_code_error: string | null
+  subtotal: number
+  // Total combined discount (promotional + first-order) — kept as the one
+  // "how much came off" number for any simple display. The breakdown
+  // fields below are additive, for a detailed Order Summary.
+  discount: number
+  promotional_discount: number
+  // A second, universal discount layer (see common/discounts.py in the
+  // backend) — automatic on a new customer's first successful order, on
+  // top of whatever promotional discount already applied. Never null:
+  // 0 when not eligible/not enabled.
+  first_order_discount_amount: number
+  first_order_discount_percentage: number | null
+  is_first_order: boolean
+  total: number
   updated_at: string
 }
 export interface AddCartItemInput {
@@ -934,12 +982,63 @@ export interface AddCartItemInput {
   price: number
 }
 
+// The Checkout page's "Offers & Discounts" section — `applied` is exactly
+// what's already discounting the cart (same winner common/discounts.py
+// picked for Cart/Checkout/Order totals, so this list can never disagree
+// with the numbers shown elsewhere); `unavailable` is any other offer that
+// targets something in the cart but isn't in effect for this customer
+// right now, with the real reason (never a generic error).
+export interface ApiAppliedOffer {
+  id: number
+  title: string
+  discount_type: "PERCENTAGE" | "FIXED"
+  discount_value: number
+  promo_code: string | null
+  end_at: string | null
+  // Only true for the customer's own explicit selection (typed code, or
+  // an "Apply Offer" click) — a plain automatic offer has nothing to
+  // remove; it just stops applying if it stops being eligible.
+  can_remove: boolean
+}
+// An offer with no promo code that isn't automatic_apply — needs an
+// explicit "Apply Offer" click (see cartApi.applyOffer).
+export interface ApiOfferOption {
+  id: number
+  title: string
+  discount_type: "PERCENTAGE" | "FIXED"
+  discount_value: number
+  end_at: string | null
+}
+export interface ApiUnavailableOffer {
+  id: number
+  title: string
+  reason: string
+}
+export interface ApiAvailableOffers {
+  applied: ApiAppliedOffer[]
+  available: ApiOfferOption[]
+  unavailable: ApiUnavailableOffer[]
+}
+
 export const cartApi = {
   get: () => request<ApiCart>("/customer/cart/"),
   addItem: (item: AddCartItemInput) => request<ApiCart>("/customer/cart/items/", { method: "POST", body: item }),
   updateQty: (id: number, qty: number) =>
     request<ApiCart>(`/customer/cart/items/${id}/`, { method: "PATCH", body: { qty } }),
   remove: (id: number) => request<ApiCart>(`/customer/cart/items/${id}/`, { method: "DELETE" }),
+  // Real backend validation (common/discounts.find_eligible_offer) — never
+  // a locally-computed fake discount. Applying IS the validation: a
+  // rejected code is never stored (see customer_management.customer_cart.
+  // services.apply_promo_code).
+  applyPromoCode: (code: string) => request<ApiCart>("/customer/cart/promo-code/", { method: "POST", body: { code } }),
+  removePromoCode: () => request<ApiCart>("/customer/cart/promo-code/", { method: "DELETE" }),
+  availableOffers: () => request<ApiAvailableOffers>("/customer/cart/offers/"),
+  // The "Apply Offer" button — for an offer with no promo code (see
+  // ApiOfferOption / customer_cart.services.apply_offer, which re-runs the
+  // same eligibility checks the cart/checkout/order totals already use).
+  applyOffer: (offerId: number) =>
+    request<ApiCart>("/customer/cart/apply-offer/", { method: "POST", body: { offer_id: offerId } }),
+  removeOffer: () => request<ApiCart>("/customer/cart/apply-offer/", { method: "DELETE" }),
 }
 
 // ---------------------------------------------------------------------
@@ -1277,6 +1376,7 @@ const ORDER_STATUS_MAP: Record<string, OrderStatus> = {
   PENDING: "Pending",
   PROCESSING: "Processing",
   SHIPPED: "Shipped",
+  OUT_FOR_DELIVERY: "Out for Delivery",
   DELIVERED: "Delivered",
   COMPLETED: "Completed",
   CANCELLED: "Cancelled",
@@ -1285,6 +1385,7 @@ const ORDER_STATUS_REVERSE_MAP: Record<OrderStatus, string> = {
   Pending: "PENDING",
   Processing: "PROCESSING",
   Shipped: "SHIPPED",
+  "Out for Delivery": "OUT_FOR_DELIVERY",
   Delivered: "DELIVERED",
   Completed: "COMPLETED",
   Cancelled: "CANCELLED",
@@ -1888,26 +1989,118 @@ export interface AdminAnalyticsSummary {
 }
 
 // ---------------------------------------------------------------------
-// Admin announcements — "System Messages". Sending one fans out to every
-// customer's notification bell on the backend (still gated per-customer by
-// their own notify_system_messages preference); this is the only place a
-// System Message notification is ever created (see admin_api/announcements
-// and customer_management.customer_notifications.services.create_announcement).
+// Admin announcements — System Messages (Customer Dashboard) and
+// promotional offers/banners (Public Website), unified into one model.
+// Publishing one fans out to every targeted customer's notification bell
+// on the backend (still gated per-customer by their own
+// notify_system_messages preference) and/or the public marketing site —
+// see admin_api/announcements and
+// customer_management.customer_notifications.services.
 // ---------------------------------------------------------------------
+
+export type AnnouncementType =
+  | "GENERAL"
+  | "FESTIVAL"
+  | "OFFER"
+  | "PRODUCT"
+  | "IMPORTANT"
+  | "MAINTENANCE"
+  | "FEATURE"
+
+export type AnnouncementDisplayLocation = "CUSTOMER" | "PUBLIC" | "BOTH"
+
+export type AnnouncementEffectiveStatus = "draft" | "scheduled" | "active" | "expired" | "disabled"
+
+export type AnnouncementDiscountType = "PERCENTAGE" | "FIXED"
 
 export interface ApiAnnouncement {
   id: number
   title: string
   message: string
+  announcement_type: AnnouncementType
+  display_location: AnnouncementDisplayLocation
+  is_published: boolean
+  status: AnnouncementEffectiveStatus
+  start_at: string | null
+  end_at: string | null
+  offer_title: string
+  discount_type: AnnouncementDiscountType
+  discount_percentage: number | null
+  discount_amount: string | null
+  promo_code: string
+  automatic_apply: boolean
+  applies_to_all_products: boolean
+  applicable_card_types: string
+  first_order_only: boolean
+  cta_text: string
+  cta_link: string
   created_by_name: string | null
   recipient_count: number
   created_at: string
+  updated_at: string
+}
+
+export interface AnnouncementFormPayload {
+  title: string
+  message: string
+  announcement_type: AnnouncementType
+  display_location: AnnouncementDisplayLocation
+  is_published?: boolean
+  start_at?: string | null
+  end_at?: string | null
+  offer_title?: string
+  discount_type?: AnnouncementDiscountType
+  discount_percentage?: number | null
+  discount_amount?: number | string | null
+  promo_code?: string
+  automatic_apply?: boolean
+  applies_to_all_products?: boolean
+  applicable_card_types?: string
+  first_order_only?: boolean
+  cta_text?: string
+  cta_link?: string
 }
 
 export const adminAnnouncementApi = {
-  list: (page = 1) => requestPaginated<ApiAnnouncement>(`/admin/announcements/?page=${page}`),
-  send: (payload: { title: string; message?: string }) =>
+  list: (params: { page?: number; type?: AnnouncementType; displayLocation?: AnnouncementDisplayLocation } = {}) => {
+    const qs = new URLSearchParams()
+    qs.set("page", String(params.page ?? 1))
+    if (params.type) qs.set("type", params.type)
+    if (params.displayLocation) qs.set("display_location", params.displayLocation)
+    return requestPaginated<ApiAnnouncement>(`/admin/announcements/?${qs.toString()}`)
+  },
+  create: (payload: AnnouncementFormPayload) =>
     request<ApiAnnouncement>("/admin/announcements/", { method: "POST", body: payload }),
+  update: (id: number, payload: Partial<AnnouncementFormPayload>) =>
+    request<ApiAnnouncement>(`/admin/announcements/${id}/`, { method: "PATCH", body: payload }),
+  remove: (id: number) => request<null>(`/admin/announcements/${id}/`, { method: "DELETE" }),
+  publish: (id: number) =>
+    request<ApiAnnouncement>(`/admin/announcements/${id}/publish/`, { method: "POST" }),
+  unpublish: (id: number) =>
+    request<ApiAnnouncement>(`/admin/announcements/${id}/unpublish/`, { method: "POST" }),
+}
+
+// Public, unauthenticated — the marketing site's offer/announcement
+// banners. Already scoped server-side to published + currently within its
+// start/end window + targeted at Public/Both (see PublicAnnouncementSerializer).
+export interface ApiPublicAnnouncement {
+  id: number
+  title: string
+  message: string
+  announcement_type: AnnouncementType
+  offer_title: string
+  discount_type: AnnouncementDiscountType
+  discount_percentage: number | null
+  discount_amount: string | null
+  promo_code: string
+  cta_text: string
+  cta_link: string
+  start_at: string | null
+  end_at: string | null
+}
+
+export const publicAnnouncementsApi = {
+  list: () => request<ApiPublicAnnouncement[]>("/announcements/public/", { auth: false }),
 }
 
 export const adminAnalyticsApi = {
@@ -2204,6 +2397,9 @@ export const ordersApi = {
   list: (page = 1) => requestPaginated<ApiOrder>(`/customer/orders/?page=${page}&page_size=100`),
   create: (payload: CreateOrderPayload) => request<ApiOrder>("/customer/orders/", { method: "POST", body: payload }),
   getById: (id: number | string) => request<ApiOrder>(`/customer/orders/${id}/`),
+  // Only Pending/Processing orders — the backend enforces this and returns
+  // the reason (e.g. already shipped) as the error message otherwise.
+  cancel: (id: number | string) => request<ApiOrder>(`/customer/orders/${id}/cancel/`, { method: "POST" }),
 
   // `orderQuery` accepts either a bare id ("13") or the "ORD000013" format
   // shown on the payment-success page — the backend strips non-digits
@@ -2327,6 +2523,12 @@ export interface ApiNotification {
   type: "ORDER_UPDATE" | "NFC_UPDATE" | "PROFILE_VIEW" | "SYSTEM_MESSAGE"
   is_read: boolean
   created_at: string
+  // Only non-null when this notification came from a published Announcement
+  // (see AdminAnnouncementApi below) — lets the bell render a CTA button
+  // for an offer/promo without a second customer-facing endpoint.
+  announcement_type: AnnouncementType | null
+  cta_text: string
+  cta_link: string
 }
 
 export const notificationsApi = {
