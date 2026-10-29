@@ -1,4 +1,5 @@
-﻿import { useNavigate } from "react-router-dom"
+﻿import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -25,13 +26,17 @@ export default function CtaBanner({
   className,
 }: CtaBannerProps) {
   const navigate = useNavigate()
+  // A stale/deleted upload would otherwise render the browser's
+  // broken-image icon over the gradient — fall back to the gradient alone.
+  const [imageFailed, setImageFailed] = useState(false)
   return (
     <section className={cn("relative overflow-hidden bg-gradient-brand px-4 py-16 sm:py-20", className)}>
-      {backgroundImageUrl && (
+      {backgroundImageUrl && !imageFailed && (
         <img
           src={backgroundImageUrl}
           alt=""
           aria-hidden="true"
+          onError={() => setImageFailed(true)}
           className="pointer-events-none absolute inset-0 size-full object-cover opacity-25 mix-blend-overlay"
         />
       )}
