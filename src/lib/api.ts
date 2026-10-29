@@ -218,6 +218,55 @@ export async function requestRaw<T>(path: string, options: RequestOptions = {}):
   return rawRequest<T>(path, options)
 }
 
+// Multipart POST that reports upload progress (0–100) — fetch() can't, so
+// this uses XMLHttpRequest but keeps rawRequest's contract: same base URL,
+// bearer token, one refresh-and-retry on 401, NetworkError/ApiError on
+// failure, and the envelope's `data` on success. Used for large files (the
+// Home page demo video) where a progress bar matters.
+export function uploadWithProgress<T>(
+  path: string,
+  formData: FormData,
+  onProgress?: (percent: number) => void,
+  retried = false,
+): Promise<T> {
+  const area = currentArea()
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open("POST", `${API_BASE_URL}${path}`)
+    const token = getAccessToken(area)
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`)
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 100))
+    }
+    xhr.onerror = () => reject(new NetworkError())
+    xhr.onload = async () => {
+      if (xhr.status === 401) {
+        if (!retried && getRefreshToken(area) && (await refreshAccessToken(area))) {
+          onProgress?.(0)
+          uploadWithProgress<T>(path, formData, onProgress, true).then(resolve, reject)
+          return
+        }
+        clearTokens(area)
+        unauthorizedHandler?.(area)
+      }
+      let json: Envelope<T> | null = null
+      try {
+        json = JSON.parse(xhr.responseText) as Envelope<T>
+      } catch {
+        json = null
+      }
+      if (xhr.status < 200 || xhr.status >= 300 || !json || json.success === false) {
+        const message =
+          json?.message || (xhr.status === 413 ? "The file is too large for the server to accept." : `Request failed (${xhr.status})`)
+        reject(new ApiError(message, xhr.status, json?.errors ?? {}))
+        return
+      }
+      resolve(json.data as T)
+    }
+    xhr.send(formData)
+  })
+}
+
 async function requestPaginated<T>(
   path: string,
   options: RequestOptions = {},

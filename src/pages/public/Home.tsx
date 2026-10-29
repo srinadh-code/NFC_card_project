@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { ArrowRight, ArrowUpLeft, MessageCircle, PlayCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -122,17 +122,21 @@ export default function Home() {
           </div>
 
           <div className="relative flex items-center justify-center py-8 lg:min-h-[520px] lg:justify-end lg:py-0">
-            {/* Decorative floating gesture caption */}
-            <div className="absolute -top-2 right-4 z-20 hidden -rotate-6 flex-col items-end gap-1 text-right sm:flex">
-              <ArrowUpLeft className="size-5 text-primary" />
-              <p className="font-serif text-base italic leading-tight text-muted-foreground">
+            {/* Floating gesture caption — links to the Order Card page */}
+            <Link
+              to="/shop"
+              aria-label="Tap, Connect, Grow — order your card"
+              className="group absolute -top-2 right-4 z-20 hidden -rotate-6 cursor-pointer flex-col items-end gap-1 rounded-md text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex"
+            >
+              <ArrowUpLeft className="size-5 text-primary transition-transform duration-200 group-hover:-translate-x-0.5 group-hover:-translate-y-0.5" />
+              <p className="font-serif text-base italic leading-tight text-muted-foreground transition-colors duration-200 group-hover:text-primary">
                 Tap
                 <br />
                 Connect
                 <br />
                 Grow
               </p>
-            </div>
+            </Link>
 
             <div className="absolute size-80 rounded-full bg-gradient-to-br from-[#4F46E5]/25 via-[#7C3AED]/25 to-[#EC4899]/25 blur-3xl sm:size-96" />
 
@@ -204,12 +208,30 @@ export default function Home() {
         )}
       </section>
 
+      {/* Demo video — admin-uploaded (Website Content > Home > Home Page Demo
+          Video). Radix unmounts the content on close, which stops playback. */}
       <Dialog open={demoOpen} onOpenChange={setDemoOpen}>
-        <DialogContent>
+        <DialogContent className={cn(hero?.demo_video_url && "sm:max-w-3xl")}>
           <DialogHeader>
             <DialogTitle>Demo Video</DialogTitle>
-            <DialogDescription>Demo video coming soon! Check back shortly.</DialogDescription>
+            <DialogDescription>
+              {hero?.demo_video_url
+                ? "See how VR's GATEWAY works."
+                : "Demo video coming soon! Check back shortly."}
+            </DialogDescription>
           </DialogHeader>
+          {hero?.demo_video_url && (
+            <video
+              src={hero.demo_video_url}
+              controls
+              autoPlay
+              playsInline
+              preload="metadata"
+              className="aspect-video w-full rounded-xl bg-black"
+            >
+              Your browser can&apos;t play this video.
+            </video>
+          )}
         </DialogContent>
       </Dialog>
 

@@ -4,7 +4,7 @@
 // (nfcApi/profileApi), but factors the repeated list/detail/reorder/image
 // boilerplate shared by ~13 near-identical resources into small generic
 // helpers instead of hand-rolling each one.
-import { request, requestRaw, type Pagination } from "./api"
+import { request, requestRaw, uploadWithProgress, type Pagination } from "./api"
 import type {
   AboutFeature,
   AboutPage,
@@ -158,6 +158,11 @@ export const heroApi = {
   removePhoneImage: heroPhoneImageApi.removeImage,
   uploadNfcCardImage: heroNfcCardImageApi.uploadImage,
   removeNfcCardImage: heroNfcCardImageApi.removeImage,
+  uploadDemoVideo: (file: File, onProgress?: (percent: number) => void) => {
+    const formData = new FormData()
+    formData.append("video", file)
+    return uploadWithProgress<Hero>(`${ADMIN}/home/hero/demo-video/`, formData, onProgress)
+  },
 }
 export const heroFeaturesApi = makeCrudApi<HeroFeature>(`${ADMIN}/home/hero-features`)
 export const bottomBarApi = makeCrudApi<BottomBarItem>(`${ADMIN}/home/bottom-bar`)

@@ -21,6 +21,9 @@ export interface Hero extends WithId {
   secondary_cta_link: string
   phone_image_url: string | null
   nfc_card_image_url: string | null
+  demo_video_url: string | null
+  demo_video_filename: string
+  demo_video_uploaded_at: string | null
   is_active: boolean
 }
 
