@@ -100,7 +100,7 @@ export default function CustomerRegister() {
       })
       setTokens(payload.access, payload.refresh)
       useCustomerSessionStore.getState().setUser(payload.user)
-      toast.success(`Welcome to VR's NEXORA, ${form.name.split(" ")[0]}!`)
+      toast.success(`Welcome to VR's GATEWAY, ${form.name.split(" ")[0]}!`)
       navigate(redirectTo)
     } catch (err) {
       // A backend-side phone rejection (its own independent check) is shown
@@ -135,7 +135,7 @@ export default function CustomerRegister() {
     try {
       const result = await customerGoogleLogin(credentialResponse.credential)
       if (result.success) {
-        toast.success("Welcome to VR's NEXORA!")
+        toast.success("Welcome to VR's GATEWAY!")
         navigate(redirectTo)
         return
       }
@@ -162,7 +162,7 @@ export default function CustomerRegister() {
               </div>
             }
           />
-          <span className="text-lg font-bold tracking-tight">VR's NEXORA</span>
+          <span className="text-lg font-bold tracking-tight">VR's GATEWAY</span>
         </div>
 
         <div className="relative z-10 space-y-6">
@@ -207,7 +207,7 @@ export default function CustomerRegister() {
           <div className="space-y-1">
             <h2 className="text-2xl font-bold tracking-tight">Sign Up</h2>
             <p className="text-sm text-muted-foreground">
-              Create your VR's NEXORA account to get started.
+              Create your VR's GATEWAY account to get started.
             </p>
           </div>
 

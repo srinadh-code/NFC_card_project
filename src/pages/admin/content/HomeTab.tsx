@@ -347,7 +347,7 @@ function WhyChooseHighlightsSection() {
       api={featuresApi}
       queryKey={["content", "features"]}
       resourceLabel="Feature"
-      description={`The "Why Choose VR's NEXORA?" cards on the Home page. (The Features page has its own, separate set of cards — see the Features tab.)`}
+      description={`The "Why Choose VR's GATEWAY?" cards on the Home page. (The Features page has its own, separate set of cards — see the Features tab.)`}
       getRowLabel={(item) => item.title}
       searchPredicate={(item, q) => item.title.toLowerCase().includes(q) || item.description.toLowerCase().includes(q)}
       createDefaults={(existing) => ({ icon: "Zap", title: "", description: "", display_order: existing.length, is_active: true })}

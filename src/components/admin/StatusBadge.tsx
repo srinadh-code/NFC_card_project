@@ -42,6 +42,11 @@ const STATUS_VARIANTS: Record<string, BadgeVariant> = {
   Enabled: "success",
   Disabled: "secondary",
 
+  // Testimonial moderation (Pending is shared with orders above).
+  Approved: "success",
+  Rejected: "destructive",
+  Hidden: "secondary",
+
   Open: "warning",
   "In Progress": "soft",
   Resolved: "success",

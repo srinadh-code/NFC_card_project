@@ -16,7 +16,7 @@ export default function Faq() {
     <div>
       <PageHeader
         title="Frequently Asked Questions"
-        subtitle="Everything you need to know about VR's NEXORA cards and profiles."
+        subtitle="Everything you need to know about VR's GATEWAY cards and profiles."
       />
 
       <section className="bg-background px-4 py-16">

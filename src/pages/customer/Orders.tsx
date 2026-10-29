@@ -26,7 +26,7 @@ import type { Order } from "@/types"
 function downloadInvoice(order: ApiOrder) {
   const orderNumber = order.order_number ?? String(order.id)
   const lines = [
-    `VR's NEXORA — Invoice for Order #${orderNumber}`,
+    `VR's GATEWAY — Invoice for Order #${orderNumber}`,
     `Date: ${formatDate(order.placed_at)}`,
     `Status: ${order.status}`,
     "",
@@ -161,10 +161,10 @@ export default function CustomerOrders() {
             </span>
             <p className="text-base font-semibold text-foreground">No orders yet</p>
             <p className="max-w-sm text-sm text-muted-foreground">
-              Your NEXORA NFC card orders will appear here.
+              Your VR's GATEWAY NFC card orders will appear here.
             </p>
             <Button asChild className="mt-2">
-              <a href="/shop">Explore NEXORA Cards</a>
+              <a href="/shop">Explore VR's GATEWAY Cards</a>
             </Button>
           </CardContent>
         </Card>

@@ -310,3 +310,89 @@ body {
     animation: none;
   }
 }
+
+/* Features page hero image: one-off entrance on the wrapper, then a slow
+   float + subtle 3D tilt on the image itself (kept on separate elements so
+   the two transforms never fight), with a navy/green glow pulsing behind. */
+@keyframes hero-enter {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-hero-enter {
+  animation: hero-enter 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes hero-float {
+  0%, 100% { transform: perspective(1200px) translateY(0) rotateX(2deg) rotateY(-4deg); }
+  50% { transform: perspective(1200px) translateY(-16px) rotateX(-1deg) rotateY(3deg); }
+}
+.animate-hero-float {
+  animation: hero-float 7s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes hero-glow {
+  0%, 100% { opacity: 0.5; transform: scale(0.95); }
+  50% { opacity: 0.85; transform: scale(1.05); }
+}
+.animate-hero-glow {
+  animation: hero-glow 7s ease-in-out infinite;
+}
+
+/* Rounds the corners of the Home (hero, NFC showcase, Our Story) and
+   Features hero images and lightly feathers their edges
+   into the page, so an uploaded image with an opaque background never reads
+   as a hard box. */
+.hero-image-soft-edges {
+  border-radius: 1.5rem;
+  --hero-fade-x: linear-gradient(to right, transparent, #000 3%, #000 97%, transparent);
+  --hero-fade-y: linear-gradient(to bottom, transparent, #000 3%, #000 97%, transparent);
+  -webkit-mask-image: var(--hero-fade-x), var(--hero-fade-y);
+  -webkit-mask-composite: source-in;
+  mask-image: var(--hero-fade-x), var(--hero-fade-y);
+  mask-composite: intersect;
+}
+
+/* Shop theme preview popup (ProfileThemeShowcase). Animates only `scale`
+   and opacity — the dialog's centering uses the separate `translate`
+   property, so the two never fight. Radix waits for the closing animation
+   before unmounting. The overlay is targeted through its content sibling so
+   no other dialog changes. */
+@keyframes theme-preview-in {
+  from { opacity: 0; scale: 0.92; }
+  to { opacity: 1; scale: 1; }
+}
+@keyframes theme-preview-out {
+  from { opacity: 1; scale: 1; }
+  to { opacity: 0; scale: 0.95; }
+}
+@keyframes theme-preview-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes theme-preview-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.theme-preview-dialog[data-state="open"] {
+  animation: theme-preview-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.theme-preview-dialog[data-state="closed"] {
+  animation: theme-preview-out 180ms ease-in forwards;
+}
+[data-slot="dialog-overlay"]:has(+ .theme-preview-dialog)[data-state="open"] {
+  animation: theme-preview-fade-in 260ms ease-out;
+}
+[data-slot="dialog-overlay"]:has(+ .theme-preview-dialog)[data-state="closed"] {
+  animation: theme-preview-fade-out 180ms ease-in forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-hero-enter,
+  .animate-hero-float,
+  .animate-hero-glow,
+  .theme-preview-dialog,
+  [data-slot="dialog-overlay"]:has(+ .theme-preview-dialog) {
+    animation: none;
+  }
+}

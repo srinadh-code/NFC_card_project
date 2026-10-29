@@ -85,7 +85,7 @@ export default function About() {
               <div className="relative mx-auto aspect-[4/3] w-full max-w-md overflow-hidden rounded-[32px] shadow-[0_20px_60px_rgba(15,23,42,0.12)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.5)] sm:max-w-lg">
                 <img
                   src={data.page.story_image_url}
-                  alt="VR's NEXORA — our story"
+                  alt="VR's GATEWAY — our story"
                   className="size-full object-cover"
                 />
               </div>
@@ -124,12 +124,12 @@ export default function About() {
         data && <StatsShowcaseCard statistics={data.statistics} />
       )}
 
-      {/* Why Choose VR's NEXORA */}
+      {/* Why Choose VR's GATEWAY */}
       {data && data.why_choose.length > 0 && (
         <section className="bg-background py-20">
           <div className="container-page">
             <div className="mx-auto max-w-2xl text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-foreground">Why Choose VR's NEXORA?</h2>
+              <h2 className="text-3xl font-bold tracking-tight text-foreground">Why Choose VR's GATEWAY?</h2>
               <p className="mt-3 text-muted-foreground">
                 Everything you need to network smarter, in one premium card.
               </p>
@@ -189,7 +189,7 @@ export default function About() {
                 <div className="relative z-10 aspect-[4/3] w-full max-w-xl overflow-hidden rounded-[24px] shadow-[0_20px_60px_rgba(15,23,42,0.12)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
                   <img
                     src={data.built_from_experience.image_url}
-                    alt="VR's NEXORA story"
+                    alt="VR's GATEWAY story"
                     className="size-full object-cover"
                   />
                 </div>

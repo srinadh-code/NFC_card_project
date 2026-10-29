@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { Navigate, Link, useNavigate, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
-import { ShieldCheck, Zap } from "lucide-react"
+import { ArrowLeft, ShieldCheck, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -69,7 +69,7 @@ export default function AdminLogin() {
           <div className="space-y-1">
             <h1 className="flex items-center justify-center gap-1.5 text-xl font-bold tracking-tight">
               <BrandMark className="size-4 rounded-sm" fallback={<Zap className="size-4" fill="currentColor" />} />
-              <span>VR&apos;s NEXORA</span>
+              <span>VR&apos;s GATEWAY</span>
             </h1>
             <p className="text-sm text-muted-foreground">Admin Portal sign-in</p>
           </div>
@@ -124,6 +124,16 @@ export default function AdminLogin() {
             Customer login
           </Link>
         </p>
+
+        <div className="flex justify-center pt-2">
+          <Link
+            to="/"
+            className="group inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-muted-foreground outline-none ring-primary/40 transition-colors hover:text-primary focus-visible:ring-2"
+          >
+            <ArrowLeft className="size-4 transition-transform group-hover:-translate-x-0.5" aria-hidden="true" />
+            Back to Website
+          </Link>
+        </div>
       </div>
 
       <ForgotPasswordDialog open={forgotOpen} onOpenChange={setForgotOpen} />

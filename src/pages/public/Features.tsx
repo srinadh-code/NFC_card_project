@@ -22,8 +22,8 @@ import ProfilePhonePreview from "@/components/marketing/ProfilePhonePreview"
 import { Reveal } from "@/components/marketing/Reveal"
 import { resolveIcon } from "@/lib/icon-map"
 import { publicWebsiteApi } from "@/lib/contentApi"
+import { usePublicTestimonials } from "@/hooks/useTestimonials"
 
-const AVATAR_SEEDS = ["ananya-reddy", "rahul-menon", "priya-nair", "karthik-iyer"]
 
 // Fallback only for a card that has neither an admin-uploaded image nor a
 // saved gradient — keeps the grid from ever showing a blank icon badge.
@@ -31,6 +31,8 @@ const FALLBACK_GRADIENT = "linear-gradient(135deg,#4F46E5,#7C3AED)"
 
 export default function Features() {
   const navigate = useNavigate()
+  const { data: testimonials } = usePublicTestimonials()
+  const customerPhotos = (testimonials ?? []).filter((t) => t.profile_image).slice(0, 4)
   const [demoOpen, setDemoOpen] = useState(false)
 
   const { data, isLoading, isError } = useQuery({
@@ -68,7 +70,7 @@ export default function Features() {
         />
         <div className="pointer-events-none absolute right-0 top-0 size-[32rem] rounded-full bg-gradient-to-br from-[#7C3AED]/20 to-[#EC4899]/10 blur-[100px]" />
 
-        <div className="relative container-page grid items-center gap-16 lg:grid-cols-2">
+        <div className="relative container-page grid items-center gap-16 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] xl:gap-10">
           <div>
             {isLoading ? (
               <div className="space-y-4">
@@ -105,16 +107,18 @@ export default function Features() {
 
             {page?.trusted_users_count && (
               <div className="mt-8 flex flex-wrap items-center gap-4">
-                <div className="flex -space-x-3">
-                  {AVATAR_SEEDS.map((seed) => (
-                    <img
-                      key={seed}
-                      src={`https://api.dicebear.com/9.x/notionists/svg?seed=${seed}`}
-                      alt=""
-                      className="size-10 rounded-full border-2 border-white bg-secondary shadow-sm"
-                    />
-                  ))}
-                </div>
+                {customerPhotos.length > 0 && (
+                  <div className="flex -space-x-3">
+                    {customerPhotos.map((t) => (
+                      <img
+                        key={t.id}
+                        src={t.profile_image}
+                        alt=""
+                        className="size-10 rounded-full border-2 border-white bg-secondary object-cover shadow-sm"
+                      />
+                    ))}
+                  </div>
+                )}
                 <div>
                   <div className="flex items-center gap-0.5">
                     {Array.from({ length: 5 }).map((_, i) => (
@@ -134,11 +138,17 @@ export default function Features() {
             <div className="pointer-events-none absolute size-96 rounded-full bg-gradient-to-br from-[#7C3AED]/20 via-[#EC4899]/15 to-transparent blur-3xl" />
 
             {page?.hero_image_url ? (
-              <img
-                src={page.hero_image_url}
-                alt=""
-                className="relative z-10 w-full max-w-md object-contain drop-shadow-2xl"
-              />
+              <div className="relative z-10 w-full max-w-lg animate-hero-enter sm:max-w-xl lg:max-w-[42rem]">
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-[6%] rounded-full bg-gradient-to-br from-[#1E3A8A]/50 via-[#22C55E]/30 to-transparent blur-3xl animate-hero-glow"
+                />
+                <img
+                  src={page.hero_image_url}
+                  alt=""
+                  className="hero-image-soft-edges relative w-full object-contain animate-hero-float"
+                />
+              </div>
             ) : (
               <>
                 <p className="absolute left-1/2 -top-10 hidden w-max max-w-[220px] -translate-x-1/2 rotate-1 text-center font-serif text-xs italic text-muted-foreground sm:block">

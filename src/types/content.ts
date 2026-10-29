@@ -151,17 +151,6 @@ export interface Faq extends WithId {
   is_active: boolean
 }
 
-export interface Testimonial extends WithId {
-  name: string
-  designation: string
-  company: string
-  review: string
-  rating: number
-  image_url: string | null
-  display_order: number
-  is_active: boolean
-}
-
 export interface Company extends WithId {
   name: string
   logo_url: string | null
@@ -359,7 +348,6 @@ export interface PublicHomePayload {
   companies: Company[]
   statistics: Statistic[]
   values: Value[]
-  testimonials: Testimonial[]
   faqs_preview: Faq[]
   cta: Cta | null
 }

@@ -8,7 +8,7 @@ import {
   Link2,
   LogOut,
   MapPin,
-  MessageSquare,
+  MessageSquareQuote,
   QrCode,
   Settings,
   ShoppingBag,
@@ -30,7 +30,7 @@ const NAV_ITEMS = [
   { to: "/activity", label: "Activity", icon: Activity },
   { to: "/orders", label: "Orders", icon: ShoppingBag },
   { to: "/addresses", label: "Addresses", icon: MapPin },
-  { to: "/reviews", label: "Reviews", icon: MessageSquare },
+  { to: "/testimonials", label: "My Testimonials", icon: MessageSquareQuote },
   { to: "/settings", label: "Settings", icon: Settings },
 ]
 
@@ -53,7 +53,7 @@ export function CustomerSidebar({ onNavigate }: CustomerSidebarProps) {
             </div>
           }
         />
-        <span className="text-lg font-bold tracking-tight text-white">VR's NEXORA</span>
+        <span className="text-lg font-bold tracking-tight text-white">VR's GATEWAY</span>
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">

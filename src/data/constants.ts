@@ -90,7 +90,7 @@ export interface NexoraCardType {
 export const NEXORA_CARD_TYPES: NexoraCardType[] = [
   {
     id: "custom",
-    name: "NEXORA Custom",
+    name: "GATEWAY Custom",
     price: 999,
     design: "Custom color, logo and design",
     bestFor: "Businesses & Brands",
@@ -154,15 +154,15 @@ export interface ProfileTheme {
 }
 
 export const PROFILE_THEMES: ProfileTheme[] = [
-  { id: "classic", name: "NEXORA Classic", tagline: "Clean. Professional. Timeless." },
-  { id: "signature", name: "NEXORA Signature", tagline: "Elegant. Personal. Memorable." },
-  { id: "creative", name: "NEXORA Creative", tagline: "Bold. Modern. Expressive." },
-  { id: "executive", name: "NEXORA Executive", tagline: "Professional. Powerful. Sophisticated." },
-  { id: "luxury", name: "NEXORA Luxury", tagline: "Premium. Sophisticated. Exclusive." },
-  { id: "future", name: "NEXORA Future", tagline: "Futuristic. Digital. Innovative." },
-  { id: "nature", name: "NEXORA Nature", tagline: "Organic. Calm. Natural." },
-  { id: "glass", name: "NEXORA Glass", tagline: "Modern. Premium. Transparent." },
-  { id: "impact", name: "NEXORA Impact", tagline: "Confident. Dynamic. Powerful." },
+  { id: "classic", name: "GATEWAY Classic", tagline: "Clean. Professional. Timeless." },
+  { id: "signature", name: "GATEWAY Signature", tagline: "Elegant. Personal. Memorable." },
+  { id: "creative", name: "GATEWAY Creative", tagline: "Bold. Modern. Expressive." },
+  { id: "executive", name: "GATEWAY Executive", tagline: "Professional. Powerful. Sophisticated." },
+  { id: "luxury", name: "GATEWAY Luxury", tagline: "Premium. Sophisticated. Exclusive." },
+  { id: "future", name: "GATEWAY Future", tagline: "Futuristic. Digital. Innovative." },
+  { id: "nature", name: "GATEWAY Nature", tagline: "Organic. Calm. Natural." },
+  { id: "glass", name: "GATEWAY Glass", tagline: "Modern. Premium. Transparent." },
+  { id: "impact", name: "GATEWAY Impact", tagline: "Confident. Dynamic. Powerful." },
 ]
 
 // Which themes belong to which card tier. Keyed by NexoraCardType["id"],

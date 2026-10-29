@@ -4,6 +4,8 @@ import { ImageIcon, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ApiError } from "@/lib/api"
 
+
+
 const DEFAULT_ACCEPTED_TYPES = "image/jpeg,image/png,image/webp,image/svg+xml"
 const DEFAULT_FORMATS_HELP = "JPEG, PNG, WEBP or SVG. Max 5MB."
 

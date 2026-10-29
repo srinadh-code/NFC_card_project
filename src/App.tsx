@@ -1,5 +1,8 @@
 import { useEffect } from "react"
-import { Route, Routes } from "react-router-dom"
+import { Navigate, Route, Routes } from "react-router-dom"
+
+
+
 
 import { ScrollToTop } from "@/components/ScrollToTop"
 import { useAdminSessionStore, useCustomerSessionStore } from "@/store/auth-store"
@@ -24,6 +27,10 @@ import Contact from "@/pages/public/Contact"
 import Privacy from "@/pages/public/Privacy"
 import Terms from "@/pages/public/Terms"
 
+
+
+
+
 import AdminDashboard from "@/pages/admin/Dashboard"
 import AdminCustomers from "@/pages/admin/Customers"
 import AdminCustomerDetails from "@/pages/admin/CustomerDetails"
@@ -36,7 +43,10 @@ import AdminReports from "@/pages/admin/Reports"
 import AdminSettings from "@/pages/admin/Settings"
 import AdminSupport from "@/pages/admin/Support"
 import AdminWebsiteContent from "@/pages/admin/content"
-import AdminReviews from "@/pages/admin/Reviews"
+
+
+
+
 
 import Login from "@/pages/Login"
 import AdminLogin from "@/pages/admin/AdminLogin"
@@ -51,11 +61,12 @@ import CustomerAnalytics from "@/pages/customer/Analytics"
 import CustomerActivity from "@/pages/customer/Activity"
 import CustomerOrders from "@/pages/customer/Orders"
 import CustomerAddresses from "@/pages/customer/Addresses"
-import CustomerReviews from "@/pages/customer/Reviews"
+import MyTestimonials from "@/pages/customer/MyTestimonials"
 import CustomerSettings from "@/pages/customer/Settings"
 
 import PublicProfile from "@/pages/profile/PublicProfile"
 import NotFound from "@/pages/NotFound"
+
 
 // The favicon actually shipped in index.html — restored here the moment
 // an Admin-uploaded favicon (Settings → General → Branding) is removed.
@@ -140,7 +151,8 @@ function App() {
             <Route path="settings" element={<AdminSettings />} />
             <Route path="support" element={<AdminSupport />} />
             <Route path="content" element={<AdminWebsiteContent />} />
-            <Route path="reviews" element={<AdminReviews />} />
+            {/* Moderation moved to Website Content → Testimonials. */}
+            <Route path="reviews" element={<Navigate to="/admin/content?tab=testimonials" replace />} />
           </Route>
         </Route>
 
@@ -158,7 +170,8 @@ function App() {
             <Route path="/activity" element={<CustomerActivity />} />
             <Route path="/orders" element={<CustomerOrders />} />
             <Route path="/addresses" element={<CustomerAddresses />} />
-            <Route path="/reviews" element={<CustomerReviews />} />
+            <Route path="/testimonials" element={<MyTestimonials />} />
+            <Route path="/reviews" element={<Navigate to="/testimonials" replace />} />
             <Route path="/settings" element={<CustomerSettings />} />
           </Route>
         </Route>

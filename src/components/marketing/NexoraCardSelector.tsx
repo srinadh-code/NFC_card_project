@@ -52,14 +52,25 @@ export default function NexoraCardSelector({ cardTypes, selectedId, onSelect }: 
             )}
 
             <h3 className="text-xl font-bold text-foreground">{card.name}</h3>
-            <p
-              className={cn(
-                "mt-2 bg-gradient-to-r bg-clip-text text-3xl font-bold text-transparent",
-                gradientClass,
+            {/* Backend-computed offer pricing (see NexoraCardType.discountedPrice). */}
+            <div className="mt-2 flex flex-wrap items-baseline gap-2">
+              <p
+                className={cn(
+                  "bg-gradient-to-r bg-clip-text text-3xl font-bold text-transparent",
+                  gradientClass,
+                )}
+              >
+                {formatCurrency(card.discountedPrice ?? card.price)}
+              </p>
+              {card.discountedPrice != null && (
+                <>
+                  <p className="text-base text-muted-foreground line-through">{formatCurrency(card.price)}</p>
+                  <span className="rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-bold text-success">
+                    {Math.round((1 - card.discountedPrice / card.price) * 100)}% OFF
+                  </span>
+                </>
               )}
-            >
-              {formatCurrency(card.price)}
-            </p>
+            </div>
             <p className="mt-2 text-sm text-muted-foreground">{card.design}</p>
 
             <div className="mt-5 space-y-1">

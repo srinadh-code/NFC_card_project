@@ -1,5 +1,6 @@
 ﻿import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 interface CtaBannerProps {
   title: string
@@ -10,6 +11,9 @@ interface CtaBannerProps {
   // section). Renders under the existing gradient at reduced opacity so
   // the white heading/button always stay readable regardless of image.
   backgroundImageUrl?: string | null
+  // Merged onto the section (via cn) so a page can tune its padding
+  // without changing the other pages that share this banner.
+  className?: string
 }
 
 export default function CtaBanner({
@@ -18,10 +22,11 @@ export default function CtaBanner({
   buttonLabel = "Order Your Card Now",
   to = "/shop",
   backgroundImageUrl,
+  className,
 }: CtaBannerProps) {
   const navigate = useNavigate()
   return (
-    <section className="relative overflow-hidden bg-gradient-brand px-4 py-16 sm:py-20">
+    <section className={cn("relative overflow-hidden bg-gradient-brand px-4 py-16 sm:py-20", className)}>
       {backgroundImageUrl && (
         <img
           src={backgroundImageUrl}

@@ -82,7 +82,7 @@ export default function Navbar() {
   }, [])
 
   return (
-    <div className="sticky top-0 z-50 w-full px-3 pt-5 sm:px-4">
+    <div className="sticky top-0 z-50 w-full px-3 pt-3 sm:px-4">
       {/* Premium floating glass navbar */}
       <header
         className={cn(
@@ -96,7 +96,7 @@ export default function Navbar() {
           className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,rgba(124,58,237,0.08),transparent_70%)] dark:bg-[radial-gradient(circle_at_center,rgba(139,92,246,0.14),transparent_70%)]"
         />
 
-        <div className="mx-auto flex h-20 max-w-[1440px] items-center justify-between px-5 sm:px-6 lg:px-10">
+        <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-5 sm:px-6 lg:px-10">
           <Logo />
 
           <nav className="hidden items-center gap-2 lg:flex">

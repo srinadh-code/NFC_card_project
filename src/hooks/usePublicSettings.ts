@@ -9,13 +9,13 @@ import type { PublicGeneralSettings } from "@/types/content"
 // source of truth whenever the request succeeds; this is purely a
 // resilience fallback, never a substitute for it.
 const FALLBACK_SETTINGS: PublicGeneralSettings = {
-  site_name: "VR's NEXORA",
+  site_name: "VR's GATEWAY",
   site_email: "support@vrsnexora.com",
   site_phone: "+91 90000 12345",
   site_address: "Hyderabad, Telangana, India",
   currency: "INR",
   timezone: "Asia/Kolkata",
-  office_name: "VR's NEXORA",
+  office_name: "VR's GATEWAY",
   office_address_line1: "",
   office_address_line2: "",
   office_landmark: "",

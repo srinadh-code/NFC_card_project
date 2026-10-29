@@ -38,7 +38,7 @@ export function PlanTypeBadge({ cardType, className }: { cardType: CardType; cla
   }
   return (
     <Badge variant="outline" className={cn(PLAN_BADGE_CLASS[plan.id], className)}>
-      {plan.name.replace("NEXORA ", "")}
+      {plan.name.replace(/^(NEXORA|GATEWAY) /, "")}
     </Badge>
   )
 }

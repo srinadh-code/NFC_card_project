@@ -16,18 +16,18 @@ interface NfcShowcaseProps {
 
 export default function NfcShowcase({ badge, heading, description, points, imageUrl }: NfcShowcaseProps) {
   return (
-    <section className="overflow-hidden bg-background py-20 sm:py-24">
-      <div className="container-page grid items-center gap-16 lg:grid-cols-2">
+    <section className="overflow-hidden bg-background pb-12 pt-12 sm:pb-16 sm:pt-14">
+      <div className="container-page grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
         {/* Visual mockup — admin-managed image when set, else the code-built
             phone+card illustration below */}
-        <div className="relative order-2 flex items-center justify-center py-8 lg:order-1">
+        <div className="relative order-2 flex items-center justify-center lg:order-1">
           <div className="absolute size-72 rounded-full bg-gradient-to-br from-[#4F46E5]/10 via-[#7C3AED]/10 to-[#EC4899]/10 blur-3xl" />
 
           {imageUrl ? (
             <img
               src={imageUrl}
-              alt="VR's NEXORA — how it works"
-              className="relative z-10 max-h-[460px] w-full max-w-sm object-contain drop-shadow-2xl"
+              alt="VR's GATEWAY — how it works"
+              className="hero-image-soft-edges relative z-10 max-h-[460px] w-full max-w-sm object-contain"
             />
           ) : (
             <>
@@ -37,7 +37,7 @@ export default function NfcShowcase({ badge, heading, description, points, image
                 <div className="flex h-full w-full flex-col items-center justify-center gap-4 overflow-hidden rounded-[2rem] bg-gradient-to-b from-[#4F46E5] via-[#7C3AED] to-[#EC4899] p-6 text-center">
                   <Nfc className="size-10 text-white" />
                   <p className="text-sm font-medium text-white/90">
-                    Hold a VR's NEXORA card near this phone to share a profile
+                    Hold a VR's GATEWAY card near this phone to share a profile
                   </p>
                 </div>
               </div>
@@ -69,7 +69,7 @@ export default function NfcShowcase({ badge, heading, description, points, image
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-md">
                     <Icon className="size-4.5" />
                   </span>
-                  <span className="pt-1.5 text-sm font-medium text-foreground">{p.text}</span>
+                  <span className="pt-1.5 text-[15px] font-medium leading-6 text-foreground sm:text-base">{p.text}</span>
                 </li>
               )
             })}

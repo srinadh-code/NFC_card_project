@@ -174,7 +174,7 @@ function SectionHeading({ icon: Icon, title, color }: { icon: typeof User; title
 export default function ImpactTemplate({ profile, onShare, showContactInfo = true }: TemplateProps) {
   const theme = IMPACT_THEMES[profile.impactTheme] ?? IMPACT_THEMES.red
   const { enabledSocial, enabledCustom, showPhone, showEmail } = useProfileSections(profile, showContactInfo)
-  const companyLabel = profile.company || "VR's NEXORA"
+  const companyLabel = profile.company || "VR's GATEWAY"
 
   const tagline = findCustomFieldValue(profile.customFields, "Tagline")
   const experience = findCustomFieldValue(profile.customFields, "Experience")

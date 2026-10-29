@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { CheckCircle2, Minus, LayoutTemplate, Plus } from "lucide-react"
+import { ArrowDown, CheckCircle2, Minus, Plus } from "lucide-react"
 import { toast } from "sonner"
 import PageHeader from "@/components/marketing/PageHeader"
 import NexoraCardSelector from "@/components/marketing/NexoraCardSelector"
@@ -54,6 +54,21 @@ export default function Shop() {
   const navigate = useNavigate()
   const { addLine } = useCart()
   const [selectedId, setSelectedId] = useState<string>("")
+  // The single "selected card" details section below — choosing a card
+  // (even the already-selected one) brings it into view.
+  const detailsRef = useRef<HTMLElement>(null)
+  // The "Choose Your Profile Theme" section, target of "View N Templates".
+  const themesRef = useRef<HTMLElement>(null)
+  function scrollToSection(ref: React.RefObject<HTMLElement | null>) {
+    const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    requestAnimationFrame(() =>
+      ref.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" }),
+    )
+  }
+  function handleSelectCard(id: string) {
+    setSelectedId(id)
+    scrollToSection(detailsRef)
+  }
   const { settings } = usePublicSettings()
   const [qty, setQty] = useState(1)
   const queryClient = useQueryClient()
@@ -187,56 +202,17 @@ export default function Shop() {
       <PageHeader title={data?.page.page_title ?? ""} subtitle={data?.page.page_subtitle} />
 
       {/* 1. Choose Your NEXORA Card */}
-      <section className="bg-[#F8FAFC] px-4 py-16">
+      <section className="bg-[#F8FAFC] px-4 pb-8 pt-10 sm:pb-10 sm:pt-12">
         <div className="mx-auto max-w-[1320px]">
-          <NexoraCardSelector cardTypes={cardTypes} selectedId={selectedId} onSelect={setSelectedId} />
-
-          {/* Template count summary strip — visually integrated, not a
-              plain table, reading straight off the same card config. */}
-          <div className={cn(cardClass, "mt-8 flex flex-col divide-y divide-[#E2E8F0] p-0 hover:translate-y-0 hover:shadow-[0_10px_30px_rgba(15,23,42,0.06)] sm:flex-row sm:divide-x sm:divide-y-0")}>
-            {cardTypes.map((card) => (
-              <div key={card.id} className="flex flex-1 items-center gap-3 p-5">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <LayoutTemplate className="size-5" />
-                </span>
-                <div>
-                  <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                    {card.name}
-                    {card.discountedPrice != null && (
-                      <span className="rounded-full bg-success/10 px-1.5 py-0.5 text-[10px] font-bold text-success">
-                        {Math.round((1 - card.discountedPrice / card.price) * 100)}% OFF
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {card.discountedPrice != null ? (
-                      <>
-                        <span className="line-through">{formatCurrency(card.price, settings.currency)}</span>{" "}
-                        <span className="font-semibold text-success">
-                          {formatCurrency(card.discountedPrice, settings.currency)}
-                        </span>
-                      </>
-                    ) : (
-                      formatCurrency(card.price, settings.currency)
-                    )}
-                    {/* No profile-template entitlement (e.g. Google Review
-                        Card) means there's nothing to count here. */}
-                    {!!card.templateCount && (
-                      <>
-                        {" "}· {card.templateCount} {card.templateCount === 1 ? "Template" : "Templates"}
-                      </>
-                    )}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
+          <NexoraCardSelector cardTypes={cardTypes} selectedId={selectedId} onSelect={handleSelectCard} />
         </div>
       </section>
 
       {/* 2. Selected card + detailed ordering — appears exactly once, at
           the end of the page. */}
-      <section className="bg-secondary px-4 py-16">
+      {/* scroll-mt clears the sticky navbar (~78px tall) on scrollIntoView,
+          plus extra room so the card heading settles well below it. */}
+      <section ref={detailsRef} id="card-details" className="scroll-mt-28 bg-secondary px-4 py-8 sm:py-10">
         <div
           className={cn(
             cardClass,
@@ -254,27 +230,43 @@ export default function Shop() {
                   </span>
                 )}
               </div>
-              <div className="mt-3 flex flex-wrap items-baseline gap-3">
-                <p
-                  className={cn(
-                    "bg-gradient-to-r bg-clip-text text-3xl font-bold text-transparent",
-                    gradientClass,
-                  )}
+              {/* A card that includes profile templates gets a jump to the
+                  theme section here instead of repeating its price (still
+                  shown on its selection card and in the summary below);
+                  any other card keeps its price. */}
+              {availableThemes.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="mt-3 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 focus-visible:ring-blue-400/50 dark:bg-blue-500/15 dark:text-blue-300 dark:hover:bg-blue-500/25 dark:hover:text-blue-200"
+                  onClick={() => scrollToSection(themesRef)}
                 >
-                  {formatCurrency(selectedCard.discountedPrice ?? selectedCard.price, settings.currency)}
-                </p>
-                {selectedCard.discountedPrice != null && (
-                  <>
-                    <p className="text-lg text-muted-foreground line-through">
-                      {formatCurrency(selectedCard.price, settings.currency)}
-                    </p>
-                    <span className="rounded-full bg-success/10 px-2.5 py-1 text-xs font-bold text-success">
-                      {Math.round((1 - selectedCard.discountedPrice / selectedCard.price) * 100)}% OFF
-                      {selectedCard.offerTitle ? ` · ${selectedCard.offerTitle}` : ""}
-                    </span>
-                  </>
-                )}
-              </div>
+                  View {availableThemes.length} Templates
+                  <ArrowDown className="size-4" aria-hidden="true" />
+                </Button>
+              ) : (
+                <div className="mt-3 flex flex-wrap items-baseline gap-3">
+                  <p
+                    className={cn(
+                      "bg-gradient-to-r bg-clip-text text-3xl font-bold text-transparent",
+                      gradientClass,
+                    )}
+                  >
+                    {formatCurrency(selectedCard.discountedPrice ?? selectedCard.price, settings.currency)}
+                  </p>
+                  {selectedCard.discountedPrice != null && (
+                    <>
+                      <p className="text-lg text-muted-foreground line-through">
+                        {formatCurrency(selectedCard.price, settings.currency)}
+                      </p>
+                      <span className="rounded-full bg-success/10 px-2.5 py-1 text-xs font-bold text-success">
+                        {Math.round((1 - selectedCard.discountedPrice / selectedCard.price) * 100)}% OFF
+                        {selectedCard.offerTitle ? ` · ${selectedCard.offerTitle}` : ""}
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
               <p className="mt-3 max-w-lg text-muted-foreground">{selectedCard.design}</p>
             </div>
 
@@ -292,7 +284,7 @@ export default function Shop() {
             >
               <div>
                 <p className="text-xs text-muted-foreground">Selected Card</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{selectedCard.name.replace("NEXORA ", "")}</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{selectedCard.name.replace(/^(NEXORA|GATEWAY) /, "")}</p>
               </div>
               <div className={cn(selectedCard.templateCount ? "border-x" : "border-l", "border-[#E2E8F0]")}>
                 <p className="text-xs text-muted-foreground">Price</p>
@@ -382,10 +374,10 @@ export default function Shop() {
               (e.g. Google Review Card) renders that image instead — same
               frame, same sizing, just a different visual inside it. */}
           <div className="flex flex-col items-center justify-center">
-            <div className="relative flex h-80 w-full max-w-sm items-center justify-center overflow-hidden rounded-[32px] bg-gradient-to-br from-[#0B0F1A] via-[#12142B] to-[#1A0F2E] p-8 shadow-2xl">
+            <div className="relative flex h-80 w-full max-w-sm items-center justify-center overflow-hidden rounded-[32px] sm:h-[26rem] sm:max-w-lg lg:h-[28rem] lg:max-w-xl bg-gradient-to-br from-[#0B0F1A] via-[#12142B] to-[#1A0F2E] p-8 shadow-2xl">
               <div className="pointer-events-none absolute left-1/4 top-1/5 size-56 rounded-full bg-[#7C3AED]/30 blur-[90px]" />
               <div className="pointer-events-none absolute bottom-1/5 right-1/4 size-56 rounded-full bg-[#2563EB]/30 blur-[90px]" />
-              <div className="relative h-44 w-full max-w-xs animate-float-slow">
+              <div className="relative h-44 w-full max-w-xs animate-float-slow sm:h-56 sm:max-w-sm lg:h-64 lg:max-w-md">
                 <div className="h-full w-full -rotate-3 cursor-pointer transition-transform duration-500 ease-out hover:-rotate-1 hover:scale-[1.04]">
                   {selectedCard.image ? (
                     <img
@@ -414,7 +406,7 @@ export default function Shop() {
           for a product with no profile-template entitlement (e.g. Google
           Review Card) rather than showing an empty theme grid. */}
       {availableThemes.length > 0 && (
-        <section className="px-4 py-16">
+        <section ref={themesRef} id="profile-themes" className="scroll-mt-20 px-4 pb-14 pt-10 sm:pb-16 sm:pt-12">
           <div className="mx-auto max-w-[1320px]">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
@@ -434,7 +426,7 @@ export default function Shop() {
                   </p>
                 ) : (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Purchase NEXORA Custom above to unlock template selection.
+                    Purchase GATEWAY Custom above to unlock template selection.
                   </p>
                 )
               ) : (
@@ -447,7 +439,7 @@ export default function Shop() {
               )}
             </div>
 
-            <div className="mt-10">
+            <div className="mt-8">
               <ProfileThemeShowcase
                 themes={availableThemes}
                 selectedId={customer && profile && hasCustomCard ? profile.selectedTemplate : undefined}
