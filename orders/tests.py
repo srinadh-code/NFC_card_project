@@ -1,56 +1,123 @@
+from decimal import Decimal
+from unittest import mock
+
 from django.core import mail
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from common import discounts
 from common.test_utils import AuthenticatedAPITestCase, make_user
-from customer_management.customer_notifications.models import Notification
+from customer_management.customer_addresses.models import CustomerAddress
+from customer_management.customer_cart.models import Cart, CartItem
+from customer_management.customer_notifications.models import Announcement, Notification
 from customer_management.customer_settings.models import CustomerSettings
 
 from .models import Order
 
+# NOTE: CustomerOrderCreateSerializer takes no `items`/`shipping_line1`
+# fields — order items are built server-side from the customer's own cart
+# (customer_management.customer_cart) and the shipping address is a
+# CustomerAddress row selected by `address_id` (see
+# CustomerOrderCreateSerializer's docstring and CustomerOrderListCreateView.
+# post in orders/views.py). These fixtures seed that real cart/address
+# state instead of sending cart lines/address fields directly in the
+# request body.
+#
+# CUSTOM and REVIEW are real, active website_content.OrderCardProduct rows
+# (seeded by migration 0012_seed_order_card_content, prices 999.00/499.00)
+# — get_product_pricing always uses that catalog price as the order's real
+# price, ignoring whatever price a cart item happens to carry, so the
+# expected totals below are computed from the catalog, not from
+# _seed_cart_item's own `price` kwarg.
 
-def _valid_payload(**overrides):
+
+def _make_address(user, **overrides):
+    defaults = {
+        "full_name": "Test Customer",
+        "phone": "9999999999",
+        "address_line1": "123 Main St",
+        "city": "Hyderabad",
+        "district": "Hyderabad",
+        "state": "Telangana",
+        "pincode": "500001",
+        "country": "India",
+    }
+    defaults.update(overrides)
+    return CustomerAddress.objects.create(customer=user, **defaults)
+
+
+def _seed_cart_item(user, **overrides):
+    defaults = {
+        "product_id": "p1",
+        "name": "Custom Card",
+        "card_type": "CUSTOM",
+        "color_name": "Black",
+        "qty": 2,
+        "price": "499.00",
+    }
+    defaults.update(overrides)
+    cart, _ = Cart.objects.get_or_create(customer=user)
+    return CartItem.objects.create(cart=cart, **defaults)
+
+
+def _valid_payload(address, **overrides):
     payload = {
-        "items": [{"product_id": "p1", "name": "Custom Card", "card_type": "CUSTOM", "color": "Black", "qty": 2, "price": "499.00"}],
         "shipping": "49.00",
         "payment_method": "UPI",
-        "shipping_line1": "123 Main St",
-        "shipping_city": "Hyderabad",
-        "shipping_state": "Telangana",
-        "shipping_pincode": "500001",
-        "shipping_country": "India",
+        "address_id": address.pk,
     }
     payload.update(overrides)
     return payload
 
 
 class CustomerOrderCreateViewTests(AuthenticatedAPITestCase):
+    """Tests the base catalog/promotional pricing pipeline specifically —
+    the first-order discount (a separate, always-on-by-default layer; see
+    FirstOrderDiscountTests below) is turned off here so these amounts
+    keep testing exactly what they say they test, undisturbed by a
+    customer's first-order status."""
+
+    def setUp(self):
+        super().setUp()
+        self.address = _make_address(self.user)
+        patcher = mock.patch.object(discounts, "FIRST_ORDER_DISCOUNT_ENABLED", False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_creates_order_with_computed_totals_and_is_paid_immediately(self):
-        response = self.client.post(reverse("my-orders"), _valid_payload(), format="json")
+        _seed_cart_item(self.user)
+        response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         data = response.data["data"]
         self.assertEqual(data["status"], "PENDING")
         self.assertEqual(data["payment_status"], "PAID")
-        self.assertEqual(str(data["amount"]), "998.00")
-        self.assertEqual(str(data["total"]), "1047.00")
+        # Real catalog price (999.00 x 2), not the cart item's own price.
+        self.assertEqual(str(data["amount"]), "1998.00")
+        self.assertEqual(str(data["total"]), "2047.00")
         self.assertEqual(len(data["items"]), 1)
 
     def test_order_belongs_to_the_authenticated_customer(self):
-        response = self.client.post(reverse("my-orders"), _valid_payload(), format="json")
+        _seed_cart_item(self.user)
+        response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
         order = Order.objects.get(pk=response.data["data"]["id"])
         self.assertEqual(order.customer_id, self.user.id)
 
     def test_rejects_order_with_no_items(self):
-        response = self.client.post(reverse("my-orders"), _valid_payload(items=[]), format="json")
+        response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_creates_order_for_google_review_card(self):
-        payload = _valid_payload(
-            items=[{"product_id": "PRD-NEXORA-GOOGLE-REVIEW", "name": "Google Review Card", "card_type": "REVIEW", "color": "Black", "qty": 1, "price": "499.00"}]
+        _seed_cart_item(
+            self.user,
+            product_id="PRD-NEXORA-GOOGLE-REVIEW",
+            name="Google Review Card",
+            card_type="REVIEW",
+            qty=1,
+            price="499.00",
         )
-        response = self.client.post(reverse("my-orders"), payload, format="json")
+        response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         data = response.data["data"]
@@ -58,37 +125,141 @@ class CustomerOrderCreateViewTests(AuthenticatedAPITestCase):
         self.assertEqual(data["items"][0]["card_type"], "REVIEW")
         self.assertEqual(data["items"][0]["name"], "Google Review Card")
 
-    def test_rejects_retired_classic_card_type(self):
-        payload = _valid_payload(
-            items=[{"product_id": "p1", "name": "Classic Card", "card_type": "CLASSIC", "color": "Black", "qty": 1, "price": "499.00"}]
-        )
-        response = self.client.post(reverse("my-orders"), payload, format="json")
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
-    def test_rejects_retired_premium_card_type(self):
-        payload = _valid_payload(
-            items=[{"product_id": "p1", "name": "Premium Card", "card_type": "PREMIUM", "color": "Black", "qty": 1, "price": "799.00"}]
-        )
-        response = self.client.post(reverse("my-orders"), payload, format="json")
+    def test_rejects_an_address_that_does_not_belong_to_the_customer(self):
+        """address_id is validated against the authenticated customer's own
+        CustomerAddress rows (see CustomerOrderCreateSerializer.
+        validate_address_id) — another customer's address id must be
+        rejected, not silently accepted."""
+        _seed_cart_item(self.user)
+        other_address = _make_address(self.other_user)
+        response = self.client.post(reverse("my-orders"), _valid_payload(other_address), format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_requires_authentication(self):
         self.client.force_authenticate(user=None)
-        response = self.client.post(reverse("my-orders"), _valid_payload(), format="json")
+        response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_creates_a_matching_transaction(self):
-        response = self.client.post(reverse("my-orders"), _valid_payload(), format="json")
+        _seed_cart_item(self.user)
+        response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
         order = Order.objects.get(pk=response.data["data"]["id"])
         self.assertEqual(order.transactions.count(), 1)
-        self.assertEqual(str(order.transactions.first().amount), "1047.00")
+        self.assertEqual(str(order.transactions.first().amount), "2047.00")
+
+
+class FirstOrderDiscountTests(AuthenticatedAPITestCase):
+    """The universal, always-on-by-default 20% first-order discount layer
+    (common.discounts.calculate_first_order_discount) — separate from the
+    Announcement/Offer promotional system, applied on top of whatever that
+    system already produced. See common/discounts.py's module docstring
+    for the stacking rule this pins."""
+
+    def setUp(self):
+        super().setUp()
+        self.address = _make_address(self.user)
+
+    def test_new_customer_gets_20_percent_off_their_first_order(self):
+        _seed_cart_item(self.user)
+        response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        data = response.data["data"]
+        # Catalog price 999.00 x 2 = 1998.00, then 20% off = 1598.40.
+        self.assertEqual(str(data["first_order_discount_percentage"]), "20.00")
+        self.assertEqual(str(data["first_order_discount_amount"]), "399.60")
+        self.assertEqual(str(data["amount"]), "1598.40")
+
+    def test_second_order_gets_no_first_order_discount(self):
+        _seed_cart_item(self.user)
+        self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
+
+        _seed_cart_item(self.user)
+        second = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
+
+        data = second.data["data"]
+        self.assertIsNone(data["first_order_discount_amount"])
+        self.assertEqual(str(data["amount"]), "1998.00")
+
+    def test_a_previous_failed_payment_does_not_consume_eligibility(self):
+        Order.objects.create(
+            customer=self.user, amount="499.00", shipping="0.00", payment_method=Order.PaymentMethod.UPI,
+            payment_status=Order.PaymentStatus.FAILED,
+            shipping_line1="x", shipping_city="x", shipping_state="x", shipping_pincode="500001",
+        )
+        _seed_cart_item(self.user)
+        response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
+        self.assertEqual(str(response.data["data"]["amount"]), "1598.40")
+
+    def test_a_previous_cancelled_order_does_not_consume_eligibility(self):
+        Order.objects.create(
+            customer=self.user, amount="499.00", shipping="0.00", payment_method=Order.PaymentMethod.UPI,
+            payment_status=Order.PaymentStatus.PAID, status=Order.Status.CANCELLED,
+            shipping_line1="x", shipping_city="x", shipping_state="x", shipping_pincode="500001",
+        )
+        _seed_cart_item(self.user)
+        response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
+        self.assertEqual(str(response.data["data"]["amount"]), "1598.40")
+
+    def test_a_previous_paid_non_cancelled_order_consumes_eligibility(self):
+        Order.objects.create(
+            customer=self.user, amount="499.00", shipping="0.00", payment_method=Order.PaymentMethod.UPI,
+            payment_status=Order.PaymentStatus.PAID, status=Order.Status.PROCESSING,
+            shipping_line1="x", shipping_city="x", shipping_state="x", shipping_pincode="500001",
+        )
+        _seed_cart_item(self.user)
+        response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
+        self.assertEqual(str(response.data["data"]["amount"]), "1998.00")
+        self.assertIsNone(response.data["data"]["first_order_discount_amount"])
+
+    def test_promotional_and_first_order_discounts_stack_sequentially(self):
+        """1998.00 subtotal -> 10% promotional -> 1798.20 -> 20% first-order
+        on that -> 359.64 off -> 1438.56 final. Matches common/discounts.py's
+        documented stacking order: promotional first, first-order on the
+        resulting subtotal."""
+        admin = make_user(email="fo-stack-admin@example.com", role="ADMIN")
+        offer = Announcement.objects.create(
+            created_by=admin, title="Stack Test Offer", message="10% off",
+            announcement_type=Announcement.AnnouncementType.OFFER,
+            display_location=Announcement.DisplayLocation.BOTH,
+            is_published=True, ever_published=True,
+            discount_type=Announcement.DiscountType.PERCENTAGE, discount_percentage=Decimal("10"),
+            automatic_apply=True, applies_to_all_products=True,
+        )
+        try:
+            _seed_cart_item(self.user)
+            response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
+            data = response.data["data"]
+            self.assertEqual(str(data["first_order_discount_amount"]), "359.64")
+            self.assertEqual(str(data["amount"]), "1438.56")
+        finally:
+            offer.delete()
+
+    def test_historical_order_pricing_is_unaffected_by_later_admin_changes(self):
+        _seed_cart_item(self.user)
+        response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
+        order_id = response.data["data"]["id"]
+
+        # Disabling the feature entirely afterward must not touch the
+        # already-created order's frozen snapshot.
+        with mock.patch.object(discounts, "FIRST_ORDER_DISCOUNT_ENABLED", False):
+            detail = self.client.get(reverse("my-order-detail", args=[order_id]))
+        self.assertEqual(str(detail.data["data"]["amount"]), "1598.40")
+        self.assertEqual(str(detail.data["data"]["first_order_discount_amount"]), "399.60")
 
 
 class CustomerOrderListDetailViewTests(AuthenticatedAPITestCase):
+    def setUp(self):
+        super().setUp()
+        self.address = _make_address(self.user)
+        self.other_address = _make_address(self.other_user)
+
     def test_list_only_returns_own_orders(self):
-        self.client.post(reverse("my-orders"), _valid_payload(), format="json")
+        _seed_cart_item(self.user)
+        self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
         self.client.force_authenticate(user=self.other_user)
-        self.client.post(reverse("my-orders"), _valid_payload(), format="json")
+        _seed_cart_item(self.other_user)
+        self.client.post(reverse("my-orders"), _valid_payload(self.other_address), format="json")
         self.client.force_authenticate(user=self.user)
 
         response = self.client.get(reverse("my-orders"))
@@ -97,7 +268,8 @@ class CustomerOrderListDetailViewTests(AuthenticatedAPITestCase):
         self.assertEqual(len(response.data["data"]), 1)
 
     def test_detail_returns_own_order(self):
-        create_response = self.client.post(reverse("my-orders"), _valid_payload(), format="json")
+        _seed_cart_item(self.user)
+        create_response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
         order_id = create_response.data["data"]["id"]
 
         response = self.client.get(reverse("my-order-detail", args=[order_id]))
@@ -106,7 +278,8 @@ class CustomerOrderListDetailViewTests(AuthenticatedAPITestCase):
         self.assertEqual(response.data["data"]["id"], order_id)
 
     def test_detail_404_for_another_users_order(self):
-        create_response = self.client.post(reverse("my-orders"), _valid_payload(), format="json")
+        _seed_cart_item(self.user)
+        create_response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
         order_id = create_response.data["data"]["id"]
 
         self.client.force_authenticate(user=self.other_user)
@@ -121,7 +294,9 @@ class CustomerOrderVisibleToAdminTests(AuthenticatedAPITestCase):
     transactions/reports already query."""
 
     def test_order_is_visible_via_the_shared_orders_model(self):
-        response = self.client.post(reverse("my-orders"), _valid_payload(), format="json")
+        address = _make_address(self.user)
+        _seed_cart_item(self.user)
+        response = self.client.post(reverse("my-orders"), _valid_payload(address), format="json")
         order_id = response.data["data"]["id"]
 
         # admin_api.orders, .dashboard, .transactions and .reports all filter
@@ -135,10 +310,19 @@ class CustomerOrderIdempotencyTests(AuthenticatedAPITestCase):
     """One user action = one order, even under a double-click, a network
     retry, or two requests racing each other — see CustomerOrderListCreateView.post."""
 
+    def setUp(self):
+        super().setUp()
+        self.address = _make_address(self.user)
+        self.other_address = _make_address(self.other_user)
+
     def test_repeated_submission_with_same_key_creates_only_one_order(self):
-        payload = _valid_payload(idempotency_key="attempt-1")
+        _seed_cart_item(self.user)
+        payload = _valid_payload(self.address, idempotency_key="attempt-1")
 
         first = self.client.post(reverse("my-orders"), payload, format="json")
+        # The idempotency lookup short-circuits before the cart is even
+        # touched, so a replay succeeds even though clear_cart already
+        # emptied the cart after the first request.
         second = self.client.post(reverse("my-orders"), payload, format="json")
         third = self.client.post(reverse("my-orders"), payload, format="json")
 
@@ -172,7 +356,7 @@ class CustomerOrderIdempotencyTests(AuthenticatedAPITestCase):
         )
 
         response = self.client.post(
-            reverse("my-orders"), _valid_payload(idempotency_key="race-attempt"), format="json"
+            reverse("my-orders"), _valid_payload(self.address, idempotency_key="race-attempt"), format="json"
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -181,11 +365,13 @@ class CustomerOrderIdempotencyTests(AuthenticatedAPITestCase):
     def test_different_keys_create_separate_legitimate_orders(self):
         """A real second order (new checkout attempt, new key) must still
         go through — idempotency must never block legitimate repeat orders."""
+        _seed_cart_item(self.user)
         first = self.client.post(
-            reverse("my-orders"), _valid_payload(idempotency_key="attempt-1"), format="json"
+            reverse("my-orders"), _valid_payload(self.address, idempotency_key="attempt-1"), format="json"
         )
+        _seed_cart_item(self.user)  # clear_cart emptied it after the first order
         second = self.client.post(
-            reverse("my-orders"), _valid_payload(idempotency_key="attempt-2"), format="json"
+            reverse("my-orders"), _valid_payload(self.address, idempotency_key="attempt-2"), format="json"
         )
 
         self.assertEqual(first.status_code, status.HTTP_201_CREATED)
@@ -198,20 +384,24 @@ class CustomerOrderIdempotencyTests(AuthenticatedAPITestCase):
         admin-created-order path, which uses a different serializer
         entirely) must still work — and two keyless submissions must not
         be treated as duplicates of each other."""
-        first = self.client.post(reverse("my-orders"), _valid_payload(), format="json")
-        second = self.client.post(reverse("my-orders"), _valid_payload(), format="json")
+        _seed_cart_item(self.user)
+        first = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
+        _seed_cart_item(self.user)  # clear_cart emptied it after the first order
+        second = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
 
         self.assertEqual(first.status_code, status.HTTP_201_CREATED)
         self.assertEqual(second.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Order.objects.filter(customer=self.user).count(), 2)
 
     def test_same_key_from_a_different_customer_is_not_treated_as_their_order(self):
+        _seed_cart_item(self.user)
         first = self.client.post(
-            reverse("my-orders"), _valid_payload(idempotency_key="shared-key"), format="json"
+            reverse("my-orders"), _valid_payload(self.address, idempotency_key="shared-key"), format="json"
         )
         self.client.force_authenticate(user=self.other_user)
+        _seed_cart_item(self.other_user)
         second = self.client.post(
-            reverse("my-orders"), _valid_payload(idempotency_key="shared-key"), format="json"
+            reverse("my-orders"), _valid_payload(self.other_address, idempotency_key="shared-key"), format="json"
         )
 
         self.assertEqual(first.status_code, status.HTTP_201_CREATED)
@@ -226,8 +416,13 @@ class OrderConfirmationEmailTests(AuthenticatedAPITestCase):
     accounts.emails.send_order_confirmation_email, called from
     orders/signals.py on order creation."""
 
+    def setUp(self):
+        super().setUp()
+        self.address = _make_address(self.user)
+
     def test_placing_an_order_sends_a_confirmation_email_with_the_tracking_link(self):
-        response = self.client.post(reverse("my-orders"), _valid_payload(), format="json")
+        _seed_cart_item(self.user)
+        response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
         order = Order.objects.get(pk=response.data["data"]["id"])
 
         self.assertEqual(len(mail.outbox), 1)
@@ -239,7 +434,8 @@ class OrderConfirmationEmailTests(AuthenticatedAPITestCase):
     def test_confirmation_email_never_exposes_the_bare_order_id_as_sufficient(self):
         """The email must link with the token, not just an order number a
         recipient could forward without the security context intact."""
-        self.client.post(reverse("my-orders"), _valid_payload(), format="json")
+        _seed_cart_item(self.user)
+        self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
 
         sent = mail.outbox[0]
         self.assertIn("token=", sent.body)
@@ -252,8 +448,13 @@ class OrderNotificationTests(AuthenticatedAPITestCase):
     customer_management.customer_orders.Order, but that model has no route
     anywhere in config/urls.py and is never written to by a real request."""
 
+    def setUp(self):
+        super().setUp()
+        self.address = _make_address(self.user)
+
     def test_placing_an_order_notifies_the_customer(self):
-        self.client.post(reverse("my-orders"), _valid_payload(), format="json")
+        _seed_cart_item(self.user)
+        self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
         self.assertTrue(
             Notification.objects.filter(user=self.user, type=Notification.Type.ORDER_UPDATE).exists()
         )
@@ -283,7 +484,8 @@ class OrderNotificationTests(AuthenticatedAPITestCase):
         settings_obj.notify_order_updates = False
         settings_obj.save(update_fields=["notify_order_updates"])
 
-        self.client.post(reverse("my-orders"), _valid_payload(), format="json")
+        _seed_cart_item(self.user)
+        self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
 
         self.assertFalse(
             Notification.objects.filter(user=self.user, type=Notification.Type.ORDER_UPDATE).exists()

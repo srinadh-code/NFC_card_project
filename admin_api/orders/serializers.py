@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from accounts.models import User
@@ -12,7 +14,19 @@ TRACKING_LABELS = ["Order Placed", "Order Confirmed", "Shipped", "Out for Delive
 class OrderItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderItem
-        fields = ["product_id", "name", "card_type", "color", "qty", "price"]
+        fields = [
+            "product_id",
+            "name",
+            "card_type",
+            "color",
+            "qty",
+            "price",
+            "original_price",
+            "discount_type",
+            "discount_value",
+            "discount_amount",
+            "promo_code_used",
+        ]
         read_only_fields = fields
 
 
@@ -23,6 +37,9 @@ class AdminOrderSerializer(serializers.ModelSerializer):
     customer_phone = serializers.CharField(source="customer.phone", read_only=True)
     items = OrderItemSerializer(many=True, read_only=True)
     total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    subtotal = serializers.SerializerMethodField()
+    discount_total = serializers.SerializerMethodField()
+    total_discount = serializers.SerializerMethodField()
     address = serializers.SerializerMethodField()
     tracking = serializers.SerializerMethodField()
     assigned_card_id = serializers.IntegerField(read_only=True)
@@ -38,6 +55,11 @@ class AdminOrderSerializer(serializers.ModelSerializer):
             "customer_phone",
             "items",
             "amount",
+            "subtotal",
+            "discount_total",
+            "first_order_discount_percentage",
+            "first_order_discount_amount",
+            "total_discount",
             "shipping",
             "total",
             "payment_method",
@@ -49,6 +71,15 @@ class AdminOrderSerializer(serializers.ModelSerializer):
             "placed_at",
         ]
         read_only_fields = fields
+
+    def get_subtotal(self, obj):
+        return sum(((item.original_price or item.price) * item.qty for item in obj.items.all()), Decimal("0.00"))
+
+    def get_discount_total(self, obj):
+        return sum((((item.discount_amount or Decimal("0.00")) * item.qty) for item in obj.items.all()), Decimal("0.00"))
+
+    def get_total_discount(self, obj):
+        return self.get_discount_total(obj) + (obj.first_order_discount_amount or Decimal("0.00"))
 
     def get_address(self, obj):
         return {

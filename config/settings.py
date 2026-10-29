@@ -8,7 +8,7 @@ from pathlib import Path
 import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
-import os
+import os                                                                       
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -171,6 +171,7 @@ AUTH_USER_MODEL = "accounts.User"
 # rules are declared here once rather than per endpoint. The signup form's
 # live checklist mirrors these rules for feedback only; this list is what
 # actually decides. Effective policy: 8-12 characters, with at least one
+
 # lowercase letter, one uppercase letter, one number and one special
 # character, and not a common or wholly numeric password.
 AUTH_PASSWORD_VALIDATORS = [

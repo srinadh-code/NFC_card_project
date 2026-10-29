@@ -1,0 +1,149 @@
+Using existing test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+Found 30 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: admin_api, cloudinary, cloudinary_storage, corsheaders, messages, rest_framework, rest_framework_simplejwt, staticfiles
+  Apply all migrations: accounts, admin, analytics, auth, contenttypes, customer_addresses, customer_analytics, customer_cart, customer_leads, customer_notifications, customer_orders, customer_qr_codes, customer_services, customer_settings, nfc_cards, orders, profiles, reports, reviews, sessions, support, token_blacklist, website_content
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  Applying contenttypes.0001_initial... OK
+  Applying contenttypes.0002_remove_content_type_name... OK
+  Applying auth.0001_initial... OK
+  Applying auth.0002_alter_permission_name_max_length... OK
+  Applying auth.0003_alter_user_email_max_length... OK
+  Applying auth.0004_alter_user_username_opts... OK
+  Applying auth.0005_alter_user_last_login_null... OK
+  Applying auth.0006_require_contenttypes_0002... OK
+  Applying auth.0007_alter_validators_add_error_messages... OK
+  Applying auth.0008_alter_user_username_max_length... OK
+  Applying auth.0009_alter_user_last_name_max_length... OK
+  Applying auth.0010_alter_group_name_max_length... OK
+  Applying auth.0011_update_proxy_permissions... OK
+  Applying auth.0012_alter_user_first_name_max_length... OK
+  Applying accounts.0001_initial... OK
+  Applying accounts.0002_remove_emailotp_code_emailotp_attempts_and_more... OK
+  Applying accounts.0003_remove_emailotp_channel... OK
+  Applying accounts.0002_user_google_avatar_url_user_google_id... OK
+  Applying accounts.0004_merge_google_signin_and_otp_rewrite... OK
+  Applying admin.0001_initial... OK
+  Applying admin.0002_logentry_remove_auto_add... OK
+  Applying admin.0003_logentry_add_action_flag_choices... OK
+  Applying nfc_cards.0001_initial... OK
+  Applying analytics.0001_initial... OK
+  Applying customer_addresses.0001_initial... OK
+  Applying customer_analytics.0001_initial... OK
+  Applying customer_cart.0001_initial... OK
+  Applying customer_cart.0002_cart_promo_code... OK
+  Applying customer_leads.0001_initial... OK
+  Applying customer_notifications.0001_initial... OK
+  Applying customer_notifications.0002_announcement... OK
+  Applying customer_notifications.0003_announcement_announcement_type_announcement_cta_link_and_more... OK
+  Applying customer_notifications.0004_backfill_existing_announcements... OK
+  Applying customer_notifications.0005_announcement_applicable_card_types_and_more... OK
+  Applying customer_notifications.0006_backfill_ever_published... OK
+  Applying customer_orders.0001_initial... OK
+  Applying customer_orders.0002_alter_orderitem_card_type... OK
+  Applying profiles.0001_initial... OK
+  Applying profiles.0002_profile_alternate_phone_profile_city_profile_country_and_more... OK
+  Applying customer_qr_codes.0001_initial... OK
+  Applying customer_services.0001_initial... OK
+  Applying customer_settings.0001_initial... OK
+  Applying nfc_cards.0002_alter_nfccard_card_type... OK
+  Applying nfc_cards.0003_alter_nfccard_card_type... OK
+  Applying nfc_cards.0004_alter_nfccard_card_type... OK
+  Applying nfc_cards.0005_delete_retired_card_types... OK
+  Applying orders.0001_initial... OK
+  Applying orders.0002_order_idempotency_key_and_more... OK
+  Applying orders.0003_rename_standard_card_type_to_classic... OK
+  Applying orders.0004_rename_metal_card_type_to_custom... OK
+  Applying orders.0005_delete_retired_card_type_order_data... OK
+  Applying orders.0006_order_tracking_token... OK
+  Applying orders.0007_backfill_order_tracking_token... OK
+  Applying orders.0008_alter_order_tracking_token... OK
+  Applying orders.0006_order_number... OK
+  Applying orders.0009_merge_20260918_1024... OK
+  Applying orders.0010_orderitem_applied_offer_orderitem_discount_amount_and_more... OK
+  Applying profiles.0003_profile_google_maps_url... OK
+  Applying profiles.0004_profile_selected_template... OK
+  Applying profiles.0005_profile_google_review_url... OK
+  Applying profiles.0006_profile_luxury_theme... OK
+  Applying profiles.0007_profile_future_theme... OK
+  Applying profiles.0008_profile_impact_theme... OK
+  Applying profiles.0009_profile_glass_theme... OK
+  Applying profiles.0007_remove_profile_show_contact_info_and_more... OK
+  Applying profiles.0010_merge_20260917_1605... OK
+  Applying reports.0001_initial... OK
+  Applying reviews.0001_initial... OK
+  Applying sessions.0001_initial... OK
+  Applying support.0001_initial... OK
+  Applying token_blacklist.0001_initial... OK
+  Applying token_blacklist.0002_outstandingtoken_jti_hex... OK
+  Applying token_blacklist.0003_auto_20171017_2007... OK
+  Applying token_blacklist.0004_auto_20171017_2013... OK
+  Applying token_blacklist.0005_remove_outstandingtoken_jti... OK
+  Applying token_blacklist.0006_auto_20171017_2113... OK
+  Applying token_blacklist.0007_auto_20171017_2214... OK
+  Applying token_blacklist.0008_migrate_to_bigautofield... OK
+  Applying token_blacklist.0010_fix_migrate_to_bigautofield... OK
+  Applying token_blacklist.0011_linearizes_history... OK
+  Applying token_blacklist.0012_alter_outstandingtoken_user... OK
+  Applying token_blacklist.0013_alter_blacklistedtoken_options_and_more... OK
+  Applying website_content.0001_initial... OK
+  Applying website_content.0002_contactmessagereply... OK
+  Applying website_content.0003_generalsettings... OK
+  Applying website_content.0004_seed_general_settings... OK
+  Applying website_content.0005_update_home_hero_and_bottom_bar... OK
+  Applying website_content.0006_emailsettings_paymentsettings_securitysettings_and_more... OK
+  Applying website_content.0007_aboutpage_story_image_public_id_and_more... OK
+  Applying website_content.0008_featuresanalyticssection_featurescta_and_more... OK
+  Applying website_content.0009_remove_featurespagesettings_hero_heading_and_more... OK
+  Applying website_content.0010_seed_features_page_content... OK
+  Applying website_content.0011_ordercardpagesettings_ordercardproduct_and_more... OK
+  Applying website_content.0012_seed_order_card_content... OK
+  Applying website_content.0013_profiletemplatepreview... OK
+  Applying website_content.0014_seed_profile_template_previews... OK
+  Applying website_content.0015_generalsettings_office_address_line1_and_more... OK
+  Applying website_content.0016_homeourstory_homehowitfeels_image_public_id_and_more... OK
+  Applying website_content.0017_generalsettings_company_logo_public_id_and_more...test_admin_can_list_sent_announcements (customer_management.customer_notifications.tests.AdminAnnouncementViewTests.test_admin_can_list_sent_announcements) ... C:\Users\Lenovo\OneDrive\Desktop\NFC-PROJECT\NFC_BACKEND\env\Lib\site-packages\django\core\handlers\base.py:63: UserWarning: No directory at: C:\Users\Lenovo\OneDrive\Desktop\NFC-PROJECT\NFC_BACKEND\staticfiles\
+  mw_instance = middleware(adapted_handler)
+ok
+test_admin_can_save_a_draft_without_notifying_anyone (customer_management.customer_notifications.tests.AdminAnnouncementViewTests.test_admin_can_save_a_draft_without_notifying_anyone) ... ok
+test_admin_can_send_an_announcement (customer_management.customer_notifications.tests.AdminAnnouncementViewTests.test_admin_can_send_an_announcement) ... ok
+test_regular_customer_cannot_send_an_announcement (customer_management.customer_notifications.tests.AdminAnnouncementViewTests.test_regular_customer_cannot_send_an_announcement) ... ok
+test_requires_a_title (customer_management.customer_notifications.tests.AdminAnnouncementViewTests.test_requires_a_title) ... ok
+test_requires_authentication (customer_management.customer_notifications.tests.AdminAnnouncementViewTests.test_requires_authentication) ... ok
+test_creates_exactly_one_announcement_record (customer_management.customer_notifications.tests.CreateAnnouncementServiceTests.test_creates_exactly_one_announcement_record) ... ok
+test_does_not_notify_customers_who_opted_out (customer_management.customer_notifications.tests.CreateAnnouncementServiceTests.test_does_not_notify_customers_who_opted_out) ... ok
+test_draft_does_not_notify_anyone (customer_management.customer_notifications.tests.CreateAnnouncementServiceTests.test_draft_does_not_notify_anyone)
+A draft (is_published=False, the default) is exactly what "Save ... ok
+test_notifies_every_opted_in_customer (customer_management.customer_notifications.tests.CreateAnnouncementServiceTests.test_notifies_every_opted_in_customer) ... ok
+test_records_a_real_recipient_count (customer_management.customer_notifications.tests.CreateAnnouncementServiceTests.test_records_a_real_recipient_count) ... ok
+test_customer_can_delete_their_own_notification (customer_management.customer_notifications.tests.DeleteNotificationViewTests.test_customer_can_delete_their_own_notification) ... ok
+test_customer_cannot_delete_another_customers_notification (customer_management.customer_notifications.tests.DeleteNotificationViewTests.test_customer_cannot_delete_another_customers_notification) ... ok
+test_deleting_a_nonexistent_notification_is_handled_gracefully (customer_management.customer_notifications.tests.DeleteNotificationViewTests.test_deleting_a_nonexistent_notification_is_handled_gracefully) ... ok
+test_deleting_a_notification_does_not_affect_the_source_order (customer_management.customer_notifications.tests.DeleteNotificationViewTests.test_deleting_a_notification_does_not_affect_the_source_order)
+The notification is a projection of the event, not the event ... ok
+test_deleting_a_read_notification_works (customer_management.customer_notifications.tests.DeleteNotificationViewTests.test_deleting_a_read_notification_works) ... ok
+test_deleting_an_unread_notification_works_and_lowers_unread_count (customer_management.customer_notifications.tests.DeleteNotificationViewTests.test_deleting_an_unread_notification_works_and_lowers_unread_count) ... ok
+test_deleting_the_same_notification_twice_is_handled_gracefully (customer_management.customer_notifications.tests.DeleteNotificationViewTests.test_deleting_the_same_notification_twice_is_handled_gracefully) ... ok
+test_requires_authentication (customer_management.customer_notifications.tests.DeleteNotificationViewTests.test_requires_authentication) ... ok
+test_deletes_only_read_notifications (customer_management.customer_notifications.tests.DeleteReadNotificationsViewTests.test_deletes_only_read_notifications) ... ok
+test_does_not_delete_another_customers_read_notifications (customer_management.customer_notifications.tests.DeleteReadNotificationsViewTests.test_does_not_delete_another_customers_read_notifications) ... ok
+test_requires_authentication (customer_management.customer_notifications.tests.DeleteReadNotificationsViewTests.test_requires_authentication) ... ok
+test_unread_count_is_unchanged_after_delete_all_read (customer_management.customer_notifications.tests.DeleteReadNotificationsViewTests.test_unread_count_is_unchanged_after_delete_all_read) ... ok
+test_lists_only_own_notifications (customer_management.customer_notifications.tests.ListNotificationsViewTests.test_lists_only_own_notifications) ... ok
+test_requires_authentication (customer_management.customer_notifications.tests.ListNotificationsViewTests.test_requires_authentication) ... ok
+test_unread_only_filter (customer_management.customer_notifications.tests.ListNotificationsViewTests.test_unread_only_filter) ... ok
+test_cannot_mark_another_users_notification (customer_management.customer_notifications.tests.MarkNotificationsReadViewTests.test_cannot_mark_another_users_notification) ... ok
+test_mark_all (customer_management.customer_notifications.tests.MarkNotificationsReadViewTests.test_mark_all) ... ok
+test_marks_specific_ids_as_read (customer_management.customer_notifications.tests.MarkNotificationsReadViewTests.test_marks_specific_ids_as_read) ... ok
+test_requires_ids_or_all (customer_management.customer_notifications.tests.MarkNotificationsReadViewTests.test_requires_ids_or_all) ... ok
+
+----------------------------------------------------------------------
+Ran 30 tests in 434.388s
+
+OK
+Preserving test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+ OK
+System check identified no issues (0 silenced).

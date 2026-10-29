@@ -12,6 +12,23 @@ class Cart(models.Model):
     no row yet rather than a pre-seeded one."""
 
     customer = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="cart")
+    # Explicit customer action ("enter promo code") — separate from
+    # automatic_apply offers, which need no code and are computed live at
+    # read time without ever being stored here. Validated against
+    # common.discounts.find_eligible_offer on every apply, never trusted
+    # as still-valid just because it was once accepted.
+    promo_code = models.CharField(max_length=50, blank=True, default="")
+    # Explicit customer action for an offer that has NO promo code and
+    # isn't automatic_apply — the "Apply Offer" button (see
+    # services.apply_offer/remove_offer). Mutually exclusive with
+    # promo_code in practice (applying one clears the other), since only
+    # one manual selection can be in effect at a time — same "single
+    # winner" rule as everywhere else. SET_NULL: deleting the offer later
+    # never breaks this row, it just stops applying (see
+    # common.discounts.find_eligible_offer).
+    applied_offer = models.ForeignKey(
+        "customer_notifications.Announcement", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
