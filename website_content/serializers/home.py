@@ -14,6 +14,9 @@ from website_content.models import (
 class HomeHeroSerializer(serializers.ModelSerializer):
     phone_image_url = serializers.CharField(read_only=True)
     nfc_card_image_url = serializers.CharField(read_only=True)
+    demo_video_url = serializers.CharField(read_only=True)
+    demo_video_filename = serializers.CharField(read_only=True)
+    demo_video_uploaded_at = serializers.DateTimeField(read_only=True)
 
     class Meta:
         model = HomeHero
@@ -29,6 +32,9 @@ class HomeHeroSerializer(serializers.ModelSerializer):
             "secondary_cta_link",
             "phone_image_url",
             "nfc_card_image_url",
+            "demo_video_url",
+            "demo_video_filename",
+            "demo_video_uploaded_at",
             "is_active",
         ]
 

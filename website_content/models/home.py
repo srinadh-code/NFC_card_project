@@ -27,6 +27,14 @@ class HomeHero(models.Model):
     nfc_card_image_url = models.URLField(max_length=500, blank=True, default="")
     nfc_card_image_public_id = models.CharField(max_length=255, blank=True, default="")
 
+    # "Watch Demo" video — a Cloudinary video resource, uploaded/replaced via
+    # HomeHeroDemoVideoAdminView. Empty until the admin uploads one, in
+    # which case the public demo popup shows a fallback message.
+    demo_video_url = models.URLField(max_length=500, blank=True, default="")
+    demo_video_public_id = models.CharField(max_length=255, blank=True, default="")
+    demo_video_filename = models.CharField(max_length=255, blank=True, default="")
+    demo_video_uploaded_at = models.DateTimeField(null=True, blank=True)
+
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

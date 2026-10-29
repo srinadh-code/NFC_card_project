@@ -10,6 +10,7 @@ from .models import (
     FeaturesPageCard,
     FeaturesPageSettings,
     GeneralSettings,
+    HomeHero,
     OrderCardPageSettings,
     OrderCardProduct,
     Statistic,
@@ -364,3 +365,117 @@ class OrderCardPageSettingsAdminViewTests(APITestCase):
 
         public = self.client.get(reverse("public-order-card"))
         self.assertEqual(public.data["data"]["page"]["page_title"], "Updated Title")
+
+
+MP4_HEADER = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom"
+
+
+def _mp4(name="demo.mp4", content=MP4_HEADER + b"\x00" * 64, content_type="video/mp4"):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    return SimpleUploadedFile(name, content, content_type=content_type)
+
+
+def _cloudinary_result(public_id):
+    return {
+        "public_id": public_id,
+        "secure_url": f"https://res.cloudinary.com/demo/video/upload/{public_id}.mp4",
+        "resource_type": "video",
+        "format": "mp4",
+    }
+
+
+@patch("common.video_storage._cloudinary_configured", return_value=True)
+class HomeHeroDemoVideoAdminViewTests(APITestCase):
+    """Upload/replace of the Home "Watch Demo" video — Cloudinary is mocked,
+    so these never touch a real Cloudinary account."""
+
+    def setUp(self):
+        self.admin = make_user(email="video-admin@example.com", role="ADMIN")
+        self.customer = make_user(email="video-customer@example.com")
+        self.url = reverse("admin-home-hero-demo-video")
+
+    def test_requires_admin_role(self, _configured):
+        self.client.force_authenticate(user=self.customer)
+        with patch("common.video_storage.cloudinary.uploader.upload_large") as mock_upload:
+            response = self.client.post(self.url, {"video": _mp4()}, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        mock_upload.assert_not_called()
+
+    def test_upload_saves_url_and_public_endpoint_returns_it(self, _configured):
+        self.client.force_authenticate(user=self.admin)
+        with patch(
+            "common.video_storage.cloudinary.uploader.upload_large",
+            return_value=_cloudinary_result("website/home/videos/v1"),
+        ) as mock_upload:
+            response = self.client.post(self.url, {"video": _mp4()}, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(mock_upload.call_args.kwargs["resource_type"], "video")
+        hero = HomeHero.objects.get()
+        self.assertEqual(hero.demo_video_public_id, "website/home/videos/v1")
+        self.assertEqual(hero.demo_video_filename, "demo.mp4")
+        self.assertIsNotNone(hero.demo_video_uploaded_at)
+
+        public = self.client.get(reverse("public-home"))
+        self.assertEqual(public.data["data"]["hero"]["demo_video_url"], hero.demo_video_url)
+
+    def test_replace_deletes_old_video_only_after_saving_the_new_one(self, _configured):
+        HomeHero.objects.create(demo_video_url="https://example.com/old.mp4", demo_video_public_id="old")
+        self.client.force_authenticate(user=self.admin)
+        with patch(
+            "common.video_storage.cloudinary.uploader.upload_large",
+            return_value=_cloudinary_result("website/home/videos/v2"),
+        ), patch("common.video_storage.cloudinary.uploader.destroy") as mock_destroy:
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.post(self.url, {"video": _mp4("new.mp4")}, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(HomeHero.objects.count(), 1)
+        self.assertEqual(HomeHero.objects.get().demo_video_public_id, "website/home/videos/v2")
+        mock_destroy.assert_called_once_with("old", resource_type="video", invalidate=True)
+
+    def test_failed_upload_keeps_the_existing_video(self, _configured):
+        HomeHero.objects.create(demo_video_url="https://example.com/old.mp4", demo_video_public_id="old")
+        self.client.force_authenticate(user=self.admin)
+        with patch(
+            "common.video_storage.cloudinary.uploader.upload_large", side_effect=Exception("network down")
+        ), patch("common.video_storage.cloudinary.uploader.destroy") as mock_destroy:
+            response = self.client.post(self.url, {"video": _mp4()}, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Video upload failed", str(response.data))
+        self.assertEqual(HomeHero.objects.get().demo_video_public_id, "old")
+        mock_destroy.assert_not_called()
+
+    def test_rejects_invalid_files_before_uploading(self, _configured):
+        self.client.force_authenticate(user=self.admin)
+        cases = [
+            _mp4("clip.mov", content_type="video/quicktime"),
+            _mp4("fake.mp4", content=b"definitely not a video file"),
+            _mp4("empty.mp4", content=b""),
+        ]
+        with patch("common.video_storage.cloudinary.uploader.upload_large") as mock_upload:
+            for file_obj in cases:
+                response = self.client.post(self.url, {"video": file_obj}, format="multipart")
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, file_obj.name)
+            missing = self.client.post(self.url, {}, format="multipart")
+        self.assertEqual(missing.status_code, status.HTTP_400_BAD_REQUEST)
+        mock_upload.assert_not_called()
+
+    def test_rejects_files_over_the_size_limit(self, _configured):
+        self.client.force_authenticate(user=self.admin)
+        with patch("common.video_storage.MAX_UPLOAD_BYTES", 32), patch(
+            "common.video_storage.cloudinary.uploader.upload_large"
+        ) as mock_upload:
+            response = self.client.post(self.url, {"video": _mp4()}, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        mock_upload.assert_not_called()
+
+    def test_non_mp4_result_from_cloudinary_is_discarded(self, _configured):
+        self.client.force_authenticate(user=self.admin)
+        bad = {**_cloudinary_result("website/home/videos/odd"), "format": "webm"}
+        with patch("common.video_storage.cloudinary.uploader.upload_large", return_value=bad), patch(
+            "common.video_storage.cloudinary.uploader.destroy"
+        ) as mock_destroy:
+            response = self.client.post(self.url, {"video": _mp4()}, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        mock_destroy.assert_called_once_with("website/home/videos/odd", resource_type="video", invalidate=True)
+        self.assertFalse(HomeHero.objects.filter(demo_video_public_id="website/home/videos/odd").exists())
