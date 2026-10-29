@@ -1,4 +1,4 @@
-import { Check, CheckCircle2 } from "lucide-react"
+import { ArrowDown, Check, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { cardClass, gradientClass } from "@/components/marketing/PremiumCard"
 import { formatCurrency } from "@/lib/mock-api"
@@ -8,9 +8,11 @@ interface NexoraCardSelectorProps {
   cardTypes: NexoraCardType[]
   selectedId: NexoraCardType["id"]
   onSelect: (id: NexoraCardType["id"]) => void
+  /** Makes the "N Templates Included" line a jump to that card's templates. */
+  onViewTemplates?: (id: NexoraCardType["id"]) => void
 }
 
-export default function NexoraCardSelector({ cardTypes, selectedId, onSelect }: NexoraCardSelectorProps) {
+export default function NexoraCardSelector({ cardTypes, selectedId, onSelect, onViewTemplates }: NexoraCardSelectorProps) {
   return (
     // `lg:grid-cols-3` was sized for 3 NEXORA tiers (Classic/Premium/Custom).
     // Only 2 products exist now (Custom + Google Review Card), so a fixed
@@ -84,9 +86,26 @@ export default function NexoraCardSelector({ cardTypes, selectedId, onSelect }: 
             {!!card.templateCount && (
               <div className="mt-4 space-y-1">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Profile Templates</p>
-                <p className="text-sm font-medium text-foreground">
-                  {card.templateCount} {card.templateCount === 1 ? "Template" : "Templates"} Included
-                </p>
+                {onViewTemplates ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      // Same as "Select Card" below: keep the card container
+                      // from also handling this click (it would scroll to the
+                      // details section instead).
+                      e.stopPropagation()
+                      onViewTemplates(card.id)
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-foreground underline-offset-4 transition-colors hover:text-[#4F46E5] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7C3AED] focus-visible:ring-offset-2"
+                  >
+                    {card.templateCount} {card.templateCount === 1 ? "Template" : "Templates"} Included
+                    <ArrowDown className="size-3.5" aria-hidden="true" />
+                  </button>
+                ) : (
+                  <p className="text-sm font-medium text-foreground">
+                    {card.templateCount} {card.templateCount === 1 ? "Template" : "Templates"} Included
+                  </p>
+                )}
               </div>
             )}
 
