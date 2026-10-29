@@ -6,6 +6,7 @@ import { CheckCircle2, Info, MapPin, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AddressFormDialog } from "@/components/customer/AddressFormDialog"
+import { OffersSection } from "@/components/checkout/OffersSection"
 import { useCart } from "@/hooks/useCart"
 import { sanitizeCartLines } from "@/store/cart-store"
 import { useCustomerAuthStore } from "@/store/auth-store"
@@ -59,7 +60,17 @@ export default function Checkout() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const customer = useCustomerAuthStore((s) => s.customer)
-  const { lines, subtotal, couponCode, discount, clearCart } = useCart()
+  const {
+    lines,
+    subtotal,
+    promotionalDiscount,
+    firstOrderDiscountAmount,
+    firstOrderDiscountPercentage,
+    isFirstOrder,
+    total: cartTotal,
+    promoCode,
+    clearCart,
+  } = useCart()
   const { settings } = usePublicSettings()
 
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
@@ -96,8 +107,10 @@ export default function Checkout() {
   const sub = subtotal()
   // The live Order backend doesn't model a separate shipping charge yet —
   // the total shown here must match exactly what gets recorded server-side
-  // (subtotal minus discount), so no shipping fee is added on top.
-  const total = Math.max(0, sub - discount)
+  // (subtotal minus discount, both already computed by common/discounts.py
+  // via the cart's own `total`/`discount`), so no shipping fee is added on
+  // top and nothing here is recomputed client-side.
+  const total = cartTotal
 
   const placeOrderMutation = useMutation({
     mutationFn: (payload: CreateOrderPayload) => ordersApi.create(payload),
@@ -242,6 +255,17 @@ export default function Checkout() {
             ) : null}
           </div>
 
+          <OffersSection enabled={lines.length > 0} />
+
+          {isFirstOrder && firstOrderDiscountAmount > 0 && (
+            <div className="rounded-2xl border border-success/30 bg-success/5 p-4 text-sm">
+              <p className="font-semibold text-success">🎉 First Order Offer</p>
+              <p className="mt-0.5 text-muted-foreground">
+                {firstOrderDiscountPercentage}% OFF applied automatically to your first order!
+              </p>
+            </div>
+          )}
+
           <div className="flex items-start gap-2 rounded-2xl border bg-muted/30 p-4 text-sm text-muted-foreground">
             <Info className="mt-0.5 size-4 shrink-0" />
             <p>
@@ -258,8 +282,11 @@ export default function Checkout() {
               <div key={l.lineId} className="flex justify-between text-muted-foreground">
                 <span>
                   {l.name} × {l.qty}
+                  {l.discountAmount ? <span className="ml-1 text-xs text-success">(offer applied)</span> : null}
                 </span>
-                <span className="text-foreground">{formatCurrency(l.price * l.qty, settings.currency)}</span>
+                <span className="text-foreground">
+                  {formatCurrency((l.finalPrice ?? l.price) * l.qty, settings.currency)}
+                </span>
               </div>
             ))}
           </div>
@@ -268,10 +295,16 @@ export default function Checkout() {
               <span>Subtotal</span>
               <span className="text-foreground">{formatCurrency(sub, settings.currency)}</span>
             </div>
-            {couponCode && (
+            {promotionalDiscount > 0 && (
               <div className="flex justify-between text-success">
-                <span>Discount ({couponCode})</span>
-                <span>- {formatCurrency(discount, settings.currency)}</span>
+                <span>Promotional Discount{promoCode ? ` (${promoCode.toUpperCase()})` : ""}</span>
+                <span>- {formatCurrency(promotionalDiscount, settings.currency)}</span>
+              </div>
+            )}
+            {firstOrderDiscountAmount > 0 && (
+              <div className="flex justify-between text-success">
+                <span>First Order Discount</span>
+                <span>- {formatCurrency(firstOrderDiscountAmount, settings.currency)}</span>
               </div>
             )}
             <div className="flex justify-between border-t pt-3 text-base font-semibold text-foreground">

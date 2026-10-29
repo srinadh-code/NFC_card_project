@@ -1,6 +1,6 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom"
 import { Loader2 } from "lucide-react"
-import { useAuthStore, hasValidSession } from "@/store/auth-store"
+import { useAdminSessionStore, useCustomerSessionStore, hasValidSession } from "@/store/auth-store"
 
 /**
  * Single source of truth for gating a route subtree behind a role. Used for
@@ -21,8 +21,15 @@ import { useAuthStore, hasValidSession } from "@/store/auth-store"
  *     enough to pass every guard in the app.
  */
 export function ProtectedRoute({ role }: { role: "ADMIN" | "CUSTOMER" }) {
-  const user = useAuthStore((s) => s.user)
-  const hydrated = useAuthStore((s) => s.hydrated)
+  // Each portal has its own independent session store (see auth-store.ts) —
+  // both are subscribed unconditionally (hooks can't be called
+  // conditionally) and the one matching `role` is picked below.
+  const adminUser = useAdminSessionStore((s) => s.user)
+  const adminHydrated = useAdminSessionStore((s) => s.hydrated)
+  const customerUser = useCustomerSessionStore((s) => s.user)
+  const customerHydrated = useCustomerSessionStore((s) => s.hydrated)
+  const user = role === "ADMIN" ? adminUser : customerUser
+  const hydrated = role === "ADMIN" ? adminHydrated : customerHydrated
   const location = useLocation()
 
   const authorized = hasValidSession(user, role)

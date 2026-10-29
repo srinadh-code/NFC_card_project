@@ -291,6 +291,12 @@ export interface CartLine {
   color: { name: string; hex: string }
   qty: number
   price: number
+  // Real, backend-computed discount (see ApiCartItem) — always undefined
+  // for a guest (pre-login) line, since there's no server cart to price it
+  // against yet; never a client-side guess.
+  finalPrice?: number
+  discountAmount?: number
+  offerTitle?: string | null
 }
 
 export interface AdminUser {

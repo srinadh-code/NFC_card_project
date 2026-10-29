@@ -50,6 +50,13 @@ const STATUS_VARIANTS: Record<string, BadgeVariant> = {
   High: "destructive",
   Medium: "warning",
   Low: "secondary",
+
+  // Announcement effective status (Admin Settings > Announcements) — see
+  // Announcement.effective_status() on the backend. "Active" and
+  // "Disabled" already exist above (shared with NFC card/other statuses).
+  Draft: "secondary",
+  Scheduled: "warning",
+  Expired: "destructive",
 }
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {

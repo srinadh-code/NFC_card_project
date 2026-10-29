@@ -2,8 +2,7 @@ import { useEffect, useRef } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCustomerAuthStore } from "@/store/auth-store"
 import { useCartStore } from "@/store/cart-store"
-import { useCouponStore } from "@/store/coupon-store"
-import { cartApi, CARD_TYPE_MAP, type ApiCartItem } from "@/lib/api"
+import { ApiError, cartApi, CARD_TYPE_MAP, type ApiCartItem } from "@/lib/api"
 import type { CardType, CartLine } from "@/types"
 
 function toFrontendCartLine(item: ApiCartItem): CartLine {
@@ -15,6 +14,9 @@ function toFrontendCartLine(item: ApiCartItem): CartLine {
     color: { name: item.color_name, hex: item.color_hex },
     qty: item.qty,
     price: Number(item.price),
+    finalPrice: item.final_price != null ? Number(item.final_price) : undefined,
+    discountAmount: item.discount_amount != null ? Number(item.discount_amount) : undefined,
+    offerTitle: item.offer_title,
   }
 }
 
@@ -57,10 +59,6 @@ export function useCart() {
   const guestRemoveLine = useCartStore((s) => s.removeLine)
   const guestClearCart = useCartStore((s) => s.clearCart)
 
-  const couponCode = useCouponStore((s) => s.couponCode)
-  const discount = useCouponStore((s) => s.discount)
-  const applyCouponRaw = useCouponStore((s) => s.applyCoupon)
-
   const cartQuery = useQuery({
     queryKey: ["cart", customer?.id],
     queryFn: cartApi.get,
@@ -100,17 +98,92 @@ export function useCart() {
     onSuccess: (cart) => queryClient.setQueryData(["cart", customer?.id], cart),
   })
 
+  // Real, backend-validated promo code — see common/discounts.py. Applying
+  // IS the validation (no separate "check" step): a rejected code is
+  // never stored, so there's no window where the UI shows a code that
+  // isn't actually in effect.
+  const applyPromoMutation = useMutation({
+    mutationFn: (code: string) => cartApi.applyPromoCode(code),
+    onSuccess: (cart) => {
+      queryClient.setQueryData(["cart", customer?.id], cart)
+      queryClient.invalidateQueries({ queryKey: ["cart-offers"] })
+    },
+  })
+  const removePromoMutation = useMutation({
+    mutationFn: () => cartApi.removePromoCode(),
+    onSuccess: (cart) => {
+      queryClient.setQueryData(["cart", customer?.id], cart)
+      queryClient.invalidateQueries({ queryKey: ["cart-offers"] })
+    },
+  })
+
+  // The "Apply Offer" button — for an offer with no promo code (see
+  // ApiOfferOption). Also invalidates the offers list itself: applying one
+  // moves it from `available` into `applied` there.
+  const applyOfferMutation = useMutation({
+    mutationFn: (offerId: number) => cartApi.applyOffer(offerId),
+    onSuccess: (cart) => {
+      queryClient.setQueryData(["cart", customer?.id], cart)
+      queryClient.invalidateQueries({ queryKey: ["cart-offers"] })
+    },
+  })
+  const removeOfferMutation = useMutation({
+    mutationFn: () => cartApi.removeOffer(),
+    onSuccess: (cart) => {
+      queryClient.setQueryData(["cart", customer?.id], cart)
+      queryClient.invalidateQueries({ queryKey: ["cart-offers"] })
+    },
+  })
+
   const backendLines = (cartQuery.data?.items ?? []).map(toFrontendCartLine)
   const lines = customer ? backendLines : guestLines
-  const subtotal = () => lines.reduce((sum, l) => sum + l.price * l.qty, 0)
+  const subtotal = () =>
+    customer && cartQuery.data ? cartQuery.data.subtotal : lines.reduce((sum, l) => sum + l.price * l.qty, 0)
+  // A guest (pre-login) cart has no server row to price a promo code (or
+  // the first-order discount) against — real discounts only exist once
+  // there's a real backend cart, so these are all 0/false rather than
+  // ever guessing client-side.
+  const discount = customer && cartQuery.data ? cartQuery.data.discount : 0
+  const promotionalDiscount = customer && cartQuery.data ? cartQuery.data.promotional_discount : 0
+  const firstOrderDiscountAmount = customer && cartQuery.data ? cartQuery.data.first_order_discount_amount : 0
+  const firstOrderDiscountPercentage = customer && cartQuery.data ? cartQuery.data.first_order_discount_percentage : null
+  const isFirstOrder = customer && cartQuery.data ? cartQuery.data.is_first_order : false
+  const total = customer && cartQuery.data ? cartQuery.data.total : subtotal()
 
   return {
     lines,
     isLoading: customer ? cartQuery.isLoading : false,
     subtotal,
-    couponCode,
     discount,
-    applyCoupon: (code: string) => applyCouponRaw(code, subtotal()),
+    promotionalDiscount,
+    firstOrderDiscountAmount,
+    firstOrderDiscountPercentage,
+    isFirstOrder,
+    total,
+    promoCode: customer ? (cartQuery.data?.promo_code ?? "") : "",
+    promoCodeError: customer ? (cartQuery.data?.promo_code_error ?? null) : null,
+    applyPromoCode: async (code: string) => {
+      if (!customer) return { success: false, message: "Log in to apply a promo code." }
+      try {
+        await applyPromoMutation.mutateAsync(code)
+        return { success: true, message: "Promo code applied." }
+      } catch (err) {
+        return { success: false, message: err instanceof ApiError ? err.message : "Couldn't apply that code." }
+      }
+    },
+    removePromoCode: () => customer && removePromoMutation.mutate(),
+    isApplyingPromo: applyPromoMutation.isPending,
+    applyOffer: async (offerId: number) => {
+      if (!customer) return { success: false, message: "Log in to apply this offer." }
+      try {
+        await applyOfferMutation.mutateAsync(offerId)
+        return { success: true, message: "Offer applied." }
+      } catch (err) {
+        return { success: false, message: err instanceof ApiError ? err.message : "Couldn't apply that offer." }
+      }
+    },
+    removeOffer: () => customer && removeOfferMutation.mutate(),
+    isApplyingOffer: applyOfferMutation.isPending,
     addLine: (line: Omit<CartLine, "lineId">) => {
       if (customer) addMutation.mutate(line)
       else guestAddLine(line)

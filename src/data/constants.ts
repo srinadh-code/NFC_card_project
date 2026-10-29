@@ -47,6 +47,12 @@ export interface NexoraCardType {
   id: string
   name: string
   price: number
+  // Real, backend-computed automatic-offer pricing (see OrderCardProduct.
+  // discounted_price/offer_title and toNexoraCardType in Shop.tsx) — unset
+  // unless an active offer currently applies to this product. Never
+  // computed on the frontend.
+  discountedPrice?: number
+  offerTitle?: string
   design: string
   bestFor: string
   // Omitted entirely for a product with no profile-template entitlement
