@@ -44,6 +44,18 @@ export default function Home() {
   const customerPhotos = (testimonials ?? []).filter((t) => t.profile_image).slice(0, 3)
 
   const hero = data?.hero ?? null
+  // Secondary button: a configured link always wins (in-app route via the
+  // router, full URL via a normal page load). With no link it opens the demo
+  // popup, labelled "Watch Demo" whenever an admin-uploaded video exists.
+  const secondaryLink = hero?.secondary_cta_link?.trim() ?? ""
+  const secondaryText =
+    !secondaryLink && hero?.demo_video_url ? "Watch Demo" : hero?.secondary_cta_text || "Watch Demo"
+
+  function handleSecondaryClick() {
+    if (!secondaryLink) setDemoOpen(true)
+    else if (/^https?:\/\//i.test(secondaryLink)) window.location.assign(secondaryLink)
+    else navigate(secondaryLink)
+  }
 
   if (isError) {
     return (
@@ -94,13 +106,10 @@ export default function Home() {
                 size="lg"
                 variant="outline"
                 className="gap-2 rounded-full border-border bg-card text-foreground shadow-sm hover:bg-secondary"
-                onClick={() => {
-                  if (hero?.secondary_cta_link) navigate(hero.secondary_cta_link)
-                  else setDemoOpen(true)
-                }}
+                onClick={handleSecondaryClick}
               >
                 <PlayCircle className="size-4 text-primary" />
-                {hero?.secondary_cta_text || "Watch Demo"}
+                {secondaryText}
               </Button>
             </div>
             {data && data.hero_features.length > 0 && (
