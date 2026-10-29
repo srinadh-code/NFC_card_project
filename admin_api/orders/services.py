@@ -14,6 +14,7 @@ def _reached_step(status):
         Order.Status.PENDING: 0,
         Order.Status.PROCESSING: 1,
         Order.Status.SHIPPED: 2,
+        Order.Status.OUT_FOR_DELIVERY: 3,
         Order.Status.DELIVERED: 4,
         Order.Status.COMPLETED: 4,
         Order.Status.CANCELLED: 0,

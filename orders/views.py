@@ -6,6 +6,7 @@ from django.db import IntegrityError, transaction
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 
+from admin_api.orders.services import apply_status_transition
 from common.pagination import StandardPagination
 from common.response import error, success
 
@@ -131,6 +132,45 @@ class CustomerOrderDetailView(APIView):
         if order is None:
             return error("Order not found.", status=404)
         return success(OrderSerializer(order).data)
+
+
+# Only orders that haven't left the warehouse yet are customer-cancellable;
+# every other status maps to the reason shown back to the customer.
+CUSTOMER_CANCELLABLE_STATUSES = {Order.Status.PENDING, Order.Status.PROCESSING}
+CANCEL_REJECTION_MESSAGES = {
+    Order.Status.SHIPPED: "Unable to cancel this order because it has been shipped.",
+    Order.Status.OUT_FOR_DELIVERY: "Unable to cancel this order because it has been shipped.",
+    Order.Status.DELIVERED: "Unable to cancel this order because it has been delivered.",
+    Order.Status.COMPLETED: "Unable to cancel this order because it has been delivered.",
+    Order.Status.CANCELLED: "This order has already been cancelled.",
+}
+
+
+class CustomerOrderCancelView(APIView):
+    """Lets a customer cancel their own order while it's still Pending or
+    Processing. Goes through the same apply_status_transition admin uses,
+    so the order, its tracking timeline, and the "Order cancelled"
+    notification behave exactly as an admin cancellation would — payment
+    status and any assigned card are left for admin reconciliation, same
+    as today. The row is locked so a concurrent admin status change (e.g.
+    to Shipped) can't interleave with the eligibility check."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        with transaction.atomic():
+            order = Order.objects.select_for_update().filter(pk=pk, customer=request.user).first()
+            if order is None:
+                return error("Order not found.", status=404)
+            if order.status not in CUSTOMER_CANCELLABLE_STATUSES:
+                return error(
+                    CANCEL_REJECTION_MESSAGES.get(order.status, "This order can no longer be cancelled."),
+                    status=400,
+                )
+            apply_status_transition(order, Order.Status.CANCELLED)
+
+        order = Order.objects.select_related("customer").prefetch_related("items").get(pk=order.pk)
+        return success(OrderSerializer(order).data, message="Order cancelled.")
 
 
 class PublicOrderTrackingView(APIView):

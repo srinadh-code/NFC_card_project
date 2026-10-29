@@ -527,3 +527,66 @@ class CustomerOrderOwnershipTests(AuthenticatedAPITestCase):
         response = self.client.get(reverse("my-orders"))
         body = str(response.data)
         self.assertNotIn(str(self.other_order.tracking_token), body)
+
+
+class CustomerOrderCancelTests(AuthenticatedAPITestCase):
+    """Customer-side cancellation: allowed only while Pending/Processing,
+    enforced server-side, and scoped to the customer's own orders."""
+
+    def _order(self, order_status, customer=None):
+        return Order.objects.create(
+            customer=customer or self.user,
+            amount="499.00",
+            payment_method=Order.PaymentMethod.COD,
+            payment_status=Order.PaymentStatus.PAID,
+            status=order_status,
+            shipping_line1="123 Main St",
+            shipping_city="Hyderabad",
+            shipping_state="Telangana",
+            shipping_pincode="500001",
+        )
+
+    def _cancel(self, order):
+        return self.client.post(reverse("my-order-cancel", args=[order.pk]))
+
+    def test_pending_and_processing_orders_can_be_cancelled(self):
+        for order_status in (Order.Status.PENDING, Order.Status.PROCESSING):
+            order = self._order(order_status)
+            response = self._cancel(order)
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response.data["data"]["status"], "CANCELLED")
+            order.refresh_from_db()
+            self.assertEqual(order.status, Order.Status.CANCELLED)
+            # Payment is left for admin reconciliation, same as an admin cancel.
+            self.assertEqual(order.payment_status, Order.PaymentStatus.PAID)
+
+    def test_shipped_orders_cannot_be_cancelled(self):
+        for order_status in (Order.Status.SHIPPED, Order.Status.OUT_FOR_DELIVERY):
+            order = self._order(order_status)
+            response = self._cancel(order)
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+            self.assertEqual(response.data["message"], "Unable to cancel this order because it has been shipped.")
+            order.refresh_from_db()
+            self.assertEqual(order.status, order_status)
+
+    def test_delivered_completed_and_cancelled_orders_cannot_be_cancelled(self):
+        for order_status in (Order.Status.DELIVERED, Order.Status.COMPLETED, Order.Status.CANCELLED):
+            order = self._order(order_status)
+            response = self._cancel(order)
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+            order.refresh_from_db()
+            self.assertEqual(order.status, order_status)
+
+    def test_cannot_cancel_another_customers_order(self):
+        order = self._order(Order.Status.PENDING, customer=self.other_user)
+        response = self._cancel(order)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PENDING)
+
+    def test_cancelling_notifies_the_customer(self):
+        order = self._order(Order.Status.PENDING)
+        self._cancel(order)
+        self.assertTrue(
+            Notification.objects.filter(user=self.user, title=f"Order #{order.pk} cancelled").exists()
+        )

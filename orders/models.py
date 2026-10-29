@@ -39,6 +39,7 @@ class Order(models.Model):
         PENDING = "PENDING", "Pending"
         PROCESSING = "PROCESSING", "Processing"
         SHIPPED = "SHIPPED", "Shipped"
+        OUT_FOR_DELIVERY = "OUT_FOR_DELIVERY", "Out for Delivery"
         DELIVERED = "DELIVERED", "Delivered"
         COMPLETED = "COMPLETED", "Completed"
         CANCELLED = "CANCELLED", "Cancelled"
@@ -59,7 +60,7 @@ class Order(models.Model):
     customer = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders"
     )
-    status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
 
     # Public-facing order code (see generate_order_number above) — the
     # identifier a customer types into the public /track-order page.
