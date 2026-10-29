@@ -1376,6 +1376,7 @@ const ORDER_STATUS_MAP: Record<string, OrderStatus> = {
   PENDING: "Pending",
   PROCESSING: "Processing",
   SHIPPED: "Shipped",
+  OUT_FOR_DELIVERY: "Out for Delivery",
   DELIVERED: "Delivered",
   COMPLETED: "Completed",
   CANCELLED: "Cancelled",
@@ -1384,6 +1385,7 @@ const ORDER_STATUS_REVERSE_MAP: Record<OrderStatus, string> = {
   Pending: "PENDING",
   Processing: "PROCESSING",
   Shipped: "SHIPPED",
+  "Out for Delivery": "OUT_FOR_DELIVERY",
   Delivered: "DELIVERED",
   Completed: "COMPLETED",
   Cancelled: "CANCELLED",
@@ -2395,6 +2397,9 @@ export const ordersApi = {
   list: (page = 1) => requestPaginated<ApiOrder>(`/customer/orders/?page=${page}&page_size=100`),
   create: (payload: CreateOrderPayload) => request<ApiOrder>("/customer/orders/", { method: "POST", body: payload }),
   getById: (id: number | string) => request<ApiOrder>(`/customer/orders/${id}/`),
+  // Only Pending/Processing orders — the backend enforces this and returns
+  // the reason (e.g. already shipped) as the error message otherwise.
+  cancel: (id: number | string) => request<ApiOrder>(`/customer/orders/${id}/cancel/`, { method: "POST" }),
 
   // `orderQuery` accepts either a bare id ("13") or the "ORD000013" format
   // shown on the payment-success page — the backend strips non-digits
