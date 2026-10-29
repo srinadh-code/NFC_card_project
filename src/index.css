@@ -203,6 +203,55 @@ body {
   padding-inline: clamp(1.5rem, 5vw, 5rem);
 }
 
+/* Equal-width/equal-height card grid whose incomplete last row is centered.
+   Each breakpoint uses twice as many tracks as visible columns and every
+   card spans two, so the first card of a short last row can start half a
+   card further in per missing card. Columns: 1 → 2 (sm) → 3 (lg) → 4 (xl). */
+.centered-card-grid {
+  display: grid;
+  gap: 1.5rem;
+  grid-auto-rows: 1fr;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 40rem) {
+  .centered-card-grid > * {
+    grid-column: span 2;
+  }
+}
+@media (min-width: 40rem) and (max-width: 63.999rem) {
+  .centered-card-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .centered-card-grid > :nth-child(2n + 1):last-child {
+    grid-column: 2 / span 2;
+  }
+}
+@media (min-width: 64rem) and (max-width: 79.999rem) {
+  .centered-card-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .centered-card-grid > :nth-child(3n + 1):nth-last-child(2) {
+    grid-column: 2 / span 2;
+  }
+  .centered-card-grid > :nth-child(3n + 1):last-child {
+    grid-column: 3 / span 2;
+  }
+}
+@media (min-width: 80rem) {
+  .centered-card-grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+  .centered-card-grid > :nth-child(4n + 1):nth-last-child(3) {
+    grid-column: 2 / span 2;
+  }
+  .centered-card-grid > :nth-child(4n + 1):nth-last-child(2) {
+    grid-column: 3 / span 2;
+  }
+  .centered-card-grid > :nth-child(4n + 1):last-child {
+    grid-column: 4 / span 2;
+  }
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -371,6 +420,8 @@ body {
   .animate-hero-enter,
   .animate-hero-float,
   .animate-hero-glow,
+  .animate-float-slow,
+  .animate-float-slower,
   .theme-preview-dialog,
   [data-slot="dialog-overlay"]:has(+ .theme-preview-dialog) {
     animation: none;

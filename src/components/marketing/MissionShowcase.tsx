@@ -34,8 +34,10 @@ interface MissionShowcaseProps {
 }
 
 export default function MissionShowcase({ badge, heading, description }: MissionShowcaseProps) {
+  // No top padding: follows the About story section on the same background,
+  // so its bottom padding already provides the gap.
   return (
-    <section className="relative overflow-hidden bg-background px-4 py-16 sm:py-20">
+    <section className="relative overflow-hidden bg-background pb-6 sm:pb-8">
       <div
         className="pointer-events-none absolute inset-0 opacity-40"
         style={{
@@ -47,17 +49,19 @@ export default function MissionShowcase({ badge, heading, description }: Mission
       <div className="pointer-events-none absolute -left-20 top-10 size-72 rounded-full bg-[#7C3AED]/10 blur-3xl" />
       <div className="pointer-events-none absolute -right-16 bottom-0 size-64 rounded-full bg-[#EC4899]/10 blur-3xl" />
 
-      <div className="relative mx-auto max-w-6xl rounded-[32px] bg-gradient-to-r from-[#6C4DFF] to-[#FF5DA8] p-[1.5px] shadow-[0_25px_70px_rgba(124,58,237,0.18)]">
-        <div className="glass-panel rounded-[30.5px] px-6 py-10 sm:px-12 sm:py-14">
-          <div className="flex flex-col items-center gap-10 lg:flex-row lg:gap-16">
-            <TargetIllustration />
+      <div className="container-page relative">
+        <div className="rounded-[32px] bg-gradient-to-r from-[#6C4DFF] to-[#FF5DA8] p-[1.5px] shadow-[0_25px_70px_rgba(124,58,237,0.18)]">
+          <div className="glass-panel rounded-[30.5px] px-6 py-10 sm:px-12 sm:py-14">
+            <div className="flex flex-col items-center gap-10 lg:flex-row lg:justify-center lg:gap-16">
+              <TargetIllustration />
 
-            <div className="text-center lg:text-left">
-              <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold tracking-wide text-primary">
-                {badge}
-              </span>
-              <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">{heading}</h2>
-              <p className="mx-auto mt-4 max-w-xl text-muted-foreground lg:mx-0">{description}</p>
+              <div className="max-w-2xl text-center lg:text-left">
+                <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold tracking-wide text-primary">
+                  {badge}
+                </span>
+                <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">{heading}</h2>
+                <p className="mx-auto mt-4 max-w-xl text-muted-foreground sm:text-lg lg:mx-0">{description}</p>
+              </div>
             </div>
           </div>
         </div>
