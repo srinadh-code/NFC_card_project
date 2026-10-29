@@ -3,7 +3,7 @@ Public, read-only endpoints. AllowAny, active content only.
 
 Home and About are each served as a single composed payload (one HTTP call
 per page instead of one per section) — the spec explicitly calls out
-avoiding redundant API calls; Features/How-It-Works/FAQs/Testimonials/
+avoiding redundant API calls; Features/How-It-Works/FAQs/
 Companies/Statistics/Values additionally get their own standalone endpoints
 since they're each reused elsewhere (the FAQ page fetches the same `Faq`
 table the Home preview slices from, etc).
@@ -42,7 +42,6 @@ from website_content.models import (
     OrderCardTrustBadge,
     ProfileTemplatePreview,
     Statistic,
-    Testimonial,
     Value,
 )
 from website_content.serializers import (
@@ -74,7 +73,6 @@ from website_content.serializers import (
     ProfileTemplatePreviewSerializer,
     PublicGeneralSettingsSerializer,
     StatisticSerializer,
-    TestimonialSerializer,
     ValueSerializer,
 )
 
@@ -116,9 +114,6 @@ class HomePublicView(APIView):
                 Statistic.objects.filter(is_active=True, page=Statistic.Page.HOME), many=True
             ).data,
             "values": ValueSerializer(Value.objects.filter(is_active=True), many=True).data,
-            "testimonials": TestimonialSerializer(
-                Testimonial.objects.filter(is_active=True), many=True
-            ).data,
             "faqs_preview": FaqSerializer(
                 Faq.objects.filter(is_active=True)[:HOME_FAQ_PREVIEW_COUNT], many=True
             ).data,
@@ -235,11 +230,6 @@ class HowItWorksPublicView(PublicListAPIView):
 class FaqsPublicView(PublicListAPIView):
     model = Faq
     serializer_class = FaqSerializer
-
-
-class TestimonialsPublicView(PublicListAPIView):
-    model = Testimonial
-    serializer_class = TestimonialSerializer
 
 
 class CompaniesPublicView(PublicListAPIView):

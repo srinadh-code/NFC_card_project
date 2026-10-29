@@ -11,7 +11,7 @@ from .serializers import AdminCustomerDetailSerializer, AdminCustomerListSeriali
 
 
 class AdminCustomerListView(APIView):
-    permission_classes = [IsAdminRole]
+    permission_classes = [IsAdminRole] 
 
     def get(self, request):
         qs = Profile.objects.select_related("user").filter(user__role=User.Role.CUSTOMER)
@@ -51,3 +51,4 @@ class AdminCustomerDetailView(APIView):
             return error("Customer not found.", status=404)
 
         return success(AdminCustomerDetailSerializer(profile).data)
+    

@@ -31,7 +31,6 @@ from .order_card import (
 )
 from .how_it_works import HowItWorksStep
 from .faqs import Faq
-from .testimonials import Testimonial
 from .companies import Company
 from .statistics import Statistic
 from .contact import ContactMessage, ContactMessageReply
@@ -69,7 +68,6 @@ __all__ = [
     "ProfileTemplatePreview",
     "HowItWorksStep",
     "Faq",
-    "Testimonial",
     "Company",
     "Statistic",
     "ContactMessage",

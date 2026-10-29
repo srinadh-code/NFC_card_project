@@ -29,7 +29,6 @@ from website_content.models import (
     HomeHowItFeelsPoint,
     HowItWorksStep,
     Statistic,
-    Testimonial,
     Value,
 )
 
@@ -44,7 +43,6 @@ class Command(BaseCommand):
         self._seed_features()
         self._seed_how_it_works()
         self._seed_faqs()
-        self._seed_testimonials()
         self._seed_companies()
         self._seed_statistics()
         self.stdout.write(self.style.SUCCESS("Website content seeded."))
@@ -95,7 +93,7 @@ class Command(BaseCommand):
                 heading="Just Tap. That's It.",
                 description=(
                     "No fumbling for a paper card, no typing a number into a new "
-                    "contact. Hold your VR's NEXORA card near any smartphone and "
+                    "contact. Hold your VR's GATEWAY card near any smartphone and "
                     "your entire digital identity appears instantly on their screen."
                 ),
             )
@@ -128,7 +126,7 @@ class Command(BaseCommand):
     def _seed_about(self):
         AboutPage.objects.get_or_create(
             defaults=dict(
-                page_title="About VR's NEXORA",
+                page_title="About VR's GATEWAY",
                 page_subtitle=(
                     "We're on a mission to replace paper business cards with a "
                     "smarter, greener, more memorable way to connect."
@@ -136,7 +134,7 @@ class Command(BaseCommand):
                 story_badge="OUR STORY",
                 story_title="A smarter way to introduce yourself",
                 story_paragraph_1=(
-                    "VR's NEXORA is a digital business card platform built for the "
+                    "VR's GATEWAY is a digital business card platform built for the "
                     "modern professional. Instead of printing hundreds of cards "
                     "that end up in a drawer, our NFC-enabled cards let you share "
                     "a rich, always up-to-date profile with a single tap — no app "
@@ -145,7 +143,7 @@ class Command(BaseCommand):
                 story_paragraph_2=(
                     "Founded by a small team of designers and engineers who were "
                     "tired of running out of paper cards at networking events, "
-                    "VR's NEXORA has grown into a platform trusted by individuals, "
+                    "VR's GATEWAY has grown into a platform trusted by individuals, "
                     "startups, and enterprise teams across the globe to make every "
                     "introduction count."
                 ),
@@ -220,7 +218,7 @@ class Command(BaseCommand):
                     "a century?"
                 ),
                 paragraph_2=(
-                    "So we built VR's NEXORA: a durable NFC card paired with a "
+                    "So we built VR's GATEWAY: a durable NFC card paired with a "
                     "beautiful, editable digital profile. Update your details "
                     "anytime, track every tap and scan, and never run out of "
                     "cards again."
@@ -279,7 +277,7 @@ class Command(BaseCommand):
             (
                 "Nfc",
                 "Activate Your Card",
-                "Scan the card once and link it to your VR's NEXORA account to activate it instantly.",
+                "Scan the card once and link it to your VR's GATEWAY account to activate it instantly.",
             ),
             (
                 "UserCircle2",
@@ -310,8 +308,8 @@ class Command(BaseCommand):
                 "no app required.",
             ),
             (
-                "How does VR's NEXORA card work?",
-                "Simply tap your VR's NEXORA card on the back of any NFC-enabled "
+                "How does VR's GATEWAY card work?",
+                "Simply tap your VR's GATEWAY card on the back of any NFC-enabled "
                 "smartphone. Your digital profile opens instantly in the recipient's "
                 "browser, letting them view your details, save your contact, and "
                 "connect on social media. If NFC isn't supported, they can scan the "
@@ -320,7 +318,7 @@ class Command(BaseCommand):
             (
                 "Do I need any app to use the card?",
                 "No. Recipients don't need to install any app to view your profile. "
-                "You only need to sign in to your VR's NEXORA dashboard to activate "
+                "You only need to sign in to your VR's GATEWAY dashboard to activate "
                 "and manage your card and profile.",
             ),
             (
@@ -350,88 +348,13 @@ class Command(BaseCommand):
                 "partners.",
             ),
             (
-                "Can I use one VR's NEXORA card for a business team?",
+                "Can I use one VR's GATEWAY card for a business team?",
                 "Yes, our Business and Enterprise plans support bulk card ordering "
                 "and centralized team management from a single admin panel.",
             ),
         ]
         for order, (question, answer) in enumerate(faqs):
             Faq.objects.get_or_create(question=question, defaults=dict(answer=answer, display_order=order))
-
-    def _seed_testimonials(self):
-        testimonials = [
-            (
-                "Ananya Reddy",
-                "Founder & CEO",
-                "Nimbus Growth Studio",
-                5,
-                "https://api.dicebear.com/9.x/notionists/svg?seed=ananya-reddy",
-                "VR's NEXORA replaced an entire box of paper cards. I tap my phone at "
-                "every event now and my whole profile — portfolio, socials, contact — "
-                "opens instantly for the other person.",
-            ),
-            (
-                "Rahul Menon",
-                "VP of Sales",
-                "Orbital Systems",
-                5,
-                "https://api.dicebear.com/9.x/notionists/svg?seed=rahul-menon",
-                "Our field sales team activated 40 cards in a day. The analytics "
-                "dashboard alone justified the switch — we finally know which "
-                "conversations turn into leads.",
-            ),
-            (
-                "Priya Nair",
-                "Freelance Designer",
-                "Studio Nair",
-                5,
-                "https://api.dicebear.com/9.x/notionists/svg?seed=priya-nair",
-                "Clients are always impressed when I tap my card on their phone. "
-                "Updating my portfolio link takes ten seconds and everyone who has "
-                "my card automatically sees the latest version.",
-            ),
-            (
-                "Karthik Iyer",
-                "Co-Founder",
-                "Ledgerly",
-                4,
-                "https://api.dicebear.com/9.x/notionists/svg?seed=karthik-iyer",
-                "Setup took less than five minutes. The QR fallback is a nice touch "
-                "for people whose phones don't support NFC — nobody gets left out.",
-            ),
-            (
-                "Sneha Kulkarni",
-                "HR Business Partner",
-                "Vertex Retail",
-                5,
-                "https://api.dicebear.com/9.x/notionists/svg?seed=sneha-kulkarni",
-                "We rolled out VR's NEXORA cards to the whole leadership team. "
-                "Managing everyone's cards from one admin panel makes onboarding new "
-                "hires painless.",
-            ),
-            (
-                "Arjun Desai",
-                "Business Development Manager",
-                "Skyline Exports",
-                4,
-                "https://api.dicebear.com/9.x/notionists/svg?seed=arjun-desai",
-                "I travel constantly for trade shows. Being able to update my number "
-                "and email from my phone the moment they change — without "
-                "reprinting anything — has saved me real money.",
-            ),
-        ]
-        for order, (name, designation, company, rating, avatar, review) in enumerate(testimonials):
-            Testimonial.objects.get_or_create(
-                name=name,
-                defaults=dict(
-                    designation=designation,
-                    company=company,
-                    rating=rating,
-                    image_url=avatar,
-                    review=review,
-                    display_order=order,
-                ),
-            )
 
     def _seed_companies(self):
         companies = ["Google", "Microsoft", "Amazon", "Airtel", "Tata", "Flipkart"]

@@ -12,7 +12,6 @@ from website_content.views.public import (
     HowItWorksPublicView,
     OrderCardPublicView,
     StatisticsPublicView,
-    TestimonialsPublicView,
     ValuesPublicView,
 )
 
@@ -24,7 +23,6 @@ urlpatterns = [
     path("order-card/", OrderCardPublicView.as_view(), name="public-order-card"),
     path("how-it-works/", HowItWorksPublicView.as_view(), name="public-how-it-works"),
     path("faqs/", FaqsPublicView.as_view(), name="public-faqs"),
-    path("testimonials/", TestimonialsPublicView.as_view(), name="public-testimonials"),
     path("companies/", CompaniesPublicView.as_view(), name="public-companies"),
     path("statistics/", StatisticsPublicView.as_view(), name="public-statistics"),
     path("values/", ValuesPublicView.as_view(), name="public-values"),
