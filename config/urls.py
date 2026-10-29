@@ -25,6 +25,14 @@ urlpatterns = [
     path("api/orders/", include("orders.public_urls")),
     path("api/customer/leads/", include("customer_management.customer_leads.urls")),
     path("api/customer/notifications/", include("customer_management.customer_notifications.urls")),
+    # Public, unauthenticated counterpart to the line above — same
+    # customer_notifications app/Announcement model, just the narrow
+    # PublicAnnouncementSerializer, for the public marketing site's
+    # offer/announcement banners (see AnnouncementBanner.tsx).
+    path(
+        "api/announcements/public/",
+        include("customer_management.customer_notifications.public_urls"),
+    ),
     path("api/customer/settings/", include("customer_management.customer_settings.urls")),
     path("api/customer/dashboard/", include("customer_management.customer_dashboard.urls")),
     path("api/customer/services/", include("customer_management.customer_services.urls")),

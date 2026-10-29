@@ -87,6 +87,18 @@ class Order(models.Model):
     # than colliding with each other on "".
     idempotency_key = models.CharField(max_length=64, null=True, blank=True, db_index=True)
 
+    # `amount` is the truly final line-items total — after BOTH the
+    # per-item promotional discount (baked into each OrderItem.price
+    # already) and this order-level first-order discount below. The two
+    # fields here are that second layer's own snapshot, frozen at order
+    # creation time exactly like every other pricing snapshot on this
+    # model/OrderItem: editing the global FIRST_ORDER_DISCOUNT_PERCENTAGE
+    # later, or the customer placing a second order, must never change
+    # what this specific order shows it charged. Null (not just 0) when
+    # the discount didn't apply, so "was this a first-order discount" is
+    # never ambiguous with "it applied for ₹0".
+    first_order_discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    first_order_discount_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     shipping = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     payment_method = models.CharField(max_length=12, choices=PaymentMethod.choices)
@@ -151,7 +163,28 @@ class OrderItem(models.Model):
     card_type = models.CharField(max_length=10)
     color = models.CharField(max_length=30)
     qty = models.PositiveIntegerField(default=1)
+    # The per-unit price actually paid — already discounted, if any offer
+    # applied. Unchanged in meaning from before this field existed.
     price = models.DecimalField(max_digits=10, decimal_places=2)
+
+    # Pricing snapshot — computed once by common.discounts at order
+    # creation time and frozen here, same reasoning as every other
+    # snapshot field on this model: an offer edited or expired later must
+    # never change what a past order shows it charged. original_price is
+    # null (not just equal to price) for a line with no offer at all, so
+    # "was this ever discounted" never depends on comparing two decimals.
+    original_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    discount_type = models.CharField(max_length=10, blank=True, default="")
+    discount_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    promo_code_used = models.CharField(max_length=50, blank=True, default="")
+    # SET_NULL, never CASCADE: deleting the Announcement later must not
+    # delete history of what a past order actually paid (original_price/
+    # discount_amount/price above already have the real numbers regardless
+    # of whether this link survives).
+    applied_offer = models.ForeignKey(
+        "customer_notifications.Announcement", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
 
     def __str__(self):
         return f"{self.name} x{self.qty} (order #{self.order_id})"

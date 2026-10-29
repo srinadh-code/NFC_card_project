@@ -197,6 +197,24 @@ class DeleteReadNotificationsViewTests(AuthenticatedAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
+def _announcement_data(**overrides):
+    """A minimal, immediately-active (is_published=True, no start/end
+    window) CUSTOMER-facing announcement payload — the create_announcement
+    signature is (created_by, data: dict) now that Announcements carry a
+    real draft/scheduled/published/expired lifecycle (see
+    customer_notifications.models.Announcement), not the old
+    (created_by, title, message) positional shape."""
+    data = {
+        "title": "Maintenance window",
+        "message": "We'll be down for 1 hour on Sunday.",
+        "announcement_type": Announcement.AnnouncementType.GENERAL,
+        "display_location": Announcement.DisplayLocation.CUSTOMER,
+        "is_published": True,
+    }
+    data.update(overrides)
+    return data
+
+
 class CreateAnnouncementServiceTests(APITestCase):
     """System Messages: the smallest proper admin announcement mechanism —
     an Announcement row plus a real notify() call per customer, still
@@ -213,7 +231,7 @@ class CreateAnnouncementServiceTests(APITestCase):
         settings_obj.save(update_fields=["notify_system_messages"])
 
     def test_notifies_every_opted_in_customer(self):
-        create_announcement(self.admin, "Maintenance window", "We'll be down for 1 hour on Sunday.")
+        create_announcement(self.admin, _announcement_data())
 
         self.assertTrue(
             Notification.objects.filter(
@@ -222,20 +240,29 @@ class CreateAnnouncementServiceTests(APITestCase):
         )
 
     def test_does_not_notify_customers_who_opted_out(self):
-        create_announcement(self.admin, "Maintenance window", "We'll be down for 1 hour on Sunday.")
+        create_announcement(self.admin, _announcement_data())
 
         self.assertFalse(
             Notification.objects.filter(user=self.opted_out, type=Notification.Type.SYSTEM_MESSAGE).exists()
         )
 
     def test_records_a_real_recipient_count(self):
-        announcement = create_announcement(self.admin, "New feature", "Check out Google Review Cards.")
+        announcement = create_announcement(
+            self.admin, _announcement_data(title="New feature", message="Check out Google Review Cards.")
+        )
 
         self.assertEqual(announcement.recipient_count, 1)  # only opted_in, not opted_out or the admin
 
     def test_creates_exactly_one_announcement_record(self):
-        create_announcement(self.admin, "Hello", "World")
+        create_announcement(self.admin, _announcement_data(title="Hello", message="World"))
         self.assertEqual(Announcement.objects.count(), 1)
+
+    def test_draft_does_not_notify_anyone(self):
+        """A draft (is_published=False, the default) is exactly what "Save
+        Draft" in the admin UI creates — it must never reach a customer
+        until it's actually published."""
+        create_announcement(self.admin, _announcement_data(is_published=False))
+        self.assertFalse(Notification.objects.filter(type=Notification.Type.SYSTEM_MESSAGE).exists())
 
 
 class AdminAnnouncementViewTests(APITestCase):
@@ -247,7 +274,13 @@ class AdminAnnouncementViewTests(APITestCase):
         self.client.force_authenticate(user=self.admin)
         response = self.client.post(
             reverse("admin-announcements"),
-            {"title": "Holiday hours", "message": "We're closed on the 25th."},
+            {
+                "title": "Holiday hours",
+                "message": "We're closed on the 25th.",
+                "announcement_type": "GENERAL",
+                "display_location": "CUSTOMER",
+                "is_published": True,
+            },
             format="json",
         )
 
@@ -258,8 +291,25 @@ class AdminAnnouncementViewTests(APITestCase):
             ).exists()
         )
 
+    def test_admin_can_save_a_draft_without_notifying_anyone(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            reverse("admin-announcements"),
+            {
+                "title": "Work in progress",
+                "message": "Not ready yet.",
+                "announcement_type": "GENERAL",
+                "display_location": "CUSTOMER",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["data"]["status"], "draft")
+        self.assertFalse(Notification.objects.filter(type=Notification.Type.SYSTEM_MESSAGE).exists())
+
     def test_admin_can_list_sent_announcements(self):
-        create_announcement(self.admin, "Past announcement", "Already sent.")
+        create_announcement(self.admin, _announcement_data(title="Past announcement", message="Already sent."))
         self.client.force_authenticate(user=self.admin)
 
         response = self.client.get(reverse("admin-announcements"))

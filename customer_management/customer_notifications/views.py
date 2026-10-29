@@ -1,3 +1,4 @@
+from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from common.permissions import IsCustomerRole
@@ -5,7 +6,7 @@ from common.response import error, success
 from common.views import PaginatedAPIView
 
 from . import services
-from .serializers import MarkNotificationsReadSerializer, NotificationSerializer
+from .serializers import MarkNotificationsReadSerializer, NotificationSerializer, PublicAnnouncementSerializer
 
 
 class CustomerNotificationsView(PaginatedAPIView):
@@ -54,3 +55,18 @@ class DeleteReadNotificationsView(APIView):
     def delete(self, request):
         deleted = services.delete_read_notifications(request.user)
         return success({"deleted": deleted}, message="Read notifications cleared.")
+
+
+class PublicAnnouncementListView(APIView):
+    """Unauthenticated — the public marketing site's offer/announcement
+    banners. Only ever returns announcements that are published, targeted
+    at the Public Website (or Both), and currently within their start/end
+    window (see services.list_active_public_announcements) — an admin
+    draft, a customer-only announcement, or an expired offer never reaches
+    this response."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        announcements = services.list_active_public_announcements()
+        return success(PublicAnnouncementSerializer(announcements, many=True).data)

@@ -2,6 +2,7 @@ from customer_management.customer_analytics.models import AnalyticsEvent
 from customer_management.customer_analytics.services import summary as analytics_summary
 from customer_management.customer_leads.models import Lead
 from customer_management.customer_notifications.models import Notification
+from customer_management.customer_notifications.services import sync_due_customer_announcements
 from nfc_cards.models import NfcCard
 # Not customer_management.customer_orders.Order — that table is no longer
 # where checkout writes orders (see config/urls.py's routing comment). The
@@ -10,6 +11,10 @@ from orders.models import Order
 
 
 def get_dashboard(user):
+    # Cheap no-op unless a scheduled customer announcement just became due
+    # — see customer_notifications.services for why this has to be called
+    # on read rather than by a background task.
+    sync_due_customer_announcements()
     totals = analytics_summary(user)["totals"]
 
     return {

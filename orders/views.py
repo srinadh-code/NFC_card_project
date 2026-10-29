@@ -6,6 +6,8 @@ from django.db import IntegrityError, transaction
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 
+from accounts.models import User
+from common.discounts import calculate_first_order_discount, get_product_pricing
 from common.pagination import StandardPagination
 from common.response import error, success
 
@@ -65,7 +67,50 @@ class CustomerOrderListCreateView(APIView):
         if not cart_items:
             return error("Your cart is empty.", status=400)
 
-        amount = sum((item.qty * item.price for item in cart_items), start=Decimal("0"))
+        # Real, backend-computed pricing per line — never the price a
+        # client claims. common.discounts is the single source of truth
+        # for whether an offer/promo code applies and what it's worth;
+        # the cart's own stored `price` is only ever a fallback for a
+        # card_type with no matching catalog product at all (shouldn't
+        # normally happen, but must never crash checkout if it does).
+        promo_code = cart.promo_code or None
+        selected_offer_id = cart.applied_offer_id
+        priced_items = []
+        amount = Decimal("0")
+        for item in cart_items:
+            pricing = get_product_pricing(
+                item.card_type, promo_code=promo_code, customer=request.user, selected_offer_id=selected_offer_id
+            )
+            if pricing is not None:
+                unit_price = pricing["final_price"]
+                offer = pricing["offer"]
+                priced_items.append(
+                    {
+                        "item": item,
+                        "unit_price": unit_price,
+                        "original_price": pricing["original_price"],
+                        "discount_type": offer.discount_type if offer else "",
+                        "discount_value": pricing["discount_value"] if offer else None,
+                        "discount_amount": pricing["discount_amount"] if offer else None,
+                        "promo_code_used": promo_code if (offer and promo_code) else "",
+                        "applied_offer": offer,
+                    }
+                )
+            else:
+                priced_items.append(
+                    {
+                        "item": item,
+                        "unit_price": item.price,
+                        "original_price": None,
+                        "discount_type": "",
+                        "discount_value": None,
+                        "discount_amount": None,
+                        "promo_code_used": "",
+                        "applied_offer": None,
+                    }
+                )
+            amount += priced_items[-1]["unit_price"] * item.qty
+
         shipping = data.get("shipping") or Decimal("0")
         # Already validated to belong to request.user in
         # CustomerOrderCreateSerializer.validate_address_id.
@@ -74,10 +119,27 @@ class CustomerOrderListCreateView(APIView):
 
         try:
             with transaction.atomic():
+                # Locks this customer's own row for the rest of the
+                # transaction, so two near-simultaneous checkout attempts
+                # from the same customer (two tabs, a double-click that
+                # slips past the idempotency-key check) can't both read
+                # "no paid order yet" and both consume the first-order
+                # discount — the second one blocks here until the first
+                # commits, by which point its own order already exists and
+                # is_first_order_eligible sees it. (On this project's
+                # current SQLite backend, SQLite's own single-writer lock
+                # already serializes this; select_for_update makes the same
+                # guarantee explicit and forward-compatible with Postgres.)
+                User.objects.select_for_update().get(pk=request.user.pk)
+                first_order = calculate_first_order_discount(amount, request.user)
+                final_amount = first_order["final_amount"]
+
                 order = Order.objects.create(
                     customer=request.user,
                     idempotency_key=idempotency_key,
-                    amount=amount,
+                    amount=final_amount,
+                    first_order_discount_percentage=first_order["percentage"],
+                    first_order_discount_amount=first_order["discount_amount"] if first_order["is_first_order"] else None,
                     shipping=shipping,
                     payment_method=data["payment_method"],
                     payment_status=Order.PaymentStatus.PAID,
@@ -87,19 +149,25 @@ class CustomerOrderListCreateView(APIView):
                     [
                         OrderItem(
                             order=order,
-                            product_id=item.product_id,
-                            name=item.name,
-                            card_type=item.card_type,
-                            color=item.color_name,
-                            qty=item.qty,
-                            price=item.price,
+                            product_id=p["item"].product_id,
+                            name=p["item"].name,
+                            card_type=p["item"].card_type,
+                            color=p["item"].color_name,
+                            qty=p["item"].qty,
+                            price=p["unit_price"],
+                            original_price=p["original_price"],
+                            discount_type=p["discount_type"],
+                            discount_value=p["discount_value"],
+                            discount_amount=p["discount_amount"],
+                            promo_code_used=p["promo_code_used"],
+                            applied_offer=p["applied_offer"],
                         )
-                        for item in cart_items
+                        for p in priced_items
                     ]
                 )
                 Transaction.objects.create(
                     order=order,
-                    amount=amount + shipping,
+                    amount=final_amount + shipping,
                     method=data["payment_method"],
                     status=Order.PaymentStatus.PAID,
                 )

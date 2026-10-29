@@ -1,3 +1,6 @@
+from django.db.models import Q
+from django.utils import timezone
+
 from .models import Announcement, Notification
 
 # Which CustomerSettings boolean gates each notification type — the single
@@ -15,7 +18,7 @@ _PREFERENCE_FIELD_FOR_TYPE = {
 }
 
 
-def notify(user, title, message="", type=Notification.Type.SYSTEM_MESSAGE):
+def notify(user, title, message="", type=Notification.Type.SYSTEM_MESSAGE, announcement=None):
     """Creates a Notification for `user`, unless they've turned this
     category off in CustomerSettings — checked here, once, so no caller can
     forget to and no notification is ever created just to be hidden by the
@@ -31,31 +34,140 @@ def notify(user, title, message="", type=Notification.Type.SYSTEM_MESSAGE):
         if not getattr(settings_obj, pref_field):
             return None
 
-    return Notification.objects.create(user=user, title=title, message=message, type=type)
+    return Notification.objects.create(
+        user=user, title=title, message=message, type=type, announcement=announcement
+    )
 
 
-def create_announcement(created_by, title, message=""):
-    """The one place a System Message is ever created — an admin action,
-    never a fabricated/demo notification. Every current customer gets a
-    real notify() call (so notify_system_messages is still respected per
-    customer, exactly like every other notification type); the Announcement
-    row itself is the permanent record of what was actually sent."""
+# ---------------------------------------------------------------------
+# Announcements — admin CRUD + the customer/public fan-out.
+# ---------------------------------------------------------------------
+
+
+def list_announcements():
+    return Announcement.objects.select_related("created_by").all()
+
+
+def create_announcement(created_by, data):
+    announcement = Announcement(created_by=created_by, **data)
+    if announcement.is_published:
+        announcement.ever_published = True
+    announcement.full_clean()
+    announcement.save()
+    if announcement.is_published:
+        _fan_out_to_customers(announcement)
+    return announcement
+
+
+def update_announcement(announcement, data):
+    for field, value in data.items():
+        setattr(announcement, field, value)
+    if announcement.is_published:
+        announcement.ever_published = True
+    announcement.full_clean()
+    announcement.save()
+    if announcement.is_published:
+        # Covers both "just published via PATCH" and "display_location
+        # edited to add Customer Dashboard after already publishing" —
+        # _fan_out_to_customers is a no-op for anyone already notified.
+        _fan_out_to_customers(announcement)
+    return announcement
+
+
+def set_published(announcement, is_published):
+    announcement.is_published = is_published
+    update_fields = ["is_published", "updated_at"]
+    if is_published and not announcement.ever_published:
+        announcement.ever_published = True
+        update_fields.append("ever_published")
+    announcement.save(update_fields=update_fields)
+    if is_published:
+        _fan_out_to_customers(announcement)
+    return announcement
+
+
+def delete_announcement(announcement):
+    announcement.delete()
+
+
+def _fan_out_to_customers(announcement):
+    """Sends this one announcement's Notifications now, if it targets
+    customers, is due (start_at has passed, if any), and hasn't already
+    been sent — the same idempotent guard sync_due_customer_announcements()
+    relies on, so calling this eagerly at publish time and lazily on every
+    notification read can never double-send."""
+    if announcement.notified_at is not None:
+        return
+    if announcement.display_location not in (
+        Announcement.DisplayLocation.CUSTOMER,
+        Announcement.DisplayLocation.BOTH,
+    ):
+        return
+    now = timezone.now()
+    if announcement.start_at and announcement.start_at > now:
+        return
+    if announcement.end_at and announcement.end_at < now:
+        return
+
     from accounts.models import User
-
-    announcement = Announcement.objects.create(title=title, message=message, created_by=created_by)
 
     recipient_count = 0
     for customer in User.objects.filter(role=User.Role.CUSTOMER).iterator():
-        created = notify(customer, title, message, type=Notification.Type.SYSTEM_MESSAGE)
+        created = notify(
+            customer,
+            announcement.title,
+            announcement.message,
+            type=Notification.Type.SYSTEM_MESSAGE,
+            announcement=announcement,
+        )
         if created is not None:
             recipient_count += 1
 
     announcement.recipient_count = recipient_count
-    announcement.save(update_fields=["recipient_count"])
-    return announcement
+    announcement.notified_at = now
+    announcement.save(update_fields=["recipient_count", "notified_at"])
+
+
+def sync_due_customer_announcements():
+    """Called on every customer notification read (see views.py) — the
+    dependency-free stand-in for a scheduled task: a *scheduled* customer
+    announcement (start_at in the future at publish time) only actually
+    reaches customers once someone opens their notification bell after
+    start_at has passed. Cheap and safe to call on every request: the
+    `notified_at__isnull=True` filter means there's nothing to do on 99% of
+    calls, and _fan_out_to_customers is itself idempotent."""
+    now = timezone.now()
+    due = (
+        Announcement.objects.filter(
+            is_published=True,
+            notified_at__isnull=True,
+            display_location__in=[Announcement.DisplayLocation.CUSTOMER, Announcement.DisplayLocation.BOTH],
+        )
+        .filter(Q(start_at__isnull=True) | Q(start_at__lte=now))
+        .filter(Q(end_at__isnull=True) | Q(end_at__gte=now))
+    )
+    for announcement in due:
+        _fan_out_to_customers(announcement)
+
+
+def list_active_public_announcements():
+    now = timezone.now()
+    return (
+        Announcement.objects.filter(
+            is_published=True,
+            display_location__in=[Announcement.DisplayLocation.PUBLIC, Announcement.DisplayLocation.BOTH],
+        )
+        .filter(Q(start_at__isnull=True) | Q(start_at__lte=now))
+        .filter(Q(end_at__isnull=True) | Q(end_at__gte=now))
+    )
 
 
 def list_notifications(user, unread_only=False):
+    # Runs on every notification read (list, unread-count) — cheap no-op
+    # unless a scheduled customer announcement has just become due, in
+    # which case this is what actually fans it out (see
+    # sync_due_customer_announcements's docstring).
+    sync_due_customer_announcements()
     queryset = Notification.objects.filter(user=user)
     if unread_only:
         queryset = queryset.filter(is_read=False)

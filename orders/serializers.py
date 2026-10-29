@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from nfc_cards.models import NfcCard
@@ -22,7 +24,19 @@ ORDER_ITEM_CARD_TYPE_CHOICES = [*NfcCard.CardType.choices, (GOOGLE_REVIEW_CARD_T
 class OrderItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderItem
-        fields = ["product_id", "name", "card_type", "color", "qty", "price"]
+        fields = [
+            "product_id",
+            "name",
+            "card_type",
+            "color",
+            "qty",
+            "price",
+            "original_price",
+            "discount_type",
+            "discount_value",
+            "discount_amount",
+            "promo_code_used",
+        ]
         read_only_fields = fields
 
 
@@ -56,6 +70,12 @@ class OrderSerializer(serializers.ModelSerializer):
     customer_phone = serializers.CharField(source="customer.phone", read_only=True)
     items = OrderItemSerializer(many=True, read_only=True)
     total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    subtotal = serializers.SerializerMethodField()
+    # Promotional-offer discount only (per-item, from the Announcement/Offer
+    # system) — unchanged in meaning from before the first-order discount
+    # existed. `total_discount` below is the one that includes both layers.
+    discount_total = serializers.SerializerMethodField()
+    total_discount = serializers.SerializerMethodField()
     address = serializers.SerializerMethodField()
     tracking = serializers.SerializerMethodField()
     assigned_card_id = serializers.IntegerField(read_only=True)
@@ -71,6 +91,11 @@ class OrderSerializer(serializers.ModelSerializer):
             "customer_phone",
             "items",
             "amount",
+            "subtotal",
+            "discount_total",
+            "first_order_discount_percentage",
+            "first_order_discount_amount",
+            "total_discount",
             "shipping",
             "total",
             "payment_method",
@@ -83,6 +108,19 @@ class OrderSerializer(serializers.ModelSerializer):
             "placed_at",
         ]
         read_only_fields = fields
+
+    def get_subtotal(self, obj):
+        # The pre-discount total — original_price falls back to the paid
+        # price itself for a line with no offer applied (original_price is
+        # only ever null for those), so this is always "what it would have
+        # cost with nothing discounted, before either discount layer".
+        return sum(((item.original_price or item.price) * item.qty for item in obj.items.all()), Decimal("0.00"))
+
+    def get_discount_total(self, obj):
+        return sum((((item.discount_amount or Decimal("0.00")) * item.qty) for item in obj.items.all()), Decimal("0.00"))
+
+    def get_total_discount(self, obj):
+        return self.get_discount_total(obj) + (obj.first_order_discount_amount or Decimal("0.00"))
 
     def get_address(self, obj):
         return {
