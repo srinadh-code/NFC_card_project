@@ -1,0 +1,12 @@
+{% autoescape off %}Hi {{ name }},
+
+Thanks for creating your VR's GATEWAY account. Please confirm your email address by opening this link:
+
+{{ action_url }}
+
+This link expires in {{ expires_text }} and can only be used once.
+
+If you didn't create an account, you can safely ignore this email.
+
+- VR's GATEWAY
+{% endautoescape %}

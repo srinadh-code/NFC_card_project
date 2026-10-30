@@ -9,6 +9,7 @@ import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 import os                                                                       
+import sys
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -251,10 +252,10 @@ CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(_csrf_trusted))  # de-dupe, keep order
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
 GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
 
-# Brevo — sends the password-reset OTP by email via Brevo's HTTP API (see
-# accounts/emails.py's send_password_reset_otp_email). Leave BREVO_API_KEY
-# unset locally: that function logs a clear "not configured" warning and
-# returns False rather than faking a successful send — the forgot-password
+# Brevo — sends the account emails (verification and password-reset links)
+# via Brevo's HTTP API (see accounts/emails.py's send_brevo_email). With
+# BREVO_API_KEY unset, sends are skipped with a clear "not configured"
+# warning and reported as not sent — never faked. The forgot-password
 # response is identical either way, so this never affects account-
 # enumeration behavior.
 #
@@ -266,6 +267,11 @@ GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "").strip()
 BREVO_SENDER_EMAIL = os.environ.get("BREVO_SENDER_EMAIL", "").strip() or DEFAULT_FROM_EMAIL
 BREVO_SENDER_NAME = os.environ.get("BREVO_SENDER_NAME", "").strip()
+
+# Never send real email from the test suite, even when .env holds a live
+# key — tests that exercise the Brevo call mock it and set their own key.
+if len(sys.argv) > 1 and sys.argv[1] == "test":
+    BREVO_API_KEY = ""
 
 
 # Cloudinary — the single source of truth for every uploaded image in this
@@ -338,6 +344,8 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "common.response.custom_exception_handler",
     "DEFAULT_THROTTLE_RATES": {
         "otp": "5/min",
+        "auth_email_hourly": "10/hour",
+        "auth_email_ip": "30/hour",
         "lead_submit": "10/min",
         "testimonial_submit": "10/hour",
     },

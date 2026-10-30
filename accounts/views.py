@@ -1,8 +1,10 @@
 import logging
+import threading
 from datetime import timedelta
 
 from django.conf import settings
-from django.db import transaction
+from django.contrib.auth.hashers import make_password
+from django.db import connection, transaction
 from django.utils import timezone
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
@@ -11,9 +13,9 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
 from common.response import error, success
-from common.throttling import OtpRequestThrottle
+from common.throttling import AuthEmailHourlyThrottle, AuthEmailIPThrottle, OtpRequestThrottle
 
-from .emails import send_password_reset_otp_email, send_registration_otp_email
+from .emails import send_password_reset_otp_email, send_verification_email
 from .google_oauth import GoogleTokenError, verify_google_id_token
 from .models import EmailOTP, User
 from .security import access_token_minutes
@@ -64,6 +66,32 @@ def _auth_payload(user):
     }
 
 
+# Every endpoint that can trigger an auth email: per-minute and per-hour
+# limits per email address, plus a per-client-IP limit.
+AUTH_EMAIL_THROTTLES = [OtpRequestThrottle, AuthEmailHourlyThrottle, AuthEmailIPThrottle]
+
+
+def _send_in_background(send_fn, *args):
+    """Runs an email send after the response has gone out, for endpoints
+    whose reply must not reveal whether an account exists — otherwise the
+    extra time spent calling Brevo for a real account would give it away.
+    The send functions never raise and never touch the database."""
+
+    def run():
+        try:
+            send_fn(*args)
+        finally:
+            connection.close()
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def _equalize_hashing_time():
+    """Burns the same password-hasher time a real token issue would, so an
+    unknown email can't be told apart from a known one by response time."""
+    make_password("timing-equalizer")
+
+
 def _blacklist_all_tokens_for_user(user):
     """Invalidates every outstanding refresh token for `user` — called after
     a password reset/change so other sessions can't keep refreshing with a
@@ -95,57 +123,85 @@ class RegisterView(APIView):
                 full_name=data["full_name"],
                 phone=data.get("phone", ""),
                 is_active=True,
-                email_verified=True,
+                email_verified=False,
             )
             Profile.ensure_for_user(user)
 
-        return success(_auth_payload(user), message="Account created.", status=201)
+        # No session until the email is verified (LoginView enforces the
+        # same rule). The account already exists, so reporting delivery
+        # failure here reveals nothing — and the customer needs to know to
+        # use "Resend verification email".
+        email_sent = send_verification_email(user, EmailOTP.issue_verification_link(user))
+        message = (
+            "Account created. Check your email for a link to verify your address."
+            if email_sent
+            else "Account created, but we couldn't send the verification email. Please use Resend verification email."
+        )
+        return success({"email": user.email, "verification_email_sent": email_sent}, message=message, status=201)
     
     
 
 
 class VerifyEmailView(APIView):
+    """Confirms the emailed verification link. Single-use: once the account
+    is verified the same link reports "already verified", and a link
+    superseded by a newer one (or past its 24h lifetime) is rejected."""
+
     permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = VerifyEmailSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        email = serializer.validated_data["email"].strip().lower()
-        code = serializer.validated_data["otp"]
 
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            return error("Invalid email or verification code.", status=400)
+        outcome, otp = EmailOTP.check_verification_link(serializer.validated_data["token"])
 
-        otp = (
-            EmailOTP.objects.filter(
-                user=user, purpose=EmailOTP.Purpose.REGISTER, is_used=False
+        if outcome == EmailOTP.LINK_ALREADY_VERIFIED:
+            return success(
+                {"email": otp.user.email, "already_verified": True},
+                message="Your email is already verified. You can log in.",
             )
-            .order_by("-created_at")
-            .first()
-        )
-
-        if otp is None or otp.is_expired or not otp.check_code(code):
-            return error("Invalid or expired verification code.", status=400)
+        if outcome == EmailOTP.LINK_EXPIRED:
+            return error(
+                "This verification link has expired. Request a new one below.",
+                errors={"code": "token_expired"},
+                status=400,
+            )
+        if outcome != EmailOTP.LINK_VALID:
+            return error(
+                "This verification link is invalid or has been replaced by a newer one. Request a new one below.",
+                errors={"code": "token_invalid"},
+                status=400,
+            )
 
         from profiles.models import Profile
 
+        user = otp.user
         with transaction.atomic():
             otp.is_used = True
             otp.save(update_fields=["is_used"])
-
             user.email_verified = True
             user.save(update_fields=["email_verified"])
-
             Profile.ensure_for_user(user)
 
-        return success(_auth_payload(user), message="Email verified.")
+        logger.info("auth.verify_email.success user_id=%s", user.id)
+        return success(
+            {"email": user.email, "already_verified": False},
+            message="Email verified. You can now log in.",
+        )
 
 
 class ResendOtpView(APIView):
+    """Resends the verification link (purpose REGISTER) or a fresh password-
+    reset code (purpose RESET, superseding the previous one). The reply is
+    identical whether or not the account exists or still needs the email,
+    and the send happens after the response so timing can't reveal it
+    either."""
+
     permission_classes = [AllowAny]
-    throttle_classes = [OtpRequestThrottle]
+    throttle_classes = AUTH_EMAIL_THROTTLES
+
+    RESEND_MESSAGE = "If this email needs it, a new link has been sent. Please check your inbox."
+    RESEND_CODE_MESSAGE = "If an account exists for this email, a new code has been sent."
 
     def post(self, request):
         serializer = ResendOtpSerializer(data=request.data)
@@ -153,31 +209,16 @@ class ResendOtpView(APIView):
         email = serializer.validated_data["email"].strip().lower()
         purpose = serializer.validated_data["purpose"]
 
-        RESEND_MESSAGE = "If this account exists, a new code has been sent."
-
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            # Do not reveal whether the account exists — including via the
-            # presence/absence of `expires_at`. RESET replies always carry a
-            # (real or synthetic) timestamp so the shape never differs.
-            data = None
-            if purpose == EmailOTP.Purpose.RESET:
-                data = {"expires_at": timezone.now() + timedelta(minutes=EmailOTP.RESET_OTP_LIFETIME_MINUTES)}
-            return success(data, message=RESEND_MESSAGE)
+        user = User.objects.filter(email=email, is_active=True).first()
 
         if purpose == EmailOTP.Purpose.RESET:
-            # Same lifetime as ForgotPasswordView — resending must supersede
-            # the old code with a fresh 6-minute code, and the countdown the
-            # frontend is showing must restart from this new expires_at, not
-            # keep counting down against the code that just got invalidated.
-            otp, raw_code = EmailOTP.issue(user, purpose, lifetime_minutes=EmailOTP.RESET_OTP_LIFETIME_MINUTES)
-            send_password_reset_otp_email(user, raw_code, EmailOTP.RESET_OTP_LIFETIME_MINUTES)
-            return success({"expires_at": otp.expires_at}, message=RESEND_MESSAGE)
+            return success({"expires_at": _issue_and_send_reset_otp(user)}, message=self.RESEND_CODE_MESSAGE)
 
-        _otp, raw_code = EmailOTP.issue(user, purpose)
-        send_registration_otp_email(user, raw_code)
-        return success(message=RESEND_MESSAGE)
+        if user is not None and not user.email_verified:
+            _send_in_background(send_verification_email, user, EmailOTP.issue_verification_link(user))
+        else:
+            _equalize_hashing_time()
+        return success(message=self.RESEND_MESSAGE)
 
 
 class LoginView(APIView):
@@ -202,6 +243,17 @@ class LoginView(APIView):
             raise
 
         user = serializer.validated_data["user"]
+        # Checked only after the password matched, so this never reveals an
+        # account's verification status to someone without its password.
+        # Admins are never blocked (they're created verified).
+        if user.role == User.Role.CUSTOMER and not user.email_verified:
+            logger.info("auth.login.unverified user_id=%s", user.id)
+            return error(
+                "Please verify your email address before logging in. Check your inbox for the verification link.",
+                errors={"code": "email_not_verified", "email": user.email},
+                status=403,
+            )
+
         logger.info(
             "auth.login.success user_id=%s role=%s dashboard_url=%s",
             user.id,
@@ -226,18 +278,31 @@ class LogoutView(APIView):
         return success(message="Logged out.")
 
 
+def _issue_and_send_reset_otp(user):
+    """Issues a fresh 5-minute reset code for `user` (superseding any older
+    one) and emails it after the response; for an unknown email (`user` is
+    None) does matching hashing work instead. Returns the code's expiry —
+    a synthetic one for unknown emails, so the reply looks the same."""
+    lifetime = EmailOTP.RESET_OTP_LIFETIME_MINUTES
+    if user is None:
+        _equalize_hashing_time()
+        return timezone.now() + timedelta(minutes=lifetime)
+    otp, raw_code = EmailOTP.issue(user, EmailOTP.Purpose.RESET, lifetime_minutes=lifetime)
+    _send_in_background(send_password_reset_otp_email, user, raw_code, lifetime)
+    return otp.expires_at
+
+
 class ForgotPasswordView(APIView):
     """
-    Step 1 of the reset flow. The response is identical whether or not the
-    email is registered, and whether or not the Brevo send actually
-    succeeds — neither is ever observable from outside, which is what makes
-    this safe against account enumeration. The OTP always goes to the
-    account's own registered email (the same one used to look it up), never
-    an address the request could supply.
+    Step 1 of the reset flow: emails a 6-digit code to the account's own
+    registered address. The response is identical whether or not the email
+    is registered and whether or not Brevo accepts the send — and the send
+    happens after the response, with matching hashing work for unknown
+    emails, so neither content nor timing reveals whether an account exists.
     """
 
     permission_classes = [AllowAny]
-    throttle_classes = [OtpRequestThrottle]
+    throttle_classes = AUTH_EMAIL_THROTTLES
 
     GENERIC_MESSAGE = "If an account exists for this email, an OTP has been sent to the registered email address."
 
@@ -246,22 +311,8 @@ class ForgotPasswordView(APIView):
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data["email"].strip().lower()
 
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            # Same response shape (message + expires_at) as the real path —
-            # a synthetic timestamp here means the frontend's countdown
-            # behaves identically either way, and nothing about this branch
-            # is observably different from outside.
-            expires_at = timezone.now() + timedelta(minutes=EmailOTP.RESET_OTP_LIFETIME_MINUTES)
-            return success({"expires_at": expires_at}, message=self.GENERIC_MESSAGE)
-
-        otp, raw_code = EmailOTP.issue(
-            user, EmailOTP.Purpose.RESET, lifetime_minutes=EmailOTP.RESET_OTP_LIFETIME_MINUTES
-        )
-        send_password_reset_otp_email(user, raw_code, EmailOTP.RESET_OTP_LIFETIME_MINUTES)
-
-        return success({"expires_at": otp.expires_at}, message=self.GENERIC_MESSAGE)
+        user = User.objects.filter(email=email, is_active=True).first()
+        return success({"expires_at": _issue_and_send_reset_otp(user)}, message=self.GENERIC_MESSAGE)
 
 
 class VerifyResetOtpView(APIView):
@@ -292,6 +343,9 @@ class VerifyResetOtpView(APIView):
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
+            # Same hashing time as a real code check, so response time
+            # doesn't reveal whether the account exists.
+            _equalize_hashing_time()
             return error(self.GENERIC_ERROR, status=400)
 
         # Not filtered to is_used=False: once check_code() locks an OTP out
@@ -306,6 +360,7 @@ class VerifyResetOtpView(APIView):
         )
 
         if otp is None or otp.is_expired:
+            _equalize_hashing_time()
             return error(self.GENERIC_ERROR, status=400)
 
         if otp.attempts >= EmailOTP.MAX_ATTEMPTS:
@@ -339,16 +394,24 @@ class ResetPasswordView(APIView):
 
         otp = EmailOTP.get_by_reset_token(data["reset_token"])
         if otp is None:
-            return error("Invalid or expired reset authorization. Please verify your code again.", status=400)
+            return error(
+                "Your reset session has expired or was already used. Please request a new code.",
+                errors={"code": "token_invalid"},
+                status=400,
+            )
 
         with transaction.atomic():
             otp.consume_reset_token()
             otp.user.set_password(data["new_password"])
-            otp.user.save(update_fields=["password"])
+            # Entering a code sent to this inbox proves the customer controls
+            # it — the same thing email verification checks.
+            otp.user.email_verified = True
+            otp.user.save(update_fields=["password", "email_verified"])
 
         _blacklist_all_tokens_for_user(otp.user)
+        logger.info("auth.reset_password.success user_id=%s", otp.user.id)
 
-        return success(message="Password reset. You can now log in.")
+        return success(message="Your password has been reset. You can now log in with your new password.")
 
 
 class ChangePasswordView(APIView):
