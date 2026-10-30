@@ -301,15 +301,28 @@ interface AuthPayload {
 }
 
 export const authApi = {
+  // No session is returned — the customer must verify their email (via the
+  // emailed link) before they can log in. `verification_email_sent` is
+  // false only if Brevo didn't accept the email.
   register: (data: { full_name: string; email: string; phone?: string; password: string }) =>
-    request<AuthPayload>("/auth/register/", { method: "POST", body: data, auth: false }),
+    request<{ email: string; verification_email_sent: boolean }>("/auth/register/", {
+      method: "POST",
+      body: data,
+      auth: false,
+    }),
 
-  verifyEmail: (data: { email: string; otp: string }) =>
-    request<AuthPayload>("/auth/verify-email/", { method: "POST", body: data, auth: false }),
+  // `token` comes from the emailed /verify-email?token=... link.
+  verifyEmail: (data: { token: string }) =>
+    request<{ email: string; already_verified: boolean }>("/auth/verify-email/", {
+      method: "POST",
+      body: data,
+      auth: false,
+    }),
 
-  // `expires_at` is only present for purpose: "RESET" (REGISTER resends
-  // have no frontend countdown UI today) — always present for RESET,
-  // real or not, so its presence never reveals whether the account exists.
+  // Resends the verification link (REGISTER) or a fresh password-reset
+  // code (RESET). Always the same generic reply, whether or not the account
+  // exists. RESET replies carry the new code's `expires_at` (synthetic for
+  // unknown emails) for the popup's countdown.
   resendOtp: (data: { email: string; purpose?: "REGISTER" | "RESET" }) =>
     request<{ expires_at?: string } | null>("/auth/resend-otp/", { method: "POST", body: data, auth: false }),
 
@@ -319,10 +332,10 @@ export const authApi = {
   logout: (refresh: string, area?: SessionArea) =>
     request<null>("/auth/logout/", { method: "POST", body: { refresh }, area }),
 
-  // `expires_at` is when the just-issued OTP stops being valid (backend-
-  // authoritative — see accounts/views.py's ForgotPasswordView) — always
-  // present, real or synthetic, whether or not the account actually
-  // exists, so its value never reveals account existence either.
+  // Emails a 6-digit reset code. `expires_at` is when that code stops
+  // being valid (backend-authoritative — see accounts/views.py's
+  // ForgotPasswordView) — always present, real or synthetic, whether or not
+  // the account exists, so it never reveals account existence.
   forgotPassword: (data: { email: string }) =>
     request<{ expires_at: string }>("/auth/forgot-password/", { method: "POST", body: data, auth: false }),
 
