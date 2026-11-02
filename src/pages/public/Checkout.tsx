@@ -6,6 +6,7 @@ import { AlertCircle, CheckCircle2, Info, Loader2, MapPin, Pencil, Plus } from "
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AddressFormDialog } from "@/components/customer/AddressFormDialog"
+import { PinnedLocationLink } from "@/components/customer/PinnedLocationLink"
 import { OffersSection } from "@/components/checkout/OffersSection"
 import { useCart } from "@/hooks/useCart"
 import { sanitizeCartLines } from "@/store/cart-store"
@@ -287,6 +288,7 @@ export default function Checkout() {
                   {selectedAddress.state} - {selectedAddress.pincode}
                 </p>
                 <p>{selectedAddress.country}</p>
+                <PinnedLocationLink address={selectedAddress} />
                 <div className="pt-2" aria-live="polite">
                   {verificationQuery.isFetching ? (
                     <p className="flex items-center gap-1.5">

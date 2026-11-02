@@ -109,6 +109,9 @@ export interface CustomerAddress {
   state: string
   pincode: string
   country: string
+  /** Delivery pin picked on the address form's map; null for a typed address. */
+  latitude: number | null
+  longitude: number | null
   isDefault: boolean
 }
 

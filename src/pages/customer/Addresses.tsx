@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { AddressFormDialog } from "@/components/customer/AddressFormDialog"
+import { PinnedLocationLink } from "@/components/customer/PinnedLocationLink"
 import { customerAddressApi, ApiError } from "@/lib/api"
 import type { CustomerAddress } from "@/types"
 
@@ -43,6 +44,7 @@ function AddressCard({
         </p>
         <p>{address.country}</p>
         <p className="pt-1">{address.phone}</p>
+        <PinnedLocationLink address={address} />
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
