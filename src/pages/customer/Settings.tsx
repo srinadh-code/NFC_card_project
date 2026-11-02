@@ -390,8 +390,8 @@ export default function CustomerSettings() {
         <CardContent>
           <p className="text-sm text-muted-foreground">
             To close or deactivate your account, email{" "}
-            <a href="mailto:support@vrsnexora.com" className="font-medium text-primary hover:underline">
-              support@vrsnexora.com
+            <a href="mailto:vrsgateway@gmail.com" className="font-medium text-primary hover:underline">
+              vrsgateway@gmail.com
             </a>{" "}
             and our team will take care of it.
           </p>

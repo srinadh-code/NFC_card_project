@@ -18,8 +18,8 @@ export default function ProfilePhonePreview({ className }: { className?: string 
           className="size-12 rounded-full border-2 border-white/70 object-cover"
         />
         <div>
-          <p className="text-xs font-bold text-white">Alex Morgan</p>
-          <p className="text-[10px] text-white/75">Product Designer</p>
+          <p className="text-xs font-bold text-white">Your Name</p>
+          <p className="text-[10px] text-white/75">Your Title</p>
         </div>
         <div className="flex items-center gap-1.5">
           {SOCIAL_ICONS.map((Icon, i) => (

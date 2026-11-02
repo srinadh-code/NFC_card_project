@@ -126,7 +126,7 @@ export default function AdminSettings() {
       errors.supportPhone = "Enter a valid phone number."
     }
     if (websiteUrl && !isValidUrlLoose(websiteUrl)) {
-      errors.websiteUrl = "Enter a valid URL (e.g. https://vrsnexora.com)."
+      errors.websiteUrl = "Enter a valid URL (e.g. https://nfc-card-project-peach.vercel.app)."
     }
     setGeneralUiErrors(errors)
     if (Object.keys(errors).length > 0) {
@@ -374,7 +374,7 @@ export default function AdminSettings() {
                             <Input
                               type="email"
                               className="pl-9"
-                              placeholder="support@vrsnexora.com"
+                              placeholder="vrsgateway@gmail.com"
                               value={general.values.support_email ?? ""}
                               onChange={(e) => {
                                 general.setField("support_email", e.target.value)
@@ -393,7 +393,7 @@ export default function AdminSettings() {
                             <Input
                               type="tel"
                               className="pl-9"
-                              placeholder="+91 90000 12345"
+                              placeholder="+91 XXXXX XXXXX"
                               value={general.values.support_phone ?? ""}
                               onChange={(e) => {
                                 general.setField("support_phone", e.target.value)
@@ -412,7 +412,7 @@ export default function AdminSettings() {
                             <Input
                               type="url"
                               className="pl-9"
-                              placeholder="https://vrsnexora.com"
+                              placeholder="https://nfc-card-project-peach.vercel.app"
                               value={general.values.website_url ?? ""}
                               onChange={(e) => {
                                 general.setField("website_url", e.target.value)

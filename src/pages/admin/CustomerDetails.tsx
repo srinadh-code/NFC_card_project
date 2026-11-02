@@ -243,7 +243,7 @@ export default function AdminCustomerDetails() {
                       rel="noreferrer"
                       className="text-sm text-primary hover:underline"
                     >
-                      vrsnexora.com/u/{customer.username}
+                      {window.location.host}/u/{customer.username}
                     </a>
                   </div>
                   <StatusBadge status={customer.profileStatus} className="ml-auto" />
