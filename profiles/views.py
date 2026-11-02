@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -11,6 +12,7 @@ from common.response import error, success
 
 from .models import CustomField, CustomLink, Profile, SocialLink
 from .serializers import (
+    CustomFieldBulkItemSerializer,
     CustomFieldSerializer,
     CustomLinkSerializer,
     ProfileSerializer,
@@ -102,6 +104,50 @@ class CustomFieldViewSet(OwnedByProfileMixin, viewsets.ModelViewSet):
     @action(detail=False, methods=["patch"])
     def reorder(self, request):
         return self._reorder(request)
+
+    @action(detail=False, methods=["put"])
+    def bulk(self, request):
+        """Replaces the customer's whole custom-field list in one atomic
+        step — what My Profile's Save Changes sends. Rows with an `id` the
+        customer owns are updated in place (never duplicated), rows without
+        one are created, owned rows missing from the list are deleted, and
+        list position becomes display_order. An `id` belonging to anyone
+        else is treated as a new row, so it can never touch their data.
+
+        Body: {"fields": [{"id"?: int, "label": str, "value": str}, ...]}
+        """
+        items = request.data.get("fields")
+        if not isinstance(items, list):
+            return error("Expected a list of fields.", errors={"fields": ["Expected a list of fields."]})
+        serializer = CustomFieldBulkItemSerializer(data=items, many=True)
+        if not serializer.is_valid():
+            # Index-aligned with the request, so the editor can mark the row.
+            return error(
+                "Please complete or remove the highlighted custom fields.",
+                errors={"fields": serializer.errors},
+            )
+        rows = [row for row in serializer.validated_data if row["label"] or row["value"]]
+
+        profile = Profile.ensure_for_user(request.user)
+        with transaction.atomic():
+            # Serializes concurrent saves from the same customer (two tabs).
+            Profile.objects.select_for_update().filter(pk=profile.pk).first()
+            existing = {f.id: f for f in CustomField.objects.filter(profile=profile)}
+            kept_ids = set()
+            for order, row in enumerate(rows):
+                field = existing.get(row.get("id"))
+                if field is not None and field.id not in kept_ids:
+                    field.label, field.value, field.display_order = row["label"], row["value"], order
+                    field.save(update_fields=["label", "value", "display_order"])
+                else:
+                    field = CustomField.objects.create(
+                        profile=profile, label=row["label"], value=row["value"], display_order=order
+                    )
+                kept_ids.add(field.id)
+            CustomField.objects.filter(profile=profile).exclude(id__in=kept_ids).delete()
+
+        saved = CustomField.objects.filter(profile=profile).order_by("display_order", "id")
+        return success(CustomFieldSerializer(saved, many=True).data, message="Custom fields saved.")
 
 
 class PublicProfileView(APIView):

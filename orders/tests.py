@@ -140,6 +140,33 @@ class CustomerOrderCreateViewTests(AuthenticatedAPITestCase):
         response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    def test_rejects_saved_address_whose_pincode_does_not_match(self):
+        """API bypass: an address saved before PIN verification existed (or
+        written straight to the DB) is re-verified at order time, whatever
+        the checkout page showed."""
+        _seed_cart_item(self.user)
+        bad_address = _make_address(self.user, pincode="122001")  # Haryana PIN, Telangana address
+        response = self.client.post(reverse("my-orders"), _valid_payload(bad_address), format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("address_id", response.data["errors"])
+        self.assertFalse(Order.objects.exists())
+
+    def test_rejects_saved_address_with_nonexistent_pincode(self):
+        _seed_cart_item(self.user)
+        bad_address = _make_address(self.user, pincode="999999")
+        response = self.client.post(reverse("my-orders"), _valid_payload(bad_address), format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(Order.objects.exists())
+
+    def test_does_not_place_order_when_pin_directory_is_unreachable(self):
+        from customer_management.customer_addresses.pincode import PincodeServiceUnavailable
+
+        _seed_cart_item(self.user)
+        self.pincode_fetch.side_effect = PincodeServiceUnavailable
+        response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertFalse(Order.objects.exists())
+
     def test_creates_a_matching_transaction(self):
         _seed_cart_item(self.user)
         response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")

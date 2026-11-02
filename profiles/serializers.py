@@ -24,6 +24,26 @@ class CustomFieldSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
 
+class CustomFieldBulkItemSerializer(serializers.Serializer):
+    """One row of the My Profile > Custom Fields editor, as sent to the
+    bulk-replace endpoint (CustomFieldViewSet.bulk). `id` is the existing
+    row's id, absent for a row added since the last save."""
+
+    id = serializers.IntegerField(required=False, allow_null=True)
+    label = serializers.CharField(max_length=CustomField._meta.get_field("label").max_length, allow_blank=True)
+    value = serializers.CharField(max_length=CustomField._meta.get_field("value").max_length, allow_blank=True)
+
+    def validate(self, attrs):
+        attrs["label"] = attrs["label"].strip()
+        attrs["value"] = attrs["value"].strip()
+        # A completely empty row is dropped by the view (an untouched "Add
+        # Field" click); a half-filled one is a mistake worth flagging.
+        if bool(attrs["label"]) != bool(attrs["value"]):
+            missing = "label" if not attrs["label"] else "value"
+            raise serializers.ValidationError({missing: f"Please enter a {missing} or remove this field."})
+        return attrs
+
+
 class ProfileSerializer(serializers.ModelSerializer):
     """Own profile — full detail, owner-only."""
 
@@ -143,7 +163,7 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     cover_image = serializers.SerializerMethodField()
     social_links = serializers.SerializerMethodField()
     custom_links = serializers.SerializerMethodField()
-    custom_fields = CustomFieldSerializer(many=True, read_only=True)
+    custom_fields = serializers.SerializerMethodField()
     services = serializers.SerializerMethodField()
 
     class Meta:
@@ -211,6 +231,13 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     def get_custom_links(self, obj):
         links = [link for link in obj.custom_links.all() if link.enabled]
         return CustomLinkSerializer(links, many=True).data
+
+    def get_custom_fields(self, obj):
+        # Only fields with both a label and a value are public — rows saved
+        # before the editor enforced this (or edited via Django admin) are
+        # simply left out rather than rendered as blanks.
+        fields = [f for f in obj.custom_fields.all() if f.label.strip() and f.value.strip()]
+        return CustomFieldSerializer(fields, many=True).data
 
     def get_services(self, obj):
         from customer_management.customer_services.models import CustomerService

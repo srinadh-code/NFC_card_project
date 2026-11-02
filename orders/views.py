@@ -11,6 +11,7 @@ from common.discounts import calculate_first_order_discount, get_product_pricing
 from common.pagination import StandardPagination
 from common.response import error, success
 
+from customer_management.customer_addresses import pincode as pincode_service
 from customer_management.customer_addresses.models import CustomerAddress
 from customer_management.customer_cart.services import clear_cart, get_or_create_cart
 
@@ -59,6 +60,24 @@ class CustomerOrderListCreateView(APIView):
                 # hand back the order that already exists instead of
                 # creating a second one.
                 return success(OrderSerializer(existing).data, message="Order placed.", status=200)
+
+        # Re-verified at order time, never trusted from the address book or
+        # the checkout page's own status — an address saved before PIN
+        # verification existed, or a request sent straight to this API,
+        # still can't order to a non-existent/mismatched PIN code.
+        # Already validated to belong to request.user in
+        # CustomerOrderCreateSerializer.validate_address_id.
+        address = CustomerAddress.objects.get(pk=data["address_id"])
+        try:
+            address_errors = pincode_service.verify_saved_address(address).errors
+        except pincode_service.PincodeServiceUnavailable:
+            return error(pincode_service.UNAVAILABLE_MESSAGE, status=503)
+        if address_errors:
+            return error(
+                "Your delivery address could not be verified. Please update the PIN code or address and try again.",
+                errors={"address_id": list(address_errors.values()), **address_errors},
+                status=400,
+            )
 
         # Always the authenticated customer's own cart — never a client-
         # supplied items array, and never another customer's cart.
@@ -112,9 +131,6 @@ class CustomerOrderListCreateView(APIView):
             amount += priced_items[-1]["unit_price"] * item.qty
 
         shipping = data.get("shipping") or Decimal("0")
-        # Already validated to belong to request.user in
-        # CustomerOrderCreateSerializer.validate_address_id.
-        address = CustomerAddress.objects.get(pk=data["address_id"])
         shipping_snapshot = compose_shipping_snapshot(address)
 
         try:

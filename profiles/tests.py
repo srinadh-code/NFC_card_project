@@ -12,7 +12,7 @@ from customer_management.customer_notifications.models import Notification
 from customer_management.customer_services.models import CustomerService
 from customer_management.customer_settings.models import CustomerSettings
 
-from .models import Profile
+from .models import CustomField, Profile
 
 
 def _fake_image_file(name="cover.png"):
@@ -284,3 +284,115 @@ class MyProfileTemplateSelectionTests(AuthenticatedAPITestCase):
     def test_rejects_a_template_id_that_does_not_exist(self):
         response = self.client.patch(reverse("profile-me"), {"selected_template": "not-a-real-template"}, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class CustomFieldBulkSaveTests(AuthenticatedAPITestCase):
+    """My Profile > Custom Fields > Save Changes (PUT custom-fields/bulk/)."""
+
+    url = reverse("custom-field-bulk")
+
+    def setUp(self):
+        super().setUp()
+        self.profile = Profile.ensure_for_user(self.user)
+
+    def _save(self, fields):
+        return self.client.put(self.url, {"fields": fields}, format="json")
+
+    def _stored(self):
+        return list(CustomField.objects.filter(profile=self.profile).values_list("label", "value", "display_order"))
+
+    def test_creates_fields_in_order(self):
+        response = self._save([{"label": "GST Number", "value": "36ABCDE1234F1Z5"}, {"label": "Experience", "value": "8 years"}])
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self._stored(), [("GST Number", "36ABCDE1234F1Z5", 0), ("Experience", "8 years", 1)])
+        self.assertEqual([f["label"] for f in response.data["data"]], ["GST Number", "Experience"])
+
+    def test_resaving_updates_in_place_without_duplicates(self):
+        first = self._save([{"label": "GST Number", "value": "old"}]).data["data"][0]
+        for _ in range(3):
+            response = self._save([{"id": first["id"], "label": "GST Number", "value": "new"}])
+        self.assertEqual(response.data["data"][0]["id"], first["id"])
+        self.assertEqual(self._stored(), [("GST Number", "new", 0)])
+
+    def test_edit_delete_and_reorder_in_one_save(self):
+        a, b, c = self._save(
+            [{"label": "A", "value": "1"}, {"label": "B", "value": "2"}, {"label": "C", "value": "3"}]
+        ).data["data"]
+        self._save([{"id": c["id"], "label": "C", "value": "3"}, {"id": a["id"], "label": "A2", "value": "1"}])
+        self.assertEqual(self._stored(), [("C", "3", 0), ("A2", "1", 1)])
+        self.assertFalse(CustomField.objects.filter(id=b["id"]).exists())
+
+    def test_empty_list_deletes_all(self):
+        self._save([{"label": "A", "value": "1"}])
+        self._save([])
+        self.assertEqual(self._stored(), [])
+
+    def test_drops_completely_empty_rows(self):
+        self._save([{"label": "  ", "value": ""}, {"label": " Website ", "value": " example.com "}])
+        self.assertEqual(self._stored(), [("Website", "example.com", 0)])
+
+    def test_rejects_half_filled_rows_and_saves_nothing(self):
+        self._save([{"label": "Keep", "value": "me"}])
+        response = self._save([{"label": "Keep", "value": "changed"}, {"label": "GST Number", "value": ""}])
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("value", response.data["errors"]["fields"][1])
+        self.assertEqual(self._stored(), [("Keep", "me", 0)])
+
+    def test_rejects_values_over_the_column_length(self):
+        response = self._save([{"label": "Long", "value": "x" * 256}])
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_cannot_modify_another_customers_field(self):
+        other_profile = Profile.ensure_for_user(self.other_user)
+        theirs = CustomField.objects.create(profile=other_profile, label="Secret", value="theirs")
+        self._save([{"id": theirs.id, "label": "Hijacked", "value": "x"}])
+        theirs.refresh_from_db()
+        self.assertEqual((theirs.label, theirs.value), ("Secret", "theirs"))
+        self.assertEqual(self._stored(), [("Hijacked", "x", 0)])
+
+    def test_profile_update_does_not_touch_custom_fields(self):
+        self._save([{"label": "GST Number", "value": "36ABCDE1234F1Z5"}])
+        self.client.patch(reverse("profile-me"), {"website": "https://example.com", "custom_fields": []}, format="json")
+        self.assertEqual(self._stored(), [("GST Number", "36ABCDE1234F1Z5", 0)])
+
+    def test_requires_authentication(self):
+        self.client.force_authenticate(user=None)
+        self.assertEqual(self._save([]).status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class PublicProfileCustomFieldTests(APITestCase):
+    def setUp(self):
+        self.user = make_user(email="card@example.com", full_name="Card Owner")
+        self.profile = Profile.ensure_for_user(self.user)
+
+    def _public_fields(self):
+        response = self.client.get(reverse("profile-public", args=[self.profile.username]))
+        return [(f["label"], f["value"]) for f in response.data["data"]["custom_fields"]]
+
+    def test_shows_saved_fields_in_order(self):
+        CustomField.objects.create(profile=self.profile, label="Experience", value="8 years", display_order=1)
+        CustomField.objects.create(profile=self.profile, label="GST Number", value="36ABCDE1234F1Z5", display_order=0)
+        self.assertEqual(self._public_fields(), [("GST Number", "36ABCDE1234F1Z5"), ("Experience", "8 years")])
+
+    def test_hides_fields_missing_a_label_or_value(self):
+        CustomField.objects.create(profile=self.profile, label="Filled", value="yes")
+        CustomField.objects.create(profile=self.profile, label="No value", value=" ")
+        CustomField.objects.create(profile=self.profile, label="", value="no label")
+        self.assertEqual(self._public_fields(), [("Filled", "yes")])
+
+    def test_reflects_latest_save_immediately(self):
+        owner = self.client_class()
+        owner.force_authenticate(user=self.user)
+        owner.put(reverse("custom-field-bulk"), {"fields": [{"label": "Award", "value": "Best Designer 2025"}]}, format="json")
+        self.assertEqual(self._public_fields(), [("Award", "Best Designer 2025")])
+        owner.put(reverse("custom-field-bulk"), {"fields": []}, format="json")
+        self.assertEqual(self._public_fields(), [])
+
+    def test_private_profile_exposes_nothing(self):
+        CustomField.objects.create(profile=self.profile, label="GST Number", value="36ABCDE1234F1Z5")
+        self.profile.profile_public = False
+        self.profile.save(update_fields=["profile_public"])
+        response = self.client.get(reverse("profile-public", args=[self.profile.username]))
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertNotIn("36ABCDE1234F1Z5", response.content.decode())
+

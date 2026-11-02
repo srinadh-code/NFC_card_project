@@ -340,6 +340,7 @@ REST_FRAMEWORK = {
         "otp": "5/min",
         "lead_submit": "10/min",
         "testimonial_submit": "10/hour",
+        "pincode_lookup": "60/min",
     },
 }
 
