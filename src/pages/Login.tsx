@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ForgotPasswordDialog } from "@/components/auth/ForgotPasswordDialog"
+import { ResendVerificationButton } from "@/components/auth/ResendVerificationButton"
 import { BrandMark } from "@/components/layout/BrandMark"
 import { useCustomerAuthStore } from "@/store/auth-store"
 import { sanitizeRedirect } from "@/lib/utils"
@@ -44,6 +45,9 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [forgotOpen, setForgotOpen] = useState(false)
+  // Set when the password was right but the email isn't verified yet — the
+  // backend refuses to log in until the emailed link has been opened.
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null)
 
   if (customer) return <Navigate to={redirectTo} replace />
 
@@ -51,6 +55,7 @@ export default function Login() {
     e.preventDefault()
     setSubmitting(true)
     setError(null)
+    setUnverifiedEmail(null)
     try {
       const result = await customerLogin(email, password)
       if (result.success) {
@@ -60,6 +65,7 @@ export default function Login() {
       }
       const message = result.error ?? "Invalid credentials."
       setError(message)
+      setUnverifiedEmail(result.unverifiedEmail ?? null)
       toast.error(message)
     } finally {
       setSubmitting(false)
@@ -186,6 +192,15 @@ export default function Login() {
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
+            {unverifiedEmail && (
+              <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-3 text-sm">
+                <p className="text-muted-foreground">
+                  Didn&apos;t get the email or the link expired? We can send a new verification link to{" "}
+                  <span className="font-medium text-foreground break-all">{unverifiedEmail}</span>.
+                </p>
+                <ResendVerificationButton email={unverifiedEmail} className="w-full" />
+              </div>
+            )}
 
             <div className="flex items-center justify-between text-sm">
               <label className="flex items-center gap-2 text-muted-foreground">

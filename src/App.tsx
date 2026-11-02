@@ -49,6 +49,7 @@ import AdminWebsiteContent from "@/pages/admin/content"
 
 
 import Login from "@/pages/Login"
+import VerifyEmail from "@/pages/VerifyEmail"
 import AdminLogin from "@/pages/admin/AdminLogin"
 import CustomerRegister from "@/pages/customer/Register"
 import CustomerDashboard from "@/pages/customer/Dashboard"
@@ -131,6 +132,7 @@ function App() {
         <Route element={<AuthLayout />}>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<CustomerRegister />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/admin/login" element={<AdminLogin />} />
         </Route>
 

@@ -14,6 +14,7 @@ import type {
   Profile,
   Service,
   SocialLink,
+  SocialPlatform,
   SupportTicket,
   TicketPriority,
   TicketStatus,
@@ -218,6 +219,55 @@ export async function requestRaw<T>(path: string, options: RequestOptions = {}):
   return rawRequest<T>(path, options)
 }
 
+// Multipart POST that reports upload progress (0–100) — fetch() can't, so
+// this uses XMLHttpRequest but keeps rawRequest's contract: same base URL,
+// bearer token, one refresh-and-retry on 401, NetworkError/ApiError on
+// failure, and the envelope's `data` on success. Used for large files (the
+// Home page demo video) where a progress bar matters.
+export function uploadWithProgress<T>(
+  path: string,
+  formData: FormData,
+  onProgress?: (percent: number) => void,
+  retried = false,
+): Promise<T> {
+  const area = currentArea()
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open("POST", `${API_BASE_URL}${path}`)
+    const token = getAccessToken(area)
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`)
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 100))
+    }
+    xhr.onerror = () => reject(new NetworkError())
+    xhr.onload = async () => {
+      if (xhr.status === 401) {
+        if (!retried && getRefreshToken(area) && (await refreshAccessToken(area))) {
+          onProgress?.(0)
+          uploadWithProgress<T>(path, formData, onProgress, true).then(resolve, reject)
+          return
+        }
+        clearTokens(area)
+        unauthorizedHandler?.(area)
+      }
+      let json: Envelope<T> | null = null
+      try {
+        json = JSON.parse(xhr.responseText) as Envelope<T>
+      } catch {
+        json = null
+      }
+      if (xhr.status < 200 || xhr.status >= 300 || !json || json.success === false) {
+        const message =
+          json?.message || (xhr.status === 413 ? "The file is too large for the server to accept." : `Request failed (${xhr.status})`)
+        reject(new ApiError(message, xhr.status, json?.errors ?? {}))
+        return
+      }
+      resolve(json.data as T)
+    }
+    xhr.send(formData)
+  })
+}
+
 async function requestPaginated<T>(
   path: string,
   options: RequestOptions = {},
@@ -252,15 +302,28 @@ interface AuthPayload {
 }
 
 export const authApi = {
+  // No session is returned — the customer must verify their email (via the
+  // emailed link) before they can log in. `verification_email_sent` is
+  // false only if Brevo didn't accept the email.
   register: (data: { full_name: string; email: string; phone?: string; password: string }) =>
-    request<AuthPayload>("/auth/register/", { method: "POST", body: data, auth: false }),
+    request<{ email: string; verification_email_sent: boolean }>("/auth/register/", {
+      method: "POST",
+      body: data,
+      auth: false,
+    }),
 
-  verifyEmail: (data: { email: string; otp: string }) =>
-    request<AuthPayload>("/auth/verify-email/", { method: "POST", body: data, auth: false }),
+  // `token` comes from the emailed /verify-email?token=... link.
+  verifyEmail: (data: { token: string }) =>
+    request<{ email: string; already_verified: boolean }>("/auth/verify-email/", {
+      method: "POST",
+      body: data,
+      auth: false,
+    }),
 
-  // `expires_at` is only present for purpose: "RESET" (REGISTER resends
-  // have no frontend countdown UI today) — always present for RESET,
-  // real or not, so its presence never reveals whether the account exists.
+  // Resends the verification link (REGISTER) or a fresh password-reset
+  // code (RESET). Always the same generic reply, whether or not the account
+  // exists. RESET replies carry the new code's `expires_at` (synthetic for
+  // unknown emails) for the popup's countdown.
   resendOtp: (data: { email: string; purpose?: "REGISTER" | "RESET" }) =>
     request<{ expires_at?: string } | null>("/auth/resend-otp/", { method: "POST", body: data, auth: false }),
 
@@ -270,10 +333,10 @@ export const authApi = {
   logout: (refresh: string, area?: SessionArea) =>
     request<null>("/auth/logout/", { method: "POST", body: { refresh }, area }),
 
-  // `expires_at` is when the just-issued OTP stops being valid (backend-
-  // authoritative — see accounts/views.py's ForgotPasswordView) — always
-  // present, real or synthetic, whether or not the account actually
-  // exists, so its value never reveals account existence either.
+  // Emails a 6-digit reset code. `expires_at` is when that code stops
+  // being valid (backend-authoritative — see accounts/views.py's
+  // ForgotPasswordView) — always present, real or synthetic, whether or not
+  // the account exists, so it never reveals account existence.
   forgotPassword: (data: { email: string }) =>
     request<{ expires_at: string }>("/auth/forgot-password/", { method: "POST", body: data, auth: false }),
 
@@ -654,9 +717,14 @@ export const profileApi = {
     return profileApi.getMine()
   },
 
-  getPublic: async (username: string): Promise<Profile | null> => {
+  // `src: "qr"` marks this load as a QR-code scan — the backend then also
+  // records a QR_SCAN for the profile owner (profiles.views.PublicProfileView).
+  getPublic: async (username: string, src?: "qr"): Promise<Profile | null> => {
     try {
-      const p = await request<ApiPublicProfile>(`/profiles/public/${encodeURIComponent(username)}/`, { auth: false })
+      const query = src === "qr" ? "?src=qr" : ""
+      const p = await request<ApiPublicProfile>(`/profiles/public/${encodeURIComponent(username)}/${query}`, {
+        auth: false,
+      })
       return {
         id: p.username,
         customerId: p.username,
@@ -1400,6 +1468,7 @@ const ORDER_STATUS_MAP: Record<string, OrderStatus> = {
   PENDING: "Pending",
   PROCESSING: "Processing",
   SHIPPED: "Shipped",
+  OUT_FOR_DELIVERY: "Out for Delivery",
   DELIVERED: "Delivered",
   COMPLETED: "Completed",
   CANCELLED: "Cancelled",
@@ -1408,6 +1477,7 @@ const ORDER_STATUS_REVERSE_MAP: Record<OrderStatus, string> = {
   Pending: "PENDING",
   Processing: "PROCESSING",
   Shipped: "SHIPPED",
+  "Out for Delivery": "OUT_FOR_DELIVERY",
   Delivered: "DELIVERED",
   Completed: "COMPLETED",
   Cancelled: "CANCELLED",
@@ -2334,6 +2404,22 @@ export const analyticsApi = {
     requestPaginated<ApiAnalyticsEvent>(`/customer/analytics/taps/?page=${page}&page_size=${pageSize}`),
   getScans: (page = 1, pageSize = 100) =>
     requestPaginated<ApiAnalyticsEvent>(`/customer/analytics/scans/?page=${page}&page_size=${pageSize}`),
+
+  /** Fire-and-forget: records a visitor's click on a social link of
+   * `username`'s public profile. Sent as a beacon (form-encoded, so no CORS
+   * preflight) so it survives the page navigating away and never delays
+   * opening the link. Failures are ignored — analytics must never break
+   * the profile. */
+  trackSocialClick: (username: string, platform: SocialPlatform) => {
+    const url = `${API_BASE_URL}/customer/analytics/track/social-click/`
+    const body = new URLSearchParams({ username, platform })
+    try {
+      if (navigator.sendBeacon?.(url, body)) return
+    } catch {
+      // fall through to fetch
+    }
+    fetch(url, { method: "POST", body, keepalive: true }).catch(() => {})
+  },
 }
 
 // ---------------------------------------------------------------------
@@ -2419,6 +2505,9 @@ export const ordersApi = {
   list: (page = 1) => requestPaginated<ApiOrder>(`/customer/orders/?page=${page}&page_size=100`),
   create: (payload: CreateOrderPayload) => request<ApiOrder>("/customer/orders/", { method: "POST", body: payload }),
   getById: (id: number | string) => request<ApiOrder>(`/customer/orders/${id}/`),
+  // Only Pending/Processing orders — the backend enforces this and returns
+  // the reason (e.g. already shipped) as the error message otherwise.
+  cancel: (id: number | string) => request<ApiOrder>(`/customer/orders/${id}/cancel/`, { method: "POST" }),
 
   // `orderQuery` accepts either a bare id ("13") or the "ORD000013" format
   // shown on the payment-success page — the backend strips non-digits

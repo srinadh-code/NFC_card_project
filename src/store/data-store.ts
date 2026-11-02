@@ -44,6 +44,8 @@ function stepsReachedFor(status: OrderStatus): number {
       return 1
     case "Shipped":
       return 2
+    case "Out for Delivery":
+      return 3
     case "Delivered":
     case "Completed":
       return 4

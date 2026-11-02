@@ -2,14 +2,15 @@ import { useState } from "react"
 import { Navigate, Link, useNavigate, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 import { GoogleLogin, type CredentialResponse } from "@react-oauth/google"
-import { Check, Sparkles, X, Zap } from "lucide-react"
+import { Check, MailCheck, Sparkles, TriangleAlert, X, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PasswordInput, PasswordRequirements } from "@/components/ui/password-input"
 import { BrandMark } from "@/components/layout/BrandMark"
-import { useCustomerAuthStore, useCustomerSessionStore } from "@/store/auth-store"
-import { ApiError, authApi, fieldErrorMessage, setTokens } from "@/lib/api"
+import { ResendVerificationButton } from "@/components/auth/ResendVerificationButton"
+import { useCustomerAuthStore } from "@/store/auth-store"
+import { ApiError, authApi, fieldErrorMessage } from "@/lib/api"
 import {
   PASSWORD_MAX_LENGTH,
   PHONE_DIGITS,
@@ -51,6 +52,9 @@ export default function CustomerRegister() {
   const [phoneError, setPhoneError] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // Set once the account is created — the form is replaced by a "check your
+  // inbox" panel, since login is only possible after email verification.
+  const [registered, setRegistered] = useState<{ email: string; emailSent: boolean } | null>(null)
   // Password requirements box: hidden until the user actually engages with
   // the field. Shown while focused (even before typing, so "all unmet" is
   // visible immediately), and stays visible on blur as long as there's a
@@ -92,16 +96,15 @@ export default function CustomerRegister() {
     setFormError(null)
     setSubmitting(true)
     try {
-      const payload = await authApi.register({
+      const result = await authApi.register({
         full_name: form.name.trim(),
         email: form.email.trim(),
         phone: form.phone ? `+91 ${form.phone}` : undefined,
         password: form.password,
       })
-      setTokens(payload.access, payload.refresh)
-      useCustomerSessionStore.getState().setUser(payload.user)
-      toast.success(`Welcome to VR's GATEWAY, ${form.name.split(" ")[0]}!`)
-      navigate(redirectTo)
+      setRegistered({ email: result.email, emailSent: result.verification_email_sent })
+      if (result.verification_email_sent) toast.success("Account created! Check your email to verify it.")
+      else toast.error("Account created, but we couldn't send the verification email.")
     } catch (err) {
       // A backend-side phone rejection (its own independent check) is shown
       // under the Phone field, same as the client-side check above — only a
@@ -204,6 +207,46 @@ export default function CustomerRegister() {
       {/* Right form panel */}
       <div className="flex w-full flex-1 items-center justify-center overflow-y-auto px-6 py-10 md:w-1/2">
         <div className="w-full max-w-sm space-y-6">
+          {registered ? (
+            <div className="space-y-5 text-center">
+              <span
+                className={cn(
+                  "mx-auto flex size-14 items-center justify-center rounded-full",
+                  registered.emailSent ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"
+                )}
+              >
+                {registered.emailSent ? <MailCheck className="size-7" /> : <TriangleAlert className="size-7" />}
+              </span>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-bold tracking-tight">
+                  {registered.emailSent ? "Check your inbox" : "Verification email not sent"}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {registered.emailSent ? (
+                    <>
+                      We&apos;ve sent a verification link to{" "}
+                      <span className="font-medium text-foreground break-all">{registered.email}</span>. Open it to
+                      activate your account — the link expires in 24 hours.
+                    </>
+                  ) : (
+                    <>
+                      Your account was created, but we couldn&apos;t send the verification email to{" "}
+                      <span className="font-medium text-foreground break-all">{registered.email}</span>. Please try
+                      resending it.
+                    </>
+                  )}
+                </p>
+                {registered.emailSent && (
+                  <p className="text-xs text-muted-foreground">Can&apos;t find it? Check your spam or promotions folder.</p>
+                )}
+              </div>
+              <ResendVerificationButton email={registered.email} className="w-full" />
+              <Button asChild variant="ghost" className="w-full">
+                <Link to={`/login${redirectQuery}`}>Back to Login</Link>
+              </Button>
+            </div>
+          ) : (
+          <>
           <div className="space-y-1">
             <h2 className="text-2xl font-bold tracking-tight">Sign Up</h2>
             <p className="text-sm text-muted-foreground">
@@ -359,6 +402,8 @@ export default function CustomerRegister() {
               Login
             </Link>
           </p>
+          </>
+          )}
         </div>
       </div>
     </div>

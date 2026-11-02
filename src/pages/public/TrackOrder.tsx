@@ -11,20 +11,13 @@ import PageHeader from "@/components/marketing/PageHeader"
 import { OrderTrackingView } from "@/components/orders/OrderTrackingView"
 import { ApiError, NetworkError, ordersApi, publicOrderTrackingApi, toFrontendPublicOrder } from "@/lib/api"
 import { formatCurrency, formatDate } from "@/lib/mock-api"
+import { orderStatusLabel } from "@/lib/order-status"
 import { cn } from "@/lib/utils"
 import type { Order } from "@/types"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
 
 const CANCELLED = "CANCELLED"
 const DELIVERED = "DELIVERED"
-
-// Title-cases the backend's real status choices (PENDING/PROCESSING/
-// SHIPPED/DELIVERED/COMPLETED/CANCELLED) for display — never a
-// frontend-invented status, just formatting the exact value Admin Orders
-// itself set.
-function formatStatus(status: string) {
-  return status.charAt(0) + status.slice(1).toLowerCase()
-}
 
 // This page serves two different entry points, kept as two separate
 // components (rather than merged into one state machine) so neither one's
@@ -207,7 +200,7 @@ function TokenTrackOrder() {
                       query.data.status === CANCELLED ? "text-destructive" : "text-primary"
                     )}
                   >
-                    {formatStatus(query.data.status)}
+                    {orderStatusLabel(query.data.status)}
                   </dd>
                 </div>
               </dl>

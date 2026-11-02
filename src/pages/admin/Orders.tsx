@@ -51,6 +51,7 @@ const STATUS_OPTIONS: (OrderStatus | "All")[] = [
   "Pending",
   "Processing",
   "Shipped",
+  "Out for Delivery",
   "Delivered",
   "Completed",
   "Cancelled",

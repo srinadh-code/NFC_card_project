@@ -60,11 +60,17 @@ export default function CustomerDashboard() {
     queryKey: ["customer-dashboard"],
     queryFn: dashboardApi.get,
     enabled: Boolean(customer),
+    // Visitors' scans/taps/views arrive while the dashboard is open — keep
+    // the counters current without a reload.
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   })
   const summaryQuery = useQuery({
     queryKey: ["customer-analytics-summary"],
     queryFn: analyticsApi.getSummary,
     enabled: Boolean(customer),
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   })
   const unreadQuery = useQuery({
     queryKey: ["customer-notifications-unread-count"],

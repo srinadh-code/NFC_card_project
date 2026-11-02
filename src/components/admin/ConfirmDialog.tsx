@@ -14,6 +14,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel = "Delete",
+  cancelLabel = "Cancel",
   destructive = true,
   onConfirm,
 }: {
@@ -22,6 +23,7 @@ export function ConfirmDialog({
   title: string
   description: string
   confirmLabel?: string
+  cancelLabel?: string
   destructive?: boolean
   onConfirm: () => void
 }) {
@@ -34,7 +36,7 @@ export function ConfirmDialog({
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {cancelLabel}
           </Button>
           <Button
             variant={destructive ? "destructive" : "default"}

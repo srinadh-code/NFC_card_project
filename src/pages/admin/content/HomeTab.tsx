@@ -1,4 +1,13 @@
+import { useRef, useState, type ChangeEvent } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
+import { Film, Loader2, Upload } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Progress } from "@/components/ui/progress"
+import { Skeleton } from "@/components/ui/skeleton"
+import { ApiError, NetworkError } from "@/lib/api"
+import { formatDate } from "@/lib/mock-api"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
@@ -120,6 +129,133 @@ function HeroSection() {
         <Input id="hero-secondary-link" placeholder="leave blank to open the demo popup instead of navigating" value={hero.values.secondary_cta_link ?? ""} onChange={(e) => hero.setField("secondary_cta_link", e.target.value)} />
       </div>
     </SingletonSectionCard>
+  )
+}
+
+// Mirrors common/video_storage.py on the backend (which re-checks both) —
+// checked here first so an obviously wrong file never starts uploading.
+const DEMO_VIDEO_MAX_BYTES = 50 * 1024 * 1024
+const DEMO_VIDEO_QUERY_KEY = ["content", "home", "hero", "demo-video"]
+
+// Separate from HeroSection's form on purpose: the video has its own upload
+// endpoint, and keeping it under its own query key means an upload never
+// resets unsaved text edits in the Hero Banner form above.
+function DemoVideoSection() {
+  const queryClient = useQueryClient()
+  const { data: hero, isLoading } = useQuery({ queryKey: DEMO_VIDEO_QUERY_KEY, queryFn: heroApi.get })
+  const [progress, setProgress] = useState<number | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const uploading = progress !== null
+  const hasVideo = Boolean(hero?.demo_video_url)
+
+  async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+    setUploadError(null)
+    if (file.type !== "video/mp4" || !file.name.toLowerCase().endsWith(".mp4")) {
+      setUploadError("Unsupported video type. Upload an MP4 (.mp4) file.")
+      return
+    }
+    if (file.size > DEMO_VIDEO_MAX_BYTES) {
+      setUploadError("Video must be smaller than 50MB.")
+      return
+    }
+    setProgress(0)
+    try {
+      const updated = await heroApi.uploadDemoVideo(file, setProgress)
+      queryClient.setQueryData(DEMO_VIDEO_QUERY_KEY, updated)
+      queryClient.invalidateQueries({ queryKey: ["content", "public-home"] })
+      toast.success(hasVideo ? "Demo video replaced." : "Demo video uploaded.")
+    } catch (err) {
+      const message =
+        err instanceof ApiError || err instanceof NetworkError ? err.message : "Failed to upload the video. Please try again."
+      setUploadError(message)
+      toast.error(message)
+    } finally {
+      setProgress(null)
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-4">
+        <div>
+          <h3 className="text-base font-semibold tracking-tight">Home Page Demo Video</h3>
+          <p className="text-sm text-muted-foreground">
+            Plays when visitors click the Hero's "Watch Demo" button (only while the Secondary Button Link above
+            is left blank). MP4 only, max 50MB. Replacing it keeps the current video live until the new one has
+            finished uploading.
+          </p>
+        </div>
+
+        {isLoading ? (
+          <Skeleton className="aspect-video w-full max-w-md rounded-xl" />
+        ) : (
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+            <div className="w-full max-w-md shrink-0">
+              {hasVideo ? (
+                <video
+                  key={hero!.demo_video_url!}
+                  src={hero!.demo_video_url!}
+                  controls
+                  preload="metadata"
+                  className="aspect-video w-full rounded-xl border border-border/70 bg-black"
+                />
+              ) : (
+                <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted text-sm text-muted-foreground">
+                  <Film className="size-6" />
+                  No demo video uploaded yet
+                </div>
+              )}
+            </div>
+
+            <div className="flex min-w-0 flex-1 flex-col gap-3 text-sm">
+              <div>
+                <p className="text-xs text-muted-foreground">File</p>
+                <p className="truncate font-medium">{hero?.demo_video_filename || "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Status</p>
+                <p className="flex items-center gap-1.5 font-medium">
+                  <span className={`size-1.5 rounded-full ${hasVideo ? "bg-success" : "bg-muted-foreground"}`} />
+                  {uploading
+                    ? "Uploading…"
+                    : hasVideo
+                      ? `Live on Home page${hero?.demo_video_uploaded_at ? ` · uploaded ${formatDate(hero.demo_video_uploaded_at)}` : ""}`
+                      : "Not uploaded"}
+                </p>
+              </div>
+
+              {uploading && (
+                <div className="flex flex-col gap-1.5">
+                  <Progress value={progress} />
+                  <p className="text-xs text-muted-foreground">
+                    {progress < 100 ? `Uploading… ${progress}%` : "Processing video on the server…"}
+                  </p>
+                </div>
+              )}
+              {uploadError && !uploading && <p className="text-xs text-destructive">{uploadError}</p>}
+
+              <div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!hero || uploading}
+                  onClick={() => inputRef.current?.click()}
+                >
+                  {uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+                  {hasVideo ? "Replace Video" : "Upload Video"}
+                </Button>
+                <input ref={inputRef} type="file" accept="video/mp4,.mp4" className="hidden" onChange={handleFileChange} />
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -426,6 +562,7 @@ export default function HomeTab() {
   return (
     <div className="flex flex-col gap-6">
       <HeroSection />
+      <DemoVideoSection />
       <HeroFeaturesSection />
       <BottomBarSection />
       <HowItFeelsSection />

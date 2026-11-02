@@ -69,6 +69,12 @@ export default function Shop() {
     setSelectedId(id)
     scrollToSection(detailsRef)
   }
+  // "N Templates Included" on a selection card: the theme section only
+  // renders for the selected card, so select it first, then jump there.
+  function handleViewTemplates(id: string) {
+    setSelectedId(id)
+    scrollToSection(themesRef)
+  }
   const { settings } = usePublicSettings()
   const [qty, setQty] = useState(1)
   const queryClient = useQueryClient()
@@ -204,7 +210,12 @@ export default function Shop() {
       {/* 1. Choose Your NEXORA Card */}
       <section className="bg-[#F8FAFC] px-4 pb-8 pt-10 sm:pb-10 sm:pt-12">
         <div className="mx-auto max-w-[1320px]">
-          <NexoraCardSelector cardTypes={cardTypes} selectedId={selectedId} onSelect={handleSelectCard} />
+          <NexoraCardSelector
+            cardTypes={cardTypes}
+            selectedId={selectedId}
+            onSelect={handleSelectCard}
+            onViewTemplates={handleViewTemplates}
+          />
         </div>
       </section>
 
