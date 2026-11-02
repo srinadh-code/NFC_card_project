@@ -90,7 +90,7 @@ export function TemplateFrame({
   children: React.ReactNode
 }) {
   return (
-    <div className="relative mx-auto w-[300px] overflow-hidden rounded-[36px] border-[8px] border-neutral-900 bg-white shadow-xl">
+    <div className="light-surface relative mx-auto w-[300px] overflow-hidden rounded-[36px] border-[8px] border-neutral-900 bg-white shadow-xl">
       <button
         type="button"
         onClick={onShare}

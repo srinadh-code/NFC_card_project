@@ -191,7 +191,7 @@ export default function Shop() {
     return (
       <div>
         <PageHeader title="" subtitle="" />
-        <section className="bg-[#F8FAFC] px-4 py-16">
+        <section className="bg-muted/40 px-4 py-16">
           <div className="mx-auto max-w-[1320px] space-y-4">
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <Skeleton className="h-96 w-full rounded-[24px]" />
@@ -208,7 +208,7 @@ export default function Shop() {
       <PageHeader title={data?.page.page_title ?? ""} subtitle={data?.page.page_subtitle} />
 
       {/* 1. Choose Your NEXORA Card */}
-      <section className="bg-[#F8FAFC] px-4 pb-8 pt-10 sm:pb-10 sm:pt-12">
+      <section className="bg-muted/40 px-4 pb-8 pt-10 sm:pb-10 sm:pt-12">
         <div className="mx-auto max-w-[1320px]">
           <NexoraCardSelector
             cardTypes={cardTypes}
@@ -289,7 +289,7 @@ export default function Shop() {
                 Included: 0". */}
             <div
               className={cn(
-                "grid gap-3 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 text-center",
+                "grid gap-3 rounded-2xl border border-border bg-muted/40 p-4 text-center",
                 selectedCard.templateCount ? "grid-cols-3" : "grid-cols-2",
               )}
             >
@@ -297,7 +297,7 @@ export default function Shop() {
                 <p className="text-xs text-muted-foreground">Selected Card</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">{selectedCard.name.replace(/^(NEXORA|GATEWAY) /, "")}</p>
               </div>
-              <div className={cn(selectedCard.templateCount ? "border-x" : "border-l", "border-[#E2E8F0]")}>
+              <div className={cn(selectedCard.templateCount ? "border-x" : "border-l", "border-border")}>
                 <p className="text-xs text-muted-foreground">Price</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">
                   {formatCurrency(selectedCard.discountedPrice ?? selectedCard.price, settings.currency)}

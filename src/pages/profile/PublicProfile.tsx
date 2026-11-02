@@ -25,7 +25,7 @@ function socialPlatformFor(rawHref: string, profile: Profile): SocialPlatform | 
 
 function EmptyShell({ title, description }: { title: string; description: string }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#EEF2FF] via-white to-[#FDF2F8] p-6">
+    <div className="light-surface flex min-h-screen items-center justify-center bg-gradient-to-br from-[#EEF2FF] via-white to-[#FDF2F8] p-6">
       <div className="max-w-sm space-y-4 text-center">
         <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
           {title === "This profile is private" ? (
@@ -98,7 +98,7 @@ export default function PublicProfile() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#EEF2FF] via-white to-[#FDF2F8] p-6">
+      <div className="light-surface flex min-h-screen items-center justify-center bg-gradient-to-br from-[#EEF2FF] via-white to-[#FDF2F8] p-6">
         <Skeleton className="h-[560px] w-[300px] rounded-[36px]" />
       </div>
     )
@@ -131,7 +131,7 @@ export default function PublicProfile() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#EEF2FF] via-white to-[#FDF2F8] px-4 py-10">
+    <div className="light-surface min-h-screen bg-gradient-to-br from-[#EEF2FF] via-white to-[#FDF2F8] px-4 py-10">
       <div className="mx-auto max-w-md" onClick={handleCardClick} onAuxClick={handleCardClick}>
         <div className="flex justify-center pb-6">
           <Link to="/" className="flex items-center gap-2">

@@ -142,7 +142,12 @@ export default function Checkout() {
     onSuccess: (order) => {
       clearCart()
       navigate("/order-success", {
-        state: { orderId: String(order.id), trackingToken: order.tracking_token, customerName: customer?.name },
+        state: {
+          orderId: String(order.id),
+          orderNumber: order.order_number,
+          trackingToken: order.tracking_token,
+          customerName: customer?.name,
+        },
       })
     },
     onError: (err) => {

@@ -38,7 +38,7 @@ export default function NexoraCardSelector({ cardTypes, selectedId, onSelect, on
             )}
             style={
               card.popular
-                ? { backgroundImage: "linear-gradient(white,white), linear-gradient(120deg,#4F46E5,#7C3AED,#EC4899)", backgroundOrigin: "border-box", backgroundClip: "padding-box, border-box", border: "1.5px solid transparent" }
+                ? { backgroundImage: "linear-gradient(var(--card),var(--card)), linear-gradient(120deg,#4F46E5,#7C3AED,#EC4899)", backgroundOrigin: "border-box", backgroundClip: "padding-box, border-box", border: "1.5px solid transparent" }
                 : undefined
             }
           >

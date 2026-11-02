@@ -117,18 +117,18 @@ export default function AdminOrders() {
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: OrderStatus }) => adminOrderApi.updateStatus(id, status),
-    onSuccess: (_data, vars) => {
+    onSuccess: (order, vars) => {
       invalidate()
-      toast.success(`Order ${vars.id} marked as ${vars.status}.`)
+      toast.success(`Order ${order.orderNumber ?? vars.id} marked as ${vars.status}.`)
     },
     onError: () => toast.error("Couldn't update the order status. Please try again."),
   })
 
   const deliveredMutation = useMutation({
     mutationFn: (id: string) => adminOrderApi.updateStatus(id, "Delivered"),
-    onSuccess: (_data, id) => {
+    onSuccess: (order, id) => {
       invalidate()
-      toast.success(`Order ${id} marked as Delivered.`)
+      toast.success(`Order ${order.orderNumber ?? id} marked as Delivered.`)
     },
     onError: () => toast.error("Couldn't update the order status. Please try again."),
   })
