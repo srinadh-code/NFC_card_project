@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react"
+import { lazy, Suspense, useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { CheckCircle2, Loader2 } from "lucide-react"
+import { CheckCircle2, Loader2, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -21,8 +21,18 @@ import {
   validateState,
   validateVillage,
 } from "@/lib/address-validation"
-import { ApiError, customerAddressApi, fieldErrorMessage, type CustomerAddressInput } from "@/lib/api"
+import {
+  ApiError,
+  customerAddressApi,
+  fieldErrorMessage,
+  type CustomerAddressInput,
+  type DetectedAddress,
+} from "@/lib/api"
 import type { CustomerAddress } from "@/types"
+import type { MapPoint } from "./AddressMapPicker"
+
+// Leaflet + map tiles only load once a customer opens "Choose on Map".
+const AddressMapPicker = lazy(() => import("./AddressMapPicker"))
 
 interface AddressForm {
   label: string
@@ -71,6 +81,44 @@ function fromAddress(address: CustomerAddress): AddressForm {
 }
 
 type FieldKey = keyof AddressForm
+
+// The address fields a map pin can fill — never label/name/phone.
+const MAP_FIELDS = [
+  "addressLine1",
+  "addressLine2",
+  "landmark",
+  "locality",
+  "city",
+  "district",
+  "state",
+  "pincode",
+] as const
+type MapField = (typeof MAP_FIELDS)[number]
+const MAP_FIELD_LABELS: Record<MapField, string> = {
+  addressLine1: "Address Line 1",
+  addressLine2: "Address Line 2",
+  landmark: "Landmark",
+  locality: "Village / Locality",
+  city: "City",
+  district: "District",
+  state: "State",
+  pincode: "PIN Code",
+}
+
+function fromDetected(d: DetectedAddress): Record<MapField, string> {
+  return {
+    addressLine1: d.address_line1,
+    addressLine2: d.address_line2,
+    landmark: d.landmark,
+    locality: d.locality,
+    city: d.city,
+    district: d.district,
+    // Only a name the State dropdown has — otherwise left for the PIN
+    // lookup's auto-fill.
+    state: INDIAN_STATES.find((s) => s.toLowerCase() === d.state.trim().toLowerCase()) ?? "",
+    pincode: d.pincode,
+  }
+}
 
 function computeErrors(form: AddressForm): Partial<Record<FieldKey, string>> {
   const errors: Partial<Record<FieldKey, string>> = {}
@@ -134,10 +182,26 @@ export function AddressFormDialog({
   const [serverErrors, setServerErrors] = useState<Partial<Record<VerifiedField, string>>>({})
   const [districtConfirmPrompt, setDistrictConfirmPrompt] = useState<string | null>(null)
   const [confirmDistrict, setConfirmDistrict] = useState(false)
+  // Map-based entry: the pin (saved as latitude/longitude), the values the
+  // map last put in each field (so a later pin only replaces what the map
+  // filled, not what the customer typed), and detected values that were
+  // held back because the customer had typed something different.
+  const [mapOpen, setMapOpen] = useState(false)
+  const [coords, setCoords] = useState<MapPoint | null>(null)
+  const [mapFilled, setMapFilled] = useState<Partial<Record<MapField, string>>>({})
+  const [mapConflicts, setMapConflicts] = useState<Partial<Record<MapField, string>>>({})
 
   useEffect(() => {
     if (open) {
       setForm(address ? fromAddress(address) : EMPTY_FORM)
+      setCoords(
+        address && address.latitude !== null && address.longitude !== null
+          ? { lat: address.latitude, lng: address.longitude }
+          : null,
+      )
+      setMapOpen(false)
+      setMapFilled({})
+      setMapConflicts({})
       setSetDefault(address?.isDefault ?? false)
       setTouched({})
       setSubmitAttempted(false)
@@ -202,6 +266,53 @@ export function AddressFormDialog({
       setConfirmDistrict(false)
     }
   }
+  function clearVerification() {
+    setServerErrors({})
+    setDistrictConfirmPrompt(null)
+    setConfirmDistrict(false)
+  }
+
+  // A map pick fills the existing fields. A field is (re)filled when it's
+  // empty or still holds what the map put there last time — including
+  // being cleared when the new spot has nothing for it, so details from a
+  // previous pin don't linger. Anything the customer typed themselves is
+  // kept, and offered as "use map details instead" if it differs.
+  function applyDetected(detected: DetectedAddress) {
+    const values = fromDetected(detected)
+    const next = { ...form }
+    const filled: Partial<Record<MapField, string>> = {}
+    const conflicts: Partial<Record<MapField, string>> = {}
+    for (const key of MAP_FIELDS) {
+      const current = form[key].trim()
+      const ownedByMap = !current || (mapFilled[key] !== undefined && current === mapFilled[key])
+      if (ownedByMap) {
+        next[key] = values[key]
+        if (values[key]) filled[key] = values[key]
+      } else if (values[key] && !sameText(current, values[key])) {
+        conflicts[key] = values[key]
+      }
+    }
+    setForm(next)
+    setMapFilled(filled)
+    setMapConflicts(conflicts)
+    setCoords({ lat: detected.latitude, lng: detected.longitude })
+    clearVerification()
+  }
+
+  function applyMapConflicts() {
+    setForm((f) => ({ ...f, ...mapConflicts }))
+    setMapFilled((m) => ({ ...m, ...mapConflicts }))
+    setMapConflicts({})
+    clearVerification()
+  }
+
+  function removeMapLocation() {
+    setCoords(null)
+    setMapOpen(false)
+    setMapFilled({})
+    setMapConflicts({})
+  }
+
   function markTouched(key: FieldKey) {
     setTouched((t) => ({ ...t, [key]: true }))
   }
@@ -238,6 +349,9 @@ export function AddressFormDialog({
       state: form.state.trim(),
       pincode: form.pincode.trim(),
       country: COUNTRY,
+      // Always sent, so removing the pin while editing clears it.
+      latitude: coords?.lat ?? null,
+      longitude: coords?.lng ?? null,
       confirmDistrict: Boolean(districtConfirmPrompt) && confirmDistrict,
     }
     setSaving(true)
@@ -269,7 +383,13 @@ export function AddressFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+      <DialogContent
+        className="max-h-[90vh] max-w-lg overflow-y-auto"
+        onEscapeKeyDown={(e) => {
+          // Escape in the map's open search list closes the list, not the form.
+          if ((e.target as HTMLElement | null)?.getAttribute?.("aria-expanded") === "true") e.preventDefault()
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{address ? "Edit Address" : "Add New Address"}</DialogTitle>
           <DialogDescription>Used for delivering your VR's GATEWAY NFC card orders.</DialogDescription>
@@ -319,6 +439,62 @@ export function AddressFormDialog({
               aria-invalid={!!showError("addressLine1")}
             />
             {showError("addressLine1") && <p className="text-sm text-destructive">{showError("addressLine1")}</p>}
+
+            {/* Map-based entry — fills the fields of this same form. */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setMapOpen((o) => !o)}
+                aria-expanded={mapOpen}
+                aria-controls="addr-map-panel"
+              >
+                <MapPin />
+                {mapOpen ? "Hide Map" : coords ? "Change on Map" : "Choose on Map"}
+              </Button>
+              {coords && (
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <CheckCircle2 className="size-3.5 text-success" />
+                  Location pinned on map
+                  <button
+                    type="button"
+                    className="font-medium text-primary underline-offset-2 hover:underline"
+                    onClick={removeMapLocation}
+                  >
+                    Remove
+                  </button>
+                </span>
+              )}
+            </div>
+            {mapOpen && (
+              <div id="addr-map-panel" className="pt-1">
+                <Suspense
+                  fallback={
+                    <div className="flex h-72 items-center justify-center gap-2 rounded-2xl border border-border text-sm text-muted-foreground">
+                      <Loader2 className="size-4 animate-spin" /> Loading map…
+                    </div>
+                  }
+                >
+                  <AddressMapPicker value={coords} onDetected={applyDetected} />
+                </Suspense>
+              </div>
+            )}
+            {Object.keys(mapConflicts).length > 0 && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                <span>
+                  Kept what you typed for{" "}
+                  {(Object.keys(mapConflicts) as MapField[]).map((k) => MAP_FIELD_LABELS[k]).join(", ")}.
+                </span>
+                <button
+                  type="button"
+                  className="font-medium text-primary underline-offset-2 hover:underline"
+                  onClick={applyMapConflicts}
+                >
+                  Use map details instead
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="space-y-1.5 sm:col-span-2">

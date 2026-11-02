@@ -894,6 +894,8 @@ export interface ApiCustomerAddress {
   state: string
   pincode: string
   country: string
+  latitude: number | null
+  longitude: number | null
   is_default: boolean
   created_at: string
   updated_at: string
@@ -912,6 +914,10 @@ export interface CustomerAddressInput {
   state: string
   pincode: string
   country?: string
+  /** Map pin ("Choose on Map"/current location); null for a typed address.
+   * Omitted -> left unchanged on update. */
+  latitude?: number | null
+  longitude?: number | null
   /** Customer explicitly keeps a district India Post doesn't list for this
    * PIN — only sent after the backend asked for it (not stored). */
   confirmDistrict?: boolean
@@ -932,6 +938,8 @@ function toFrontendCustomerAddress(a: ApiCustomerAddress): CustomerAddress {
     state: a.state,
     pincode: a.pincode,
     country: a.country,
+    latitude: a.latitude ?? null,
+    longitude: a.longitude ?? null,
     isDefault: a.is_default,
   }
 }
@@ -950,6 +958,7 @@ function toApiAddressPayload(values: CustomerAddressInput): Record<string, unkno
     state: values.state,
     pincode: values.pincode,
     country: values.country ?? "India",
+    ...(values.latitude !== undefined ? { latitude: values.latitude, longitude: values.longitude ?? null } : {}),
     ...(values.confirmDistrict ? { confirm_district: true } : {}),
   }
 }
@@ -990,6 +999,46 @@ export const customerAddressApi = {
   // Re-checks a saved address against its PIN code (see customer_addresses
   // CustomerAddressVerifyView) — checkout's only source for "verified".
   verify: (id: string) => request<AddressVerification>(`/customer/addresses/${id}/verify/`, { method: "POST" }),
+
+  // Map-based entry (customer_addresses/geocoding.py, OpenStreetMap data).
+  // Search: the map's autocomplete box, ranked near `near` (the map view).
+  searchPlaces: (query: string, near?: { lat: number; lng: number }) => {
+    const params = new URLSearchParams({ q: query })
+    if (near) {
+      params.set("lat", near.lat.toFixed(4))
+      params.set("lng", near.lng.toFixed(4))
+    }
+    return request<PlaceSearchResult[]>(`/customer/addresses/geocode/search/?${params}`)
+  },
+
+  // The address at a map pin — pre-fills the form only; the saved address
+  // is still verified against India Post like a typed one. Rejects (400)
+  // outside India, 404 when nothing is there, 503 when unavailable.
+  reverseGeocode: (lat: number, lng: number) =>
+    request<DetectedAddress>(`/customer/addresses/geocode/reverse/?lat=${lat.toFixed(6)}&lng=${lng.toFixed(6)}`),
+}
+
+export interface PlaceSearchResult {
+  title: string
+  subtitle: string
+  latitude: number
+  longitude: number
+}
+
+/** Address-form fields detected at a map pin (any may be blank). */
+export interface DetectedAddress {
+  latitude: number
+  longitude: number
+  address_line1: string
+  address_line2: string
+  landmark: string
+  locality: string
+  city: string
+  district: string
+  state: string
+  pincode: string
+  country: string
+  display_name: string
 }
 
 export interface PincodeLocation {
