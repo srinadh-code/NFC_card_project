@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
-from django.db import models
+from django.db import IntegrityError, models, transaction
 from django.utils.text import slugify
 
 from common.templates import DEFAULT_TEMPLATE, TEMPLATE_CHOICES
@@ -164,16 +164,28 @@ class Profile(models.Model):
         if profile is not None:
             return profile
 
-        username = cls._unique_username(user.full_name or user.email.split("@")[0])
-        profile = cls.objects.create(user=user, username=username)
-
-        SocialLink.objects.bulk_create(
-            [
-                SocialLink(profile=profile, platform=platform, url="", enabled=False, display_order=i)
-                for i, platform in enumerate(SOCIAL_PLATFORMS)
-            ]
-        )
-        return profile
+        # A brand-new account's dashboard fires several requests at once,
+        # each of which can get here — the first to insert wins and the
+        # rest use its profile instead of failing on the unique user/
+        # username constraint. (A username clash with a *different* user
+        # just retries with the next free name.)
+        for _ in range(3):
+            username = cls._unique_username(user.full_name or user.email.split("@")[0])
+            try:
+                with transaction.atomic():
+                    profile = cls.objects.create(user=user, username=username)
+                    SocialLink.objects.bulk_create(
+                        [
+                            SocialLink(profile=profile, platform=platform, url="", enabled=False, display_order=i)
+                            for i, platform in enumerate(SOCIAL_PLATFORMS)
+                        ]
+                    )
+                return profile
+            except IntegrityError:
+                existing = cls.objects.filter(user=user).first()
+                if existing is not None:
+                    return existing
+        raise IntegrityError(f"Could not create a profile for user {user.pk}.")
 
 
 class SocialLink(models.Model):
