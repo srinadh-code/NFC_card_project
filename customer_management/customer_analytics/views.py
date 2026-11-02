@@ -1,9 +1,8 @@
-from django.shortcuts import get_object_or_404
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from common.permissions import IsCustomerRole
-from common.response import success
+from common.response import error, success
 from common.views import PaginatedAPIView
 from profiles.models import Profile
 
@@ -69,14 +68,17 @@ class TrackSocialClickView(APIView):
     def post(self, request):
         serializer = TrackSocialClickSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        profile = get_object_or_404(
-            Profile, username__iexact=serializer.validated_data["username"]
-        )
+        profile = Profile.objects.filter(username__iexact=serializer.validated_data["username"]).first()
+        # Same availability rule as the public profile page itself — clicks
+        # can only be recorded for a profile a visitor could actually see.
+        if profile is None or not profile.profile_public or profile.status != Profile.Status.ACTIVE:
+            return error("This profile is not available.", status=404)
         services.record_event(
             profile.user,
             AnalyticsEvent.EventType.SOCIAL_CLICK,
             request=request,
             source="public_profile",
             metadata=serializer.validated_data["platform"],
+            dedupe_seconds=3,
         )
         return success(message="Recorded.")

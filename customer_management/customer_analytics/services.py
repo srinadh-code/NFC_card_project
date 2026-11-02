@@ -34,14 +34,31 @@ def extract_ip(request):
     return request.META.get("REMOTE_ADDR")
 
 
-def record_event(user, event_type, request=None, source="", metadata=""):
+def record_event(user, event_type, request=None, source="", metadata="", dedupe_seconds=0):
+    """Stores one event row. With `dedupe_seconds`, an identical event (same
+    owner, type, metadata, visitor IP and device) recorded within that many
+    seconds is treated as the same action — a double-fired request, not a
+    second scan or click — and nothing new is stored."""
     if user is None:
         return None
+    device = extract_device(request)
+    ip_address = extract_ip(request)
+    if dedupe_seconds:
+        recent = AnalyticsEvent.objects.filter(
+            user=user,
+            event_type=event_type,
+            metadata=metadata,
+            device=device,
+            ip_address=ip_address,
+            created_at__gte=timezone.now() - timedelta(seconds=dedupe_seconds),
+        ).first()
+        if recent is not None:
+            return recent
     return AnalyticsEvent.objects.create(
         user=user,
         event_type=event_type,
-        device=extract_device(request),
-        ip_address=extract_ip(request),
+        device=device,
+        ip_address=ip_address,
         source=source,
         metadata=metadata,
     )
