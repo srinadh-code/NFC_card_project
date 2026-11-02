@@ -2,6 +2,7 @@ from datetime import timedelta
 from unittest.mock import ANY, patch
 
 import requests
+from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -25,17 +26,31 @@ class RegisterViewTests(APITestCase):
         payload.update(overrides)
         return payload
 
-    def test_register_creates_user_and_profile(self):
+    @patch("accounts.views.send_verification_email", return_value=True)
+    def test_register_creates_unverified_user_and_emails_verification_link(self, mock_send):
         response = self.client.post(reverse("auth-register"), self._payload(), format="json")
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertTrue(response.data["success"])
-        self.assertIn("access", response.data["data"])
-        self.assertIn("refresh", response.data["data"])
+        # No session until the email is verified.
+        self.assertNotIn("access", response.data["data"])
+        self.assertNotIn("refresh", response.data["data"])
+        self.assertTrue(response.data["data"]["verification_email_sent"])
 
         user = User.objects.get(email="newcustomer@example.com")
         self.assertTrue(user.is_active)
+        self.assertFalse(user.email_verified)
         self.assertTrue(Profile.objects.filter(user=user).exists())
+        mock_send.assert_called_once_with(user, ANY)
+        self.assertTrue(EmailOTP.objects.filter(user=user, purpose=EmailOTP.Purpose.REGISTER).exists())
+
+    @patch("accounts.views.send_verification_email", return_value=False)
+    def test_register_reports_when_verification_email_was_not_sent(self, _mock_send):
+        response = self.client.post(reverse("auth-register"), self._payload(), format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(response.data["data"]["verification_email_sent"])
+        self.assertIn("couldn't send", response.data["message"])
 
     def test_duplicate_email_is_rejected(self):
         self.client.post(reverse("auth-register"), self._payload(), format="json")
@@ -277,6 +292,7 @@ class ForgotPasswordFlowTests(APITestCase):
     throughout — these tests exercise the OTP/token lifecycle, not Brevo."""
 
     def setUp(self):
+        cache.clear()  # throttle counters are cached per email
         self.user = make_user(email="forgot@example.com", password="OldPass123")
 
     def _issue_reset_otp(self):
@@ -289,60 +305,54 @@ class ForgotPasswordFlowTests(APITestCase):
         )
         return response.data["data"]["reset_token"]
 
-    @patch("accounts.views.send_password_reset_otp_email")
-    def test_forgot_password_sends_email_otp_without_revealing_existence(self, mock_send_email):
+    @patch("accounts.views._send_in_background", side_effect=lambda fn, *args: fn(*args))
+    @patch("accounts.views.send_password_reset_otp_email", return_value=True)
+    def test_forgot_password_emails_otp_without_revealing_existence(self, mock_send, _sync):
         before = timezone.now()
         response = self.client.post(reverse("auth-forgot-password"), {"email": "forgot@example.com"}, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_send.assert_called_once_with(self.user, ANY, EmailOTP.RESET_OTP_LIFETIME_MINUTES)
+        self.assertRegex(mock_send.call_args.args[1], r"^\d{6}$")
 
         otp = EmailOTP.objects.get(user=self.user, purpose=EmailOTP.Purpose.RESET)
-        mock_send_email.assert_called_once_with(self.user, ANY, EmailOTP.RESET_OTP_LIFETIME_MINUTES)
-
-        # expires_at is real, backend-authoritative, and exactly 6 minutes out.
-        self.assertIn("expires_at", response.data["data"])
         self.assertEqual(response.data["data"]["expires_at"], otp.expires_at)
-        expected_delta = timedelta(minutes=EmailOTP.RESET_OTP_LIFETIME_MINUTES)
-        self.assertAlmostEqual((otp.expires_at - before).total_seconds(), expected_delta.total_seconds(), delta=5)
+        self.assertAlmostEqual((otp.expires_at - before).total_seconds(), 5 * 60, delta=5)
 
         unknown_response = self.client.post(
             reverse("auth-forgot-password"), {"email": "unknown@example.com"}, format="json"
         )
         self.assertEqual(unknown_response.status_code, status.HTTP_200_OK)
+        # Same message and shape (including expires_at) for a non-existent
+        # account, and no email attempted.
         self.assertEqual(unknown_response.data["message"], response.data["message"])
-        # Same response shape for a non-existent account too — including
-        # `expires_at` being present — so its absence/presence can never be
-        # used to distinguish a real account from a fake one.
-        self.assertIn("expires_at", unknown_response.data["data"])
+        self.assertEqual(set(unknown_response.data["data"]), {"expires_at"})
+        mock_send.assert_called_once()
 
+    @patch("accounts.views._send_in_background", side_effect=lambda fn, *args: fn(*args))
     @patch("accounts.emails.requests.post")
-    def test_forgot_password_still_succeeds_when_brevo_fails(self, mock_post):
+    def test_forgot_password_still_succeeds_when_brevo_fails(self, mock_post, _sync):
         mock_post.side_effect = requests.exceptions.Timeout("simulated Brevo timeout")
         with self.settings(BREVO_API_KEY="test-key-not-real"):
             response = self.client.post(
                 reverse("auth-forgot-password"), {"email": "forgot@example.com"}, format="json"
             )
-        # A Brevo outage must not surface as an API failure or a different
-        # response shape — the OTP is still generated and stored either way.
+        # A Brevo outage must not change the response — that would reveal
+        # that the account exists.
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("expires_at", response.data["data"])
         self.assertTrue(EmailOTP.objects.filter(user=self.user, purpose=EmailOTP.Purpose.RESET).exists())
 
+    @patch("accounts.views._send_in_background", side_effect=lambda fn, *args: fn(*args))
     @patch("accounts.emails.requests.post")
-    def test_forgot_password_actually_calls_brevo_api_with_configured_credentials(self, mock_post):
-        """
-        Pins the real, unmocked code path all the way down to the HTTP call
-        accounts/emails.py makes — this is what proves the OTP is sent
-        *through Brevo* specifically, not just that some function was
-        invoked. Only the network call itself (`requests.post`) is faked;
-        everything above it (view -> OTP issuance -> email helper -> request
-        construction) runs for real.
-        """
-        mock_post.return_value.raise_for_status.return_value = None
+    def test_forgot_password_actually_calls_brevo_api_with_configured_credentials(self, mock_post, _sync):
+        """Only the network call itself is faked — view, token issuance,
+        template rendering and request construction all run for real."""
+        mock_post.return_value.status_code = 201
 
         with self.settings(
             BREVO_API_KEY="dev-key-for-test",
             BREVO_SENDER_EMAIL="sender@example.com",
-            BREVO_SENDER_NAME="VR's NEXORA",
+            BREVO_SENDER_NAME="VR's GATEWAY",
+            FRONTEND_URL="https://app.example.com",
         ):
             response = self.client.post(
                 reverse("auth-forgot-password"), {"email": "forgot@example.com"}, format="json"
@@ -354,31 +364,24 @@ class ForgotPasswordFlowTests(APITestCase):
         self.assertEqual(call.args[0], "https://api.brevo.com/v3/smtp/email")
         self.assertEqual(call.kwargs["headers"]["api-key"], "dev-key-for-test")
         payload = call.kwargs["json"]
-        self.assertEqual(payload["sender"], {"email": "sender@example.com", "name": "VR's NEXORA"})
+        self.assertEqual(payload["sender"], {"email": "sender@example.com", "name": "VR's GATEWAY"})
         self.assertEqual(payload["to"], [{"email": "forgot@example.com"}])
-        # The email body carries a genuine 6-digit code (the raw OTP is never
-        # persisted anywhere to compare against directly — see EmailOTP.issue)
-        # — proof the code is actually embedded in what Brevo is asked to
-        # deliver, not just that *some* email was sent.
+        # The email carries a real 6-digit code and no link.
         self.assertRegex(payload["textContent"], r"\b\d{6}\b")
-        # The API response itself, by contrast, carries only `expires_at` and
-        # the generic message — never the raw code or the OTP row's hash.
-        self.assertEqual(set(response.data["data"].keys()), {"expires_at"})
+        self.assertRegex(payload["htmlContent"], r">\d{6}<")
+        self.assertNotIn("reset-password?token=", payload["htmlContent"])
+        # The API response only carries the expiry — never the code.
+        self.assertEqual(set(response.data["data"]), {"expires_at"})
 
     def test_brevo_not_configured_skips_send_without_failing_request(self):
-        """With BREVO_API_KEY unset (the local-dev default — see .env.example),
-        send_password_reset_otp_email must skip the network call entirely and
-        return False, while the forgot-password request still succeeds with
-        its normal response shape. This is what "leave BREVO_API_KEY blank
-        for local dev" actually guarantees, not just documents."""
         with self.settings(BREVO_API_KEY=""):
-            with patch("accounts.emails.requests.post") as mock_post:
-                response = self.client.post(
-                    reverse("auth-forgot-password"), {"email": "forgot@example.com"}, format="json"
-                )
-                mock_post.assert_not_called()
+            with patch("accounts.views._send_in_background", side_effect=lambda fn, *args: fn(*args)):
+                with patch("accounts.emails.requests.post") as mock_post:
+                    response = self.client.post(
+                        reverse("auth-forgot-password"), {"email": "forgot@example.com"}, format="json"
+                    )
+                    mock_post.assert_not_called()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(EmailOTP.objects.filter(user=self.user, purpose=EmailOTP.Purpose.RESET).exists())
 
     def test_verify_otp_grants_reset_token(self):
         token = self._verified_reset_token()
@@ -417,28 +420,22 @@ class ForgotPasswordFlowTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("Too many", response.data["message"])
 
-    @patch("accounts.views.send_password_reset_otp_email")
-    def test_resend_otp_invalidates_previous_code_and_returns_fresh_expiry(self, mock_send_email):
+    @patch("accounts.views._send_in_background", side_effect=lambda fn, *args: fn(*args))
+    @patch("accounts.views.send_password_reset_otp_email", return_value=True)
+    def test_resend_otp_invalidates_previous_code_and_returns_fresh_expiry(self, mock_send, _sync):
         old_otp, old_code = self._issue_reset_otp()
 
         resend_response = self.client.post(
             reverse("auth-resend-otp"), {"email": "forgot@example.com", "purpose": "RESET"}, format="json"
         )
-        mock_send_email.assert_called_once_with(self.user, ANY, EmailOTP.RESET_OTP_LIFETIME_MINUTES)
-
-        new_otp = (
-            EmailOTP.objects.filter(user=self.user, purpose=EmailOTP.Purpose.RESET, is_used=False)
-            .order_by("-created_at")
-            .first()
-        )
-        self.assertIsNotNone(new_otp)
+        self.assertEqual(resend_response.status_code, status.HTTP_200_OK)
+        mock_send.assert_called_once_with(self.user, ANY, EmailOTP.RESET_OTP_LIFETIME_MINUTES)
+        new_otp = EmailOTP.objects.filter(user=self.user, purpose=EmailOTP.Purpose.RESET, is_used=False).get()
         self.assertNotEqual(new_otp.pk, old_otp.pk)
-        # The countdown the frontend is showing must restart from THIS value.
         self.assertEqual(resend_response.data["data"]["expires_at"], new_otp.expires_at)
 
         old_otp.refresh_from_db()
         self.assertTrue(old_otp.is_used)
-
         response = self.client.post(
             reverse("auth-verify-reset-otp"), {"email": "forgot@example.com", "otp": old_code}, format="json"
         )
@@ -519,27 +516,239 @@ class ForgotPasswordFlowTests(APITestCase):
 
 
 class VerifyEmailViewTests(APITestCase):
-    def test_verify_email_with_valid_otp_activates_and_creates_profile(self):
-        user = make_user(email="verify@example.com", email_verified=False)
-        _otp, raw_code = EmailOTP.issue(user, EmailOTP.Purpose.REGISTER)
+    def setUp(self):
+        cache.clear()
+        self.user = make_user(email="verify@example.com", email_verified=False)
 
-        response = self.client.post(
-            reverse("auth-verify-email"), {"email": "verify@example.com", "otp": raw_code}, format="json"
-        )
+    def _verify(self, token):
+        return self.client.post(reverse("auth-verify-email"), {"token": token}, format="json")
+
+    def test_valid_link_verifies_email_and_allows_login(self):
+        token = EmailOTP.issue_verification_link(self.user)
+
+        response = self._verify(token)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        user.refresh_from_db()
-        self.assertTrue(user.email_verified)
-        self.assertTrue(Profile.objects.filter(user=user).exists())
+        self.assertFalse(response.data["data"]["already_verified"])
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.email_verified)
+        self.assertTrue(Profile.objects.filter(user=self.user).exists())
+        login = self.client.post(
+            reverse("auth-login"), {"email": "verify@example.com", "password": "StrongPass123"}, format="json"
+        )
+        self.assertEqual(login.status_code, status.HTTP_200_OK)
 
-    def test_verify_email_rejects_invalid_code(self):
-        user = make_user(email="verify2@example.com", email_verified=False)
-        EmailOTP.issue(user, EmailOTP.Purpose.REGISTER)
+    def test_reusing_a_link_reports_already_verified(self):
+        token = EmailOTP.issue_verification_link(self.user)
+        self._verify(token)
 
+        response = self._verify(token)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["data"]["already_verified"])
+
+    def test_expired_link_is_rejected(self):
+        token = EmailOTP.issue_verification_link(self.user)
+        EmailOTP.objects.filter(user=self.user).update(expires_at=timezone.now() - timedelta(seconds=1))
+
+        response = self._verify(token)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["errors"]["code"], "token_expired")
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.email_verified)
+
+    def test_link_superseded_by_a_newer_one_is_rejected(self):
+        old_token = EmailOTP.issue_verification_link(self.user)
+        new_token = EmailOTP.issue_verification_link(self.user)
+
+        self.assertEqual(self._verify(old_token).data["errors"]["code"], "token_invalid")
+        self.assertEqual(self._verify(new_token).status_code, status.HTTP_200_OK)
+
+    def test_tampered_or_malformed_tokens_are_rejected(self):
+        token = EmailOTP.issue_verification_link(self.user)
+        pk = token.split(".", 1)[0]
+        for bad in (f"{pk}.wrong-secret", "not-a-token", "999999.whatever", ""):
+            response = self._verify(bad)
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, bad)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.email_verified)
+
+    def test_only_the_secret_hash_is_stored(self):
+        token = EmailOTP.issue_verification_link(self.user)
+        secret = token.split(".", 1)[1]
+        otp = EmailOTP.objects.get(user=self.user, purpose=EmailOTP.Purpose.REGISTER)
+        self.assertNotIn(secret, otp.code_hash)
+
+    @patch("accounts.views._send_in_background", side_effect=lambda fn, *args: fn(*args))
+    @patch("accounts.views.send_verification_email", return_value=True)
+    def test_resend_verification_sends_new_link_only_when_needed(self, mock_send, _sync):
+        url = reverse("auth-resend-otp")
+        unverified = self.client.post(url, {"email": "verify@example.com", "purpose": "REGISTER"}, format="json")
+        mock_send.assert_called_once_with(self.user, ANY)
+
+        make_user(email="done@example.com")  # already verified
+        verified = self.client.post(url, {"email": "done@example.com", "purpose": "REGISTER"}, format="json")
+        unknown = self.client.post(url, {"email": "nobody@example.com", "purpose": "REGISTER"}, format="json")
+
+        mock_send.assert_called_once()
+        # Same reply in all three cases — nothing reveals account state.
+        self.assertEqual(unverified.data, verified.data)
+        self.assertEqual(unverified.data, unknown.data)
+
+
+class UnverifiedLoginTests(APITestCase):
+    def test_unverified_customer_cannot_log_in(self):
+        make_user(email="pending@example.com", email_verified=False)
         response = self.client.post(
-            reverse("auth-verify-email"), {"email": "verify2@example.com", "otp": "000000"}, format="json"
+            reverse("auth-login"), {"email": "pending@example.com", "password": "StrongPass123"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["errors"]["code"], "email_not_verified")
+        self.assertNotIn("access", response.data.get("data") or {})
+
+    def test_wrong_password_never_reveals_verification_status(self):
+        make_user(email="pending@example.com", email_verified=False)
+        response = self.client.post(
+            reverse("auth-login"), {"email": "pending@example.com", "password": "Wrong@123"}, format="json"
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertNotIn("code", response.data.get("errors") or {})
+
+    def test_admin_is_never_blocked(self):
+        make_user(email="boss@example.com", role=User.Role.ADMIN, email_verified=False)
+        response = self.client.post(
+            reverse("auth-login"), {"email": "boss@example.com", "password": "StrongPass123"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+class ResetOtpFlowTests(APITestCase):
+    """The full popup flow over HTTP: forgot-password emails a code ->
+    verify-reset-otp grants a reset token -> reset-password consumes it."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = make_user(email="otpflow@example.com", password="OldPass123", email_verified=False)
+
+    def _request_code(self, url_name="auth-forgot-password", **extra):
+        with patch("accounts.views.send_password_reset_otp_email", return_value=True) as mock_send, patch(
+            "accounts.views._send_in_background", side_effect=lambda fn, *args: fn(*args)
+        ):
+            response = self.client.post(reverse(url_name), {"email": "otpflow@example.com", **extra}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return mock_send.call_args.args[1]
+
+    def _verify(self, code):
+        return self.client.post(
+            reverse("auth-verify-reset-otp"), {"email": "otpflow@example.com", "otp": code}, format="json"
+        )
+
+    def _reset(self, token, password="NewPass@456"):
+        return self.client.post(
+            reverse("auth-reset-password"),
+            {"reset_token": token, "new_password": password, "confirm_password": password},
+            format="json",
+        )
+
+    def test_full_flow_then_code_and_token_cannot_be_reused(self):
+        code = self._request_code()
+        verify = self._verify(code)
+        self.assertEqual(verify.status_code, status.HTTP_200_OK)
+        token = verify.data["data"]["reset_token"]
+
+        # The code works only once.
+        self.assertEqual(self._verify(code).status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.assertEqual(self._reset(token).status_code, status.HTTP_200_OK)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("NewPass@456"))
+        self.assertTrue(self.user.email_verified)  # the code proved inbox ownership
+
+        reuse = self._reset(token, "Other@789")
+        self.assertEqual(reuse.status_code, status.HTTP_400_BAD_REQUEST)
+        login = self.client.post(
+            reverse("auth-login"), {"email": "otpflow@example.com", "password": "NewPass@456"}, format="json"
+        )
+        self.assertEqual(login.status_code, status.HTTP_200_OK)
+
+    def test_code_expires_after_five_minutes(self):
+        code = self._request_code()
+        EmailOTP.objects.filter(user=self.user, purpose=EmailOTP.Purpose.RESET).update(
+            expires_at=timezone.now() - timedelta(seconds=1)
+        )
+        self.assertEqual(self._verify(code).status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_resent_code_replaces_the_old_one(self):
+        old_code = self._request_code()
+        new_code = self._request_code("auth-resend-otp", purpose="RESET")
+        if old_code != new_code:  # 1-in-a-million chance they collide
+            self.assertEqual(self._verify(old_code).status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(self._verify(new_code).status_code, status.HTTP_200_OK)
+
+    def test_requesting_a_new_code_cancels_an_unused_reset_token(self):
+        token = self._verify(self._request_code()).data["data"]["reset_token"]
+        self._request_code()
+        self.assertEqual(self._reset(token).status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_weak_password_is_rejected_and_token_stays_usable(self):
+        token = self._verify(self._request_code()).data["data"]["reset_token"]
+        self.assertEqual(self._reset(token, "weak").status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(self._reset(token).status_code, status.HTTP_200_OK)
+
+    def test_forgot_and_resend_are_rate_limited_per_email(self):
+        url = reverse("auth-forgot-password")
+        with patch("accounts.views._send_in_background"):
+            statuses = [
+                self.client.post(url, {"email": "otpflow@example.com"}, format="json").status_code for _ in range(6)
+            ]
+            resend = self.client.post(
+                reverse("auth-resend-otp"), {"email": "otpflow@example.com", "purpose": "RESET"}, format="json"
+            )
+        self.assertEqual(statuses[:5], [200] * 5)
+        self.assertEqual(statuses[5], status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertEqual(resend.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+
+class BrevoEmailTests(APITestCase):
+    def setUp(self):
+        self.user = make_user(email="mail@example.com")
+
+    @patch("accounts.emails.requests.post")
+    def test_rejected_send_returns_false_and_never_logs_the_token(self, mock_post):
+        from .emails import send_password_reset_otp_email
+
+        mock_post.return_value.status_code = 401
+        mock_post.return_value.json.return_value = {"code": "unauthorized", "message": "Key not found"}
+        with self.settings(BREVO_API_KEY="bad-key"), self.assertLogs("accounts.email", level="ERROR") as logs:
+            sent = send_password_reset_otp_email(self.user, "839201", 5)
+
+        self.assertFalse(sent)
+        output = "\n".join(logs.output)
+        self.assertIn("status=401", output)
+        self.assertIn("unauthorized", output)
+        self.assertNotIn("839201", output)
+        self.assertNotIn("bad-key", output)
+
+    @patch("accounts.emails.requests.post")
+    def test_production_refuses_non_https_links(self, mock_post):
+        from .emails import send_verification_email
+
+        with self.settings(BREVO_API_KEY="key", DJANGO_ENV="production", FRONTEND_URL="http://insecure.example.com"):
+            self.assertFalse(send_verification_email(self.user, "1.secret"))
+        mock_post.assert_not_called()
+
+    @patch("accounts.emails.requests.post")
+    def test_user_name_is_html_escaped_in_the_email(self, mock_post):
+        from .emails import send_verification_email
+
+        mock_post.return_value.status_code = 201
+        self.user.full_name = "<script>alert(1)</script>"
+        with self.settings(BREVO_API_KEY="key", FRONTEND_URL="http://localhost:5173"):
+            self.assertTrue(send_verification_email(self.user, "1.secret"))
+        payload = mock_post.call_args.kwargs["json"]
+        self.assertNotIn("<script>", payload["htmlContent"])
+        self.assertIn("http://localhost:5173/verify-email?token=1.secret", payload["htmlContent"])
 
 
 class ChangePasswordViewTests(APITestCase):

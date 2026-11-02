@@ -62,3 +62,15 @@ services:
         sync: false
       - key: CLOUDINARY_URL
         sync: false
+      # Account emails (verification and password-reset links) go through
+      # Brevo's HTTPS API — Render blocks outbound SMTP on free instances.
+      # Without BREVO_API_KEY no verification email can be sent, and new
+      # customers can't log in until they verify. BREVO_SENDER_EMAIL must
+      # be a sender verified in Brevo. FRONTEND_URL (above) must be the
+      # https:// Vercel URL — the emailed links are built from it.
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_SENDER_EMAIL
+        sync: false
+      - key: BREVO_SENDER_NAME
+        sync: false

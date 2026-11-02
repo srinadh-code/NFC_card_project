@@ -67,8 +67,10 @@ class RegisterSerializer(serializers.Serializer):
 
 
 class VerifyEmailSerializer(serializers.Serializer):
-    email = serializers.EmailField()
-    otp = serializers.CharField(max_length=6, min_length=6)
+    # The "<id>.<secret>" token from the emailed verification link (see
+    # EmailOTP.issue_verification_link).
+    token = serializers.CharField(max_length=200)
+
 
 
 class ResendOtpSerializer(serializers.Serializer):

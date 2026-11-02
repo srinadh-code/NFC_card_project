@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 
@@ -60,3 +61,59 @@ class CustomerQrCodeViewTests(AuthenticatedAPITestCase):
         self.client.force_authenticate(user=None)
         response = self.client.get(reverse("customer-qr"))
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+IN_MEMORY_STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.InMemoryStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
+
+
+@override_settings(STORAGES=IN_MEMORY_STORAGES)
+class QrTargetUrlTests(AuthenticatedAPITestCase):
+    """The URL inside the QR must always be the current public profile URL."""
+
+    def test_stale_qr_is_rebuilt_with_the_current_site_url(self):
+        with self.settings(FRONTEND_URL="http://localhost:5173"):
+            self.client.post(reverse("customer-qr-generate"))
+        old_image = CustomerQrCode.objects.get().image.name
+
+        with self.settings(FRONTEND_URL="https://vrsgateway.example.com"):
+            response = self.client.get(reverse("customer-qr"))
+
+        profile = Profile.objects.get(user=self.user)
+        expected = f"https://vrsgateway.example.com/u/{profile.username}?src=qr"
+        self.assertEqual(response.data["data"]["target_url"], expected)
+        qr = CustomerQrCode.objects.get()
+        self.assertEqual(qr.target_url, expected)
+        self.assertNotEqual(qr.image.name, old_image)
+
+    def test_up_to_date_qr_is_not_rebuilt(self):
+        with self.settings(FRONTEND_URL="https://vrsgateway.example.com"):
+            self.client.post(reverse("customer-qr-generate"))
+            image = CustomerQrCode.objects.get().image.name
+            self.client.get(reverse("customer-qr"))
+            self.client.post(reverse("customer-qr-generate"))
+        self.assertEqual(CustomerQrCode.objects.get().image.name, image)
+
+    def test_username_change_updates_the_qr(self):
+        with self.settings(FRONTEND_URL="https://vrsgateway.example.com"):
+            self.client.post(reverse("customer-qr-generate"))
+            Profile.objects.filter(user=self.user).update(username="renamed-user")
+            # Each real request loads the user (and profile) fresh.
+            self.client.force_authenticate(user=type(self.user).objects.get(pk=self.user.pk))
+            response = self.client.get(reverse("customer-qr"))
+        self.assertEqual(response.data["data"]["target_url"], "https://vrsgateway.example.com/u/renamed-user?src=qr")
+
+    def test_trailing_slash_in_frontend_url_is_ignored(self):
+        with self.settings(FRONTEND_URL="https://vrsgateway.example.com/"):
+            response = self.client.post(reverse("customer-qr-generate"))
+        self.assertNotIn(".com//u/", response.data["data"]["target_url"])
+
+    def test_each_customer_gets_their_own_qr(self):
+        with self.settings(FRONTEND_URL="https://vrsgateway.example.com"):
+            mine = self.client.post(reverse("customer-qr-generate")).data["data"]["target_url"]
+            self.client.force_authenticate(user=self.other_user)
+            theirs = self.client.post(reverse("customer-qr-generate")).data["data"]["target_url"]
+        self.assertNotEqual(mine, theirs)
+        self.assertEqual(CustomerQrCode.objects.count(), 2)

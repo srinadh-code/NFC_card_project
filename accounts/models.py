@@ -113,13 +113,24 @@ class EmailOTP(models.Model):
     # itself) read this constant rather than hardcoding the number twice.
     # REGISTER-purpose OTPs are unaffected (EmailOTP.issue()'s own
     # lifetime_minutes=10 default still applies there).
-    RESET_OTP_LIFETIME_MINUTES = 6
+    RESET_OTP_LIFETIME_MINUTES = 5
 
     # How long a granted password-reset authorization (see
     # `issue_reset_token`) stays usable after successful OTP verification —
     # deliberately short-lived and single-purpose, independent of the OTP's
     # own (shorter) expiry.
     RESET_TOKEN_LIFETIME_MINUTES = 10
+
+    # Email-verification link lifetime (see issue_verification_link) — a
+    # verification link can reasonably sit in an inbox for a day.
+    VERIFY_LINK_LIFETIME_MINUTES = 24 * 60
+
+    # Outcomes of check_verification_link() — VerifyEmailView maps each to
+    # its own message so the page can say *why* a link didn't work.
+    LINK_VALID = "valid"
+    LINK_INVALID = "invalid"
+    LINK_EXPIRED = "expired"
+    LINK_ALREADY_VERIFIED = "already_verified"
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="otps")
     # Hashed with the same hasher as user passwords (django.contrib.auth.hashers)
@@ -156,7 +167,7 @@ class EmailOTP(models.Model):
         only its hash, so callers must send/return it to the user immediately
         (it cannot be read back from the returned `otp` afterwards)."""
         with transaction.atomic():
-            cls.objects.filter(user=user, purpose=purpose, is_used=False).update(is_used=True)
+            cls._supersede(user, purpose)
             raw_code = cls.generate_code()
             otp = cls.objects.create(
                 user=user,
@@ -165,6 +176,59 @@ class EmailOTP(models.Model):
                 expires_at=timezone.now() + timedelta(minutes=lifetime_minutes),
             )
             return otp, raw_code
+
+    @classmethod
+    def _supersede(cls, user, purpose):
+        """Retires every outstanding code/link of `purpose` for `user` —
+        including any reset authorization already granted on them — so only
+        the most recently requested one can ever be used."""
+        cls.objects.filter(user=user, purpose=purpose).filter(
+            models.Q(is_used=False) | ~models.Q(reset_token_hash="")
+        ).update(is_used=True, reset_token_hash="", reset_token_expires_at=None)
+
+    @staticmethod
+    def _split_token(raw_token):
+        try:
+            pk_str, raw_secret = raw_token.split(".", 1)
+            return int(pk_str), raw_secret
+        except (ValueError, AttributeError):
+            return None, None
+
+    @classmethod
+    def issue_verification_link(cls, user):
+        """Supersedes older verification links/codes and issues a fresh
+        email-verification link token ("<pk>.<secret>"). Only the secret's
+        hash is stored (in code_hash), so the raw token must be emailed
+        immediately — it cannot be read back afterwards."""
+        with transaction.atomic():
+            cls._supersede(user, cls.Purpose.REGISTER)
+            raw_secret = secrets.token_urlsafe(32)
+            otp = cls.objects.create(
+                user=user,
+                code_hash=make_password(raw_secret),
+                purpose=cls.Purpose.REGISTER,
+                expires_at=timezone.now() + timedelta(minutes=cls.VERIFY_LINK_LIFETIME_MINUTES),
+            )
+            return f"{otp.pk}.{raw_secret}"
+
+    @classmethod
+    def check_verification_link(cls, raw_token):
+        """Returns (outcome, otp) for a verification link token. The secret
+        is always checked first, so nothing about an account is revealed to
+        anyone who doesn't hold its genuine link."""
+        pk, raw_secret = cls._split_token(raw_token)
+        if pk is None:
+            return cls.LINK_INVALID, None
+        otp = cls.objects.select_related("user").filter(pk=pk, purpose=cls.Purpose.REGISTER).first()
+        if otp is None or not raw_secret or not check_password(raw_secret, otp.code_hash):
+            return cls.LINK_INVALID, None
+        if otp.user.email_verified:
+            return cls.LINK_ALREADY_VERIFIED, otp
+        if otp.is_used:  # superseded by a newer link
+            return cls.LINK_INVALID, otp
+        if otp.is_expired:
+            return cls.LINK_EXPIRED, otp
+        return cls.LINK_VALID, otp
 
     @property
     def is_expired(self):
@@ -207,10 +271,8 @@ class EmailOTP(models.Model):
     def get_by_reset_token(cls, raw_token):
         """Resolves a token from issue_reset_token() back to its OTP row, or
         None if it's malformed, unknown, expired, or already consumed."""
-        try:
-            pk_str, raw_secret = raw_token.split(".", 1)
-            pk = int(pk_str)
-        except (ValueError, AttributeError):
+        pk, raw_secret = cls._split_token(raw_token)
+        if pk is None:
             return None
 
         try:
@@ -232,4 +294,5 @@ class EmailOTP(models.Model):
         password reset, so the same token can never be replayed."""
         self.reset_token_hash = ""
         self.reset_token_expires_at = None
-        self.save(update_fields=["reset_token_hash", "reset_token_expires_at"])
+        self.is_used = True
+        self.save(update_fields=["reset_token_hash", "reset_token_expires_at", "is_used"])

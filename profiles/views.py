@@ -169,7 +169,9 @@ class PublicProfileView(APIView):
 
         record_event(profile.user, AnalyticsEvent.EventType.PROFILE_VIEW, request=request)
         if request.query_params.get("src") == "qr":
-            record_event(profile.user, AnalyticsEvent.EventType.QR_SCAN, request=request, source="qr")
+            record_event(
+                profile.user, AnalyticsEvent.EventType.QR_SCAN, request=request, source="qr", dedupe_seconds=10
+            )
 
         # notify() itself checks CustomerSettings.notify_profile_views before
         # creating anything (see customer_notifications/services.py) — this

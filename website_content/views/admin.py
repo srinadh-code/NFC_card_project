@@ -5,11 +5,15 @@ plumbing in base.py — reorder and image-upload sub-endpoints are opt-in per
 resource, only where the spec calls for them.
 """
 
+from django.db import transaction
+from django.utils import timezone
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.views import APIView
 
 from common.pagination import StandardPagination
 from common.permissions import IsAdminRole
 from common.response import error, success
+from common.video_storage import delete_video, upload_video
 
 from website_content.models import (
     AboutBuiltFromExperience,
@@ -117,6 +121,54 @@ class HomeHeroNfcCardImageAdminView(AdminSingletonImageUploadAPIView):
     url_field = "nfc_card_image_url"
     public_id_field = "nfc_card_image_public_id"
     folder = "website/home"
+
+
+class HomeHeroDemoVideoAdminView(APIView):
+    """POST {video: <mp4 file>} — uploads or replaces the Home page "Watch
+    Demo" video on the HomeHero singleton. Same order as the image views'
+    _ImageOpsMixin: upload (and verify) first, save the row, and only then
+    clean up the previous Cloudinary video — a failure at any step leaves
+    the currently saved video untouched."""
+
+    permission_classes = [IsAdminRole]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        file_obj = request.FILES.get("video")
+        if not file_obj:
+            return error("No video file provided.", status=400)
+        original_name = file_obj.name
+
+        uploaded = upload_video(file_obj, folder="website/home/videos")
+
+        try:
+            with transaction.atomic():
+                hero = HomeHero.objects.select_for_update().order_by("pk").first()
+                if hero is None:
+                    hero = HomeHero.objects.create()
+                old_public_id = hero.demo_video_public_id
+                hero.demo_video_url = uploaded["url"]
+                hero.demo_video_public_id = uploaded["public_id"]
+                hero.demo_video_filename = original_name[:255]
+                hero.demo_video_uploaded_at = timezone.now()
+                hero.save(
+                    update_fields=[
+                        "demo_video_url",
+                        "demo_video_public_id",
+                        "demo_video_filename",
+                        "demo_video_uploaded_at",
+                        "updated_at",
+                    ]
+                )
+        except Exception:
+            # The new video never made it into the database — don't leave it
+            # orphaned on Cloudinary.
+            delete_video(uploaded["public_id"])
+            raise
+
+        if old_public_id and old_public_id != uploaded["public_id"]:
+            transaction.on_commit(lambda: delete_video(old_public_id))
+        return success(HomeHeroSerializer(hero).data, message="Demo video uploaded.")
 
 
 class HomeHeroFeatureHighlightAdminListView(AdminListCreateAPIView):

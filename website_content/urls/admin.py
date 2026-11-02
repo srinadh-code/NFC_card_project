@@ -50,6 +50,7 @@ from website_content.views.admin import (
     HomeHeroFeatureHighlightAdminDetailView,
     HomeHeroFeatureHighlightAdminListView,
     HomeHeroFeatureHighlightAdminReorderView,
+    HomeHeroDemoVideoAdminView,
     HomeHeroNfcCardImageAdminView,
     HomeHeroPhoneImageAdminView,
     HomeHowItFeelsAdminView,
@@ -97,6 +98,11 @@ urlpatterns = [
         "home/hero/nfc-card-image/",
         HomeHeroNfcCardImageAdminView.as_view(),
         name="admin-home-hero-nfc-card-image",
+    ),
+    path(
+        "home/hero/demo-video/",
+        HomeHeroDemoVideoAdminView.as_view(),
+        name="admin-home-hero-demo-video",
     ),
     path(
         "home/hero-features/",
