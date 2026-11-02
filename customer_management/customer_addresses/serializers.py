@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from . import geocoding
 from . import pincode as pincode_service
 from .models import CustomerAddress
 
@@ -9,6 +10,10 @@ class CustomerAddressSerializer(serializers.ModelSerializer):
     # and the legacy-district mapping don't list for this PIN (see
     # pincode.verify_address). Only honoured once the locality is proven.
     confirm_district = serializers.BooleanField(write_only=True, required=False, default=False)
+    # The map pin, if the customer used "Choose on Map" — floats in/out
+    # (not the model's decimal strings), rounded to the column's 6 places.
+    latitude = serializers.FloatField(required=False, allow_null=True, min_value=-90, max_value=90)
+    longitude = serializers.FloatField(required=False, allow_null=True, min_value=-180, max_value=180)
 
     class Meta:
         model = CustomerAddress
@@ -26,6 +31,8 @@ class CustomerAddressSerializer(serializers.ModelSerializer):
             "state",
             "pincode",
             "country",
+            "latitude",
+            "longitude",
             "is_default",
             "confirm_district",
             "created_at",
@@ -57,6 +64,7 @@ class CustomerAddressSerializer(serializers.ModelSerializer):
         # the saved values for whatever wasn't sent.
         confirm_district = attrs.pop("confirm_district", False)
         current = lambda name: attrs.get(name, getattr(self.instance, name, "") if self.instance else "")
+        self._validate_coordinates(attrs)
         try:
             result = pincode_service.verify_address(
                 locality=current("locality"),
@@ -71,3 +79,19 @@ class CustomerAddressSerializer(serializers.ModelSerializer):
         if result.errors:
             raise serializers.ValidationError(result.errors)
         return attrs
+
+    def _validate_coordinates(self, attrs):
+        # Optional (typed addresses have none), but a pin is a pair and must
+        # be somewhere we deliver.
+        if "latitude" not in attrs and "longitude" not in attrs:
+            return
+        saved = lambda name: getattr(self.instance, name, None) if self.instance else None
+        lat, lng = attrs.get("latitude", saved("latitude")), attrs.get("longitude", saved("longitude"))
+        if lat is None and lng is None:
+            return
+        if lat is None or lng is None:
+            raise serializers.ValidationError({"latitude": "Please choose the location on the map again."})
+        lat, lng = round(float(lat), 6), round(float(lng), 6)
+        if not geocoding.in_india_bounds(lat, lng):
+            raise serializers.ValidationError({"latitude": geocoding.OUTSIDE_INDIA_MESSAGE})
+        attrs["latitude"], attrs["longitude"] = lat, lng

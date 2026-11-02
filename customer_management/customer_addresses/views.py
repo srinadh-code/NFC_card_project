@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 from common.permissions import IsCustomerRole
 from common.response import error, success
 
+from . import geocoding
 from . import pincode as pincode_service
 from . import services
 from .serializers import CustomerAddressSerializer
@@ -113,3 +114,60 @@ class CustomerAddressVerifyView(APIView):
             result.as_dict(),
             message="Address details verified." if result.verified else result.errors["pincode"],
         )
+
+
+class GeocodeThrottle(UserRateThrottle):
+    scope = "geocode"
+
+
+def _coordinate_params(request):
+    """(lat, lng) floats from ?lat=&lng=, or None if absent/invalid."""
+    try:
+        lat, lng = float(request.query_params["lat"]), float(request.query_params["lng"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        return None
+    return lat, lng
+
+
+class GeocodeSearchView(APIView):
+    """The address form's map search box (autocomplete): places in India
+    matching ?q=, ranked near ?lat=&lng= (the map's view) when given."""
+
+    permission_classes = [IsCustomerRole]
+    throttle_classes = [GeocodeThrottle]
+
+    def get(self, request):
+        query = request.query_params.get("q", "")
+        try:
+            results = geocoding.search_places(query, bias=_coordinate_params(request))
+        except geocoding.GeocodingUnavailable:
+            return error(geocoding.UNAVAILABLE_MESSAGE, status=503)
+        return success(results)
+
+
+class GeocodeReverseView(APIView):
+    """The address a map pin resolves to (map click, marker drag, search
+    pick, "Use My Current Location") — used to pre-fill the address form.
+    Not verification: the saved address is still checked against India
+    Post by CustomerAddressSerializer."""
+
+    permission_classes = [IsCustomerRole]
+    throttle_classes = [GeocodeThrottle]
+
+    def get(self, request):
+        coords = _coordinate_params(request)
+        if coords is None:
+            return error("Please choose a location on the map.", errors={"location": ["Invalid coordinates."]})
+        try:
+            detected = geocoding.reverse_geocode(*coords)
+        except geocoding.OutsideServiceArea:
+            message = geocoding.OUTSIDE_INDIA_MESSAGE
+            return error(message, errors={"location": [message]})
+        except LookupError:
+            message = geocoding.NOT_FOUND_MESSAGE
+            return error(message, errors={"location": [message]}, status=404)
+        except geocoding.GeocodingUnavailable:
+            return error(geocoding.UNAVAILABLE_MESSAGE, status=503)
+        return success(detected.as_dict())
