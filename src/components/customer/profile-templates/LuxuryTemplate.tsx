@@ -1,6 +1,7 @@
 import { Globe, Info, Mail, MessageCircle, Phone, UserPlus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { BodySections } from "./BodySections"
+import { ContactUsSection } from "./ContactUsSection"
 import { digitsOnly, downloadVCard, SOCIAL_BRAND, TemplateFrame, type TemplateProps } from "./shared"
 
 // Quick Actions use each action's real-world associated color (like the
@@ -77,7 +78,7 @@ const LUXURY_THEMES: Record<"green" | "blue" | "black", LuxuryThemeConfig> = {
   },
 }
 
-export default function LuxuryTemplate({ profile, onShare, showContactInfo = true }: TemplateProps) {
+export default function LuxuryTemplate({ profile, onShare, showContactInfo = true, enquiryEnabled }: TemplateProps) {
   const theme = LUXURY_THEMES[profile.luxuryTheme] ?? LUXURY_THEMES.black
   const showPhone = showContactInfo && Boolean(profile.phone)
   const showEmail = showContactInfo && Boolean(profile.email)
@@ -226,6 +227,18 @@ export default function LuxuryTemplate({ profile, onShare, showContactInfo = tru
           labelColor={theme.labelColor}
           chipShape={theme.chipShape}
           ctaColor={theme.ctaColor}
+        />
+
+        <ContactUsSection
+          profile={profile}
+          enabled={enquiryEnabled}
+          accent={theme.ctaColor}
+          accentTextClassName={theme.ctaTextClass}
+          className={cn("mt-7 border-t pt-6", theme.dividerColor)}
+          titleClassName={theme.heroTextPrimary}
+          textClassName={theme.heroTextSecondary}
+          buttonClassName={cn("rounded-xl", theme.ctaTextClass)}
+          buttonStyle={{ background: theme.ctaColor }}
         />
       </div>
     </TemplateFrame>

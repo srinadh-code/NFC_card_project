@@ -59,6 +59,7 @@ import CustomerServices from "@/pages/customer/Services"
 import CustomerSocialLinks from "@/pages/customer/SocialLinks"
 import CustomerQrCode from "@/pages/customer/QrCode"
 import CustomerAnalytics from "@/pages/customer/Analytics"
+import CustomerEnquiries from "@/pages/customer/Enquiries"
 import CustomerActivity from "@/pages/customer/Activity"
 import CustomerOrders from "@/pages/customer/Orders"
 import CustomerAddresses from "@/pages/customer/Addresses"
@@ -169,6 +170,7 @@ function App() {
             <Route path="/social-links" element={<CustomerSocialLinks />} />
             <Route path="/qr-code" element={<CustomerQrCode />} />
             <Route path="/analytics" element={<CustomerAnalytics />} />
+            <Route path="/enquiries" element={<CustomerEnquiries />} />
             <Route path="/activity" element={<CustomerActivity />} />
             <Route path="/orders" element={<CustomerOrders />} />
             <Route path="/addresses" element={<CustomerAddresses />} />

@@ -1,5 +1,6 @@
 import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
+import { Link } from "react-router-dom"
 import {
   Cell,
   Legend,
@@ -12,12 +13,14 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { Eye, Handshake, MonitorSmartphone, MousePointerClick, QrCode, Radar, BookmarkCheck } from "lucide-react"
+import { ArrowRight, Eye, Handshake, Inbox, MonitorSmartphone, MousePointerClick, QrCode, Radar, BookmarkCheck } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ChartContainer } from "@/components/ui/chart-container"
 import { ErrorState } from "@/components/customer/ErrorState"
 import { StatCard } from "@/components/customer/StatCard"
+import { LeadsTable } from "@/components/customer/LeadsTable"
+import { Button } from "@/components/ui/button"
 import { useCustomerAuthStore } from "@/store/auth-store"
 import { analyticsApi, leadsApi, type ApiAnalyticsEvent } from "@/lib/api"
 
@@ -81,9 +84,13 @@ export default function CustomerAnalytics() {
     enabled: Boolean(customer),
   })
   const leadsQuery = useQuery({
-    queryKey: ["customer-leads-count"],
-    queryFn: () => leadsApi.list(1),
+    // Under the "customer-leads" prefix so it refreshes with the Recent Leads
+    // table below; the count is the backend's real total of saved enquiries.
+    queryKey: ["customer-leads", "count"],
+    queryFn: () => leadsApi.list(1, "", { pageSize: 1 }),
     enabled: Boolean(customer),
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   })
 
   const isLoading =
@@ -261,6 +268,24 @@ export default function CustomerAnalytics() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="rounded-2xl">
+        <CardHeader className="flex flex-row items-center justify-between gap-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Inbox className="size-4 text-primary" />
+            Recent Leads
+          </CardTitle>
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/enquiries">
+              View all enquiries
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <LeadsTable pageSize={5} />
+        </CardContent>
+      </Card>
     </div>
   )
 }

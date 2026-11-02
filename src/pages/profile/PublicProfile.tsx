@@ -146,6 +146,7 @@ export default function PublicProfile() {
           profile={profile}
           onShare={handleShare}
           showContactInfo={Boolean(profile.email || profile.phone)}
+          enquiryEnabled
         />
 
         <p className="pt-6 text-center text-xs text-muted-foreground">

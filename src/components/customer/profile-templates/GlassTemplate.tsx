@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils"
 import { withoutFields } from "@/lib/custom-fields"
 import { AdditionalInfoSection } from "./AdditionalInfoSection"
+import { ContactUsSection } from "./ContactUsSection"
 import { SOCIAL_BRAND, digitsOnly, downloadVCard, TemplateFrame, useProfileSections, type TemplateProps } from "./shared"
 
 // Template 4 ("Glass") — a premium frosted-glass digital-identity card:
@@ -48,7 +49,7 @@ const GRID_COLS_BY_COUNT: Record<number, string> = {
   4: "grid-cols-4",
 }
 
-export default function GlassTemplate({ profile, onShare, showContactInfo = true }: TemplateProps) {
+export default function GlassTemplate({ profile, onShare, showContactInfo = true, enquiryEnabled }: TemplateProps) {
   const { enabledSocial, customFields, showPhone, showEmail } = useProfileSections(profile, showContactInfo)
 
   const initials = profile.fullName
@@ -272,6 +273,16 @@ export default function GlassTemplate({ profile, onShare, showContactInfo = true
           </span>
           <ChevronRight className="size-4" />
         </button>
+
+        <ContactUsSection
+          profile={profile}
+          enabled={enquiryEnabled}
+          accent="#5B6FA8"
+          className="mt-4 rounded-2xl border border-white/60 bg-white/40 p-4 backdrop-blur-md"
+          titleClassName="text-slate-900"
+          textClassName="text-slate-600"
+          buttonClassName="rounded-2xl bg-slate-900 text-white"
+        />
 
         <div className="mt-6 flex items-center justify-center gap-3 text-[9px] font-semibold uppercase tracking-[0.15em] text-slate-500">
           <span className="h-px w-8 bg-slate-400/40" />
