@@ -32,6 +32,12 @@ class CustomerAddress(models.Model):
     pincode = models.CharField(max_length=6)
     country = models.CharField(max_length=100, default="India")
 
+    # Delivery pin chosen on the address form's map ("Choose on Map" /
+    # "Use My Current Location"). Optional — a manually typed address has
+    # none. Both set or both null (CustomerAddressSerializer.validate).
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+
     is_default = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)

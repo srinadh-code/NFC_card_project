@@ -349,6 +349,8 @@ REST_FRAMEWORK = {
         "lead_submit": "10/min",
         "testimonial_submit": "10/hour",
         "pincode_lookup": "60/min",
+        # Map search-as-you-type + pin lookups on the address form.
+        "geocode": "60/min",
     },
 }
 

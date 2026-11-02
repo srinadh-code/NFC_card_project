@@ -360,19 +360,14 @@ def lookup_pincode(pincode):
     )
 
 
-def other_pincodes_for_post_office(name, state, pincode):
-    """PIN codes (other than `pincode`) of post offices in `state` named
-    exactly `name` — i.e. evidence that the customer's locality is served
-    by a different PIN. Empty when the name isn't a post office at all
-    (colony/street names usually aren't) or the lookup can't be made: this
-    check only ever adds a rejection, so an outage simply skips it."""
+def pincodes_for_post_office(name, state):
+    """PIN codes of post offices in `state` named exactly `name` (sorted;
+    empty when the name isn't a post office there). Raises
+    PincodeServiceUnavailable."""
     key = POST_OFFICE_CACHE_KEY.format(name=_norm(name))
     offices = cache.get(key)
     if offices is None:
-        try:
-            offices = _fetch_post_offices_by_name(name.strip())
-        except PincodeServiceUnavailable:
-            return []
+        offices = _fetch_post_offices_by_name(name.strip())
         cache.set(key, offices, FOUND_CACHE_SECONDS)
     wanted, wanted_state = _norm(name), _norm_state(state)
     return sorted(
@@ -381,9 +376,20 @@ def other_pincodes_for_post_office(name, state, pincode):
             for o in offices
             if _norm(o.get("Name")) == wanted
             and _norm_state(_display_state(o.get("State", ""), [o.get("District", "")])) == wanted_state
-            and str(o.get("Pincode", "")) != pincode
         }
     )
+
+
+def other_pincodes_for_post_office(name, state, pincode):
+    """PIN codes (other than `pincode`) of post offices in `state` named
+    exactly `name` — i.e. evidence that the customer's locality is served
+    by a different PIN. Empty when the name isn't a post office at all
+    (colony/street names usually aren't) or the lookup can't be made: this
+    check only ever adds a rejection, so an outage simply skips it."""
+    try:
+        return [pin for pin in pincodes_for_post_office(name, state) if pin != pincode]
+    except PincodeServiceUnavailable:
+        return []
 
 
 def is_valid_pincode_format(pincode):
