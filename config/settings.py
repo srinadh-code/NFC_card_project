@@ -1,5 +1,5 @@
 """
-Django settings for the VR's NEXORA backend (config project).
+Django settings for the VR's Gateway backend (config project).
 """
 
 from datetime import timedelta
@@ -219,7 +219,7 @@ if EMAIL_HOST:
 else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@vrsnexora.com")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "vrsgateway@gmail.com")
 
 
 # Frontend / CORS

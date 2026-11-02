@@ -1,4 +1,4 @@
-# VR's NEXORA Backend (Phase A)
+# VR's Gateway Backend (Phase A)
 
 Django REST Framework backend for the NFC digital business card app. This
 covers Phase A: authentication (register/OTP/login/JWT/logout/forgot &
