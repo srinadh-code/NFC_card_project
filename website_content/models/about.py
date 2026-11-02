@@ -64,7 +64,7 @@ class AboutMission(models.Model):
 
 
 class AboutWhyChoose(models.Model):
-    """'Why Choose VR's NEXORA' cards."""
+    """'Why Choose VR's Gateway' cards."""
 
     title = models.CharField(max_length=150)
     description = models.TextField()
