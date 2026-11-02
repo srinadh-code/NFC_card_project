@@ -1,4 +1,5 @@
 import { Mail, MapPin, MessageCircle, Phone, Share2, UserPlus } from "lucide-react"
+import { ContactUsSection } from "./ContactUsSection"
 import { cn } from "@/lib/utils"
 import { AdditionalInfoSection } from "./AdditionalInfoSection"
 import { digitsOnly, downloadVCard, SOCIAL_BRAND, TemplateFrame, useProfileSections, type TemplateProps } from "./shared"
@@ -88,7 +89,7 @@ const TEMPLATE2_THEMES: Record<"green" | "blue" | "black", Template2ThemeConfig>
 const HEADER_TAGLINE = ["People", "Ideas", "Progress"]
 const FOOTER_MESSAGE = "Let's Grow Together"
 
-export default function Template2({ profile, onShare, showContactInfo = true }: TemplateProps) {
+export default function Template2({ profile, onShare, showContactInfo = true, enquiryEnabled }: TemplateProps) {
   const theme = TEMPLATE2_THEMES[profile.futureTheme] ?? TEMPLATE2_THEMES.green
   const { enabledSocial, customFields, showPhone, showEmail } = useProfileSections(profile, showContactInfo)
   const companyLabel = profile.company || "VR's GATEWAY"
@@ -276,6 +277,18 @@ export default function Template2({ profile, onShare, showContactInfo = true }: 
           <Share2 className="size-4" />
           Share Profile
         </button>
+
+        <ContactUsSection
+          profile={profile}
+          enabled={enquiryEnabled}
+          accent={theme.ctaFrom}
+          className="mt-6 border-t pt-6"
+          style={{ borderColor: theme.border }}
+          titleStyle={{ color: theme.ink }}
+          textClassName={theme.inkSoftClass}
+          buttonClassName={cn("rounded-full", theme.ctaTextClass)}
+          buttonStyle={{ background: `linear-gradient(90deg, ${theme.ctaFrom}, ${theme.ctaTo})` }}
+        />
 
         <div className="mt-6 flex items-center justify-center gap-3">
           <span className="h-px flex-1" style={{ background: theme.border }} />

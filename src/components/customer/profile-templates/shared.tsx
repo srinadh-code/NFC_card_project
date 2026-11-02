@@ -11,6 +11,9 @@ export interface TemplateProps {
   onShare: () => void
   /** Gates phone/email visibility — see DigitalCardPreview for the same contract. */
   showContactInfo?: boolean
+  /** True only on the real public page — the dashboard preview shows the
+   * Contact Us section but never submits enquiries. */
+  enquiryEnabled?: boolean
 }
 
 export function digitsOnly(phone: string) {

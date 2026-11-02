@@ -1,4 +1,5 @@
 import { ArrowRight, Globe, Info, Link2, Mail, MessageCircle, Phone, User, UserPlus, Zap } from "lucide-react"
+import { ContactUsSection } from "./ContactUsSection"
 import { cn } from "@/lib/utils"
 import type { CustomField } from "@/types"
 import { findFieldByLabel, withoutFields } from "@/lib/custom-fields"
@@ -26,7 +27,7 @@ function findCustomFieldValue(fields: CustomField[], label: string): string | un
   return match?.value.trim() || undefined
 }
 
-export default function NatureTemplate({ profile, onShare, showContactInfo = true }: TemplateProps) {
+export default function NatureTemplate({ profile, onShare, showContactInfo = true, enquiryEnabled }: TemplateProps) {
   const { enabledSocial, customFields, showPhone, showEmail } = useProfileSections(profile, showContactInfo)
   const companyLabel = profile.company || "VR's GATEWAY"
   const tagline = findCustomFieldValue(profile.customFields, "Tagline")
@@ -213,6 +214,17 @@ export default function NatureTemplate({ profile, onShare, showContactInfo = tru
           itemClassName="rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-neutral-100"
           labelClassName="text-neutral-500"
           valueClassName="text-neutral-800"
+        />
+
+        <ContactUsSection
+          profile={profile}
+          enabled={enquiryEnabled}
+          accent={ACCENT_GREEN}
+          className="mt-6 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-neutral-100"
+          titleStyle={{ color: DARK_GREEN }}
+          textClassName="text-neutral-500"
+          buttonClassName="rounded-full text-white"
+          buttonStyle={{ background: ACCENT_GREEN }}
         />
 
         <div className="mt-7 flex items-center justify-center gap-3">

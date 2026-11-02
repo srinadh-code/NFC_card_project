@@ -2661,12 +2661,32 @@ export interface ApiLead {
   phone: string
   company: string
   message: string
+  status: LeadStatus
   created_at: string
 }
 
+export type LeadStatus = "NEW" | "CONTACTED" | "CONVERTED"
+
+export interface EnquiryInput {
+  username: string
+  name: string
+  email: string
+  phone: string
+  message: string
+}
+
 export const leadsApi = {
-  list: (page = 1, search = "") =>
-    requestPaginated<ApiLead>(`/customer/leads/?page=${page}${search ? `&search=${encodeURIComponent(search)}` : ""}`),
+  list: (page = 1, search = "", { pageSize = 10, status = "" }: { pageSize?: number; status?: LeadStatus | "" } = {}) => {
+    const qs = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
+    if (search) qs.set("search", search)
+    if (status) qs.set("status", status)
+    return requestPaginated<ApiLead>(`/customer/leads/?${qs.toString()}`)
+  },
+  // Public — a visitor on someone's profile page, no account.
+  submitEnquiry: (body: EnquiryInput) =>
+    request<ApiLead>(`/customer/leads/`, { method: "POST", body, auth: false }),
+  updateStatus: (id: number, status: LeadStatus) =>
+    request<ApiLead>(`/customer/leads/${id}/`, { method: "PATCH", body: { status } }),
 }
 
 // ---------------------------------------------------------------------

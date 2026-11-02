@@ -32,13 +32,14 @@ interface ThemedDigitalCardPreviewProps {
   profile: Profile
   onShare: () => void
   showContactInfo?: boolean
+  enquiryEnabled?: boolean
 }
 
 /** Renders the profile using whichever template the customer selected
  * (`profile.selectedTemplate`), falling back to Classic for an unrecognized
  * or missing id. Used by both the /qr-code live preview and the public
  * profile page, so selecting a template changes both from one save. */
-export function ThemedDigitalCardPreview({ profile, onShare, showContactInfo }: ThemedDigitalCardPreviewProps) {
+export function ThemedDigitalCardPreview({ profile, onShare, showContactInfo, enquiryEnabled }: ThemedDigitalCardPreviewProps) {
   const Template = PROFILE_TEMPLATE_COMPONENTS[profile.selectedTemplate] ?? DigitalCardPreview
-  return <Template profile={profile} onShare={onShare} showContactInfo={showContactInfo} />
+  return <Template profile={profile} onShare={onShare} showContactInfo={showContactInfo} enquiryEnabled={enquiryEnabled} />
 }

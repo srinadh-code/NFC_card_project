@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils"
 import type { CustomField } from "@/types"
 import { findFieldByLabel, withoutFields } from "@/lib/custom-fields"
 import { AdditionalInfoSection } from "./AdditionalInfoSection"
+import { ContactUsSection } from "./ContactUsSection"
 import {
   digitsOnly,
   downloadVCard,
@@ -176,7 +177,7 @@ function SectionHeading({ icon: Icon, title, color }: { icon: typeof User; title
   )
 }
 
-export default function ImpactTemplate({ profile, onShare, showContactInfo = true }: TemplateProps) {
+export default function ImpactTemplate({ profile, onShare, showContactInfo = true, enquiryEnabled }: TemplateProps) {
   const theme = IMPACT_THEMES[profile.impactTheme] ?? IMPACT_THEMES.red
   const { enabledSocial, enabledCustom, customFields, showPhone, showEmail } = useProfileSections(
     profile,
@@ -526,6 +527,18 @@ export default function ImpactTemplate({ profile, onShare, showContactInfo = tru
           Download vCard
           <ArrowRight className="size-4" />
         </button>
+
+        <ContactUsSection
+          profile={profile}
+          enabled={enquiryEnabled}
+          accent={theme.highlight}
+          className={cn("mt-6 rounded-2xl border p-4", theme.cardSurface)}
+          style={{ borderColor: theme.border }}
+          titleStyle={{ color: theme.ink }}
+          textClassName={theme.inkSoftClass}
+          buttonClassName={cn("rounded-full", theme.ctaTextClass)}
+          buttonStyle={{ background: `linear-gradient(90deg, ${theme.highlight}, ${theme.highlightTo})` }}
+        />
       </div>
 
       <div className="relative mt-2 h-16 w-full overflow-hidden">
