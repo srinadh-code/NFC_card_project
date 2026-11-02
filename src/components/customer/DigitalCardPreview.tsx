@@ -21,6 +21,8 @@ import {
 import { SOCIAL_BRAND } from "@/components/customer/brand-icons"
 import { cn } from "@/lib/utils"
 import type { Profile } from "@/types"
+import { getPublicCustomFields } from "@/lib/custom-fields"
+import { AdditionalInfoSection } from "./profile-templates/AdditionalInfoSection"
 
 interface DigitalCardPreviewProps {
   profile: Profile
@@ -133,7 +135,7 @@ export function DigitalCardPreview({
   const enabledCustom = [...profile.customLinks]
     .filter((l) => l.enabled && l.url.trim())
     .sort((a, b) => a.order - b.order)
-  const customFields = [...profile.customFields].sort((a, b) => a.order - b.order)
+  const customFields = getPublicCustomFields(profile.customFields)
   const activeServices = [...profile.services].filter((s) => s.isActive).sort((a, b) => a.order - b.order)
 
   // Backend now gates every one of these fields independently (show_email,
@@ -335,24 +337,12 @@ export function DigitalCardPreview({
             </div>
           )}
 
-          {/* Custom Details */}
-          {customFields.length > 0 && (
-            <div className="mt-7 w-full">
-              <SectionLabel>Custom Details</SectionLabel>
-              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                {customFields.map((field) => (
-                  <div key={field.id} className="rounded-2xl border border-border/70 bg-muted/30 px-3.5 py-2.5 text-left">
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                      {field.label || "Untitled"}
-                    </p>
-                    <p className="truncate text-sm font-semibold text-foreground" title={field.value}>
-                      {field.value || "—"}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Additional Information — the customer's custom fields */}
+          <AdditionalInfoSection
+            className="mt-7"
+            fields={customFields}
+            heading={<SectionLabel>Additional Information</SectionLabel>}
+          />
 
           {/* Remaining sections — custom links */}
           {enabledCustom.length > 0 && (

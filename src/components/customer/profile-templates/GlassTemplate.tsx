@@ -14,6 +14,8 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { withoutFields } from "@/lib/custom-fields"
+import { AdditionalInfoSection } from "./AdditionalInfoSection"
 import { SOCIAL_BRAND, digitsOnly, downloadVCard, TemplateFrame, useProfileSections, type TemplateProps } from "./shared"
 
 // Template 4 ("Glass") — a premium frosted-glass digital-identity card:
@@ -84,11 +86,15 @@ export default function GlassTemplate({ profile, onShare, showContactInfo = true
   const stripItems: Array<{ icon: LucideIcon; primary: string; secondary?: string }> = []
   const location = [profile.city, profile.state].filter(Boolean)
   if (location.length > 0) stripItems.push({ icon: MapPin, primary: location[0], secondary: location[1] })
+  const stripFieldIds: string[] = []
   for (const field of customFields) {
     if (stripItems.length >= 4) break
     if (!field.value?.trim()) continue
     stripItems.push({ icon: inferStripIcon(field.label), primary: field.value, secondary: field.label || undefined })
+    stripFieldIds.push(field.id)
   }
+  // Everything the compact strip had no room for.
+  const additionalFields = withoutFields(customFields, stripFieldIds)
 
   return (
     <TemplateFrame onShare={onShare} bodyClassName="relative max-h-[660px] overflow-y-auto bg-[#7C8FB8]">
@@ -234,6 +240,25 @@ export default function GlassTemplate({ profile, onShare, showContactInfo = true
                 )
               })}
             </div>
+          </div>
+        )}
+
+        {additionalFields.length > 0 && (
+          <div className="mt-4 rounded-2xl border border-white/60 bg-white/40 p-4 backdrop-blur-md">
+            <AdditionalInfoSection
+              fields={additionalFields}
+              heading={
+                <div className="mb-3 flex items-center justify-between text-slate-900">
+                  <span className="flex items-center gap-2 text-sm font-bold">
+                    <Info className="size-4" /> Additional Information
+                  </span>
+                  <ChevronRight className="size-4 text-slate-500" />
+                </div>
+              }
+              itemClassName="rounded-xl bg-white/50 px-3 py-2"
+              labelClassName="text-slate-600"
+              valueClassName="text-slate-900"
+            />
           </div>
         )}
 

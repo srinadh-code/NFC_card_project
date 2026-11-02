@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { CheckCircle2, Info, MapPin, Plus } from "lucide-react"
+import { AlertCircle, CheckCircle2, Info, Loader2, MapPin, Pencil, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AddressFormDialog } from "@/components/customer/AddressFormDialog"
@@ -76,6 +76,9 @@ export default function Checkout() {
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
   const [selectorOpen, setSelectorOpen] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
+  // Set -> the form dialog edits this address (e.g. to fix a PIN code that
+  // failed verification); null -> it adds a new one.
+  const [editingAddress, setEditingAddress] = useState<CustomerAddress | null>(null)
 
   // One id per checkout attempt (this page mount) — sent on every submit so
   // a double-click or retry resends the *same* id, letting the backend
@@ -104,6 +107,27 @@ export default function Checkout() {
 
   const selectedAddress = addresses.find((a) => a.id === selectedAddressId) ?? null
 
+  // The only source of "verified" on this page: the backend re-checks the
+  // selected address's PIN code against India Post every time it changes
+  // (customer_addresses CustomerAddressVerifyView). Order creation repeats
+  // the same check server-side, so this only gates the button/message.
+  const verificationQuery = useQuery({
+    queryKey: [
+      "address-verification",
+      selectedAddress?.id,
+      selectedAddress?.pincode,
+      selectedAddress?.city,
+      selectedAddress?.district,
+      selectedAddress?.state,
+    ],
+    queryFn: () => customerAddressApi.verify(selectedAddress!.id),
+    enabled: Boolean(selectedAddress),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  })
+  const verification = verificationQuery.data
+  const addressVerified = Boolean(selectedAddress) && verification?.verified === true && !verificationQuery.isFetching
+
   const sub = subtotal()
   // The live Order backend doesn't model a separate shipping charge yet —
   // the total shown here must match exactly what gets recorded server-side
@@ -123,6 +147,11 @@ export default function Checkout() {
     onError: (err) => {
       const message = err instanceof ApiError ? err.message : "Something went wrong placing your order."
       toast.error(message)
+      // The backend rejected the address at order time — refresh the
+      // on-page status so it shows the real reason instead of "verified".
+      if (err instanceof ApiError && err.errors.address_id) {
+        queryClient.invalidateQueries({ queryKey: ["address-verification"] })
+      }
     },
   })
 
@@ -132,8 +161,14 @@ export default function Checkout() {
 
   function handleAddressSaved(address: CustomerAddress) {
     queryClient.invalidateQueries({ queryKey: ["customer-addresses"] })
+    queryClient.invalidateQueries({ queryKey: ["address-verification"] })
     setSelectedAddressId(address.id)
     setSelectorOpen(false)
+  }
+
+  function openAddressForm(address: CustomerAddress | null) {
+    setEditingAddress(address)
+    setFormOpen(true)
   }
 
   function handleSubmit(e: FormEvent) {
@@ -145,6 +180,10 @@ export default function Checkout() {
     }
     if (!selectedAddress) {
       toast.error("Please select or add a delivery address.")
+      return
+    }
+    if (!addressVerified) {
+      toast.error("Please correct your delivery address before placing the order.")
       return
     }
 
@@ -209,7 +248,7 @@ export default function Checkout() {
             ) : addresses.length === 0 ? (
               <div className="mt-4 flex flex-col items-center gap-3 rounded-xl border border-dashed p-8 text-center">
                 <p className="text-sm font-medium text-foreground">No delivery address found.</p>
-                <Button type="button" onClick={() => setFormOpen(true)}>
+                <Button type="button" onClick={() => openAddressForm(null)}>
                   <Plus className="size-4" /> Add Delivery Address
                 </Button>
               </div>
@@ -226,7 +265,7 @@ export default function Checkout() {
                     }}
                   />
                 ))}
-                <Button type="button" variant="outline" className="mt-1" onClick={() => setFormOpen(true)}>
+                <Button type="button" variant="outline" className="mt-1" onClick={() => openAddressForm(null)}>
                   <Plus className="size-4" /> Add New Address
                 </Button>
               </div>
@@ -248,9 +287,53 @@ export default function Checkout() {
                   {selectedAddress.state} - {selectedAddress.pincode}
                 </p>
                 <p>{selectedAddress.country}</p>
-                <p className="pt-2 flex items-center gap-1.5 text-success">
-                  <CheckCircle2 className="size-3.5" /> Address details verified
-                </p>
+                <div className="pt-2" aria-live="polite">
+                  {verificationQuery.isFetching ? (
+                    <p className="flex items-center gap-1.5">
+                      <Loader2 className="size-3.5 animate-spin" /> Verifying PIN code and address…
+                    </p>
+                  ) : verification?.verified ? (
+                    <div className="space-y-0.5">
+                      <p className="flex items-center gap-1.5 text-success">
+                        <CheckCircle2 className="size-3.5" /> Address details verified
+                      </p>
+                      <p className="text-xs">
+                        PIN {selectedAddress.pincode} serves{" "}
+                        {[verification.matched_place || selectedAddress.city, verification.location?.state]
+                          .filter(Boolean)
+                          .join(", ")}
+                      </p>
+                      {verification.district_note && <p className="text-xs">{verification.district_note}</p>}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="flex items-start gap-1.5 text-destructive">
+                        <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+                        {verification
+                          ? (verification.errors.pincode ??
+                            Object.values(verification.errors)[0] ??
+                            "This address could not be verified.")
+                          : verificationQuery.error instanceof ApiError
+                            ? verificationQuery.error.message
+                            : "We couldn't verify your PIN code right now. Please try again in a moment."}
+                      </p>
+                      {verification ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openAddressForm(selectedAddress)}
+                        >
+                          <Pencil className="size-3.5" /> Edit Address
+                        </Button>
+                      ) : (
+                        <Button type="button" variant="outline" size="sm" onClick={() => verificationQuery.refetch()}>
+                          Retry
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             ) : null}
           </div>
@@ -316,14 +399,19 @@ export default function Checkout() {
             type="submit"
             size="lg"
             className="mt-6 w-full"
-            disabled={!selectedAddress || placeOrderMutation.isPending}
+            disabled={!addressVerified || placeOrderMutation.isPending}
           >
             {placeOrderMutation.isPending ? "Placing Order…" : "Place Order"}
           </Button>
         </div>
       </form>
 
-      <AddressFormDialog open={formOpen} onOpenChange={setFormOpen} onSaved={handleAddressSaved} />
+      <AddressFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        address={editingAddress}
+        onSaved={handleAddressSaved}
+      />
     </div>
   )
 }

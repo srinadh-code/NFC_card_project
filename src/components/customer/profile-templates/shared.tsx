@@ -1,6 +1,7 @@
 import { Briefcase, FileText, Link2, Newspaper, ShoppingBag, type LucideIcon } from "lucide-react"
 import { SOCIAL_BRAND } from "@/components/customer/brand-icons"
 import type { Profile } from "@/types"
+import { getPublicCustomFields } from "@/lib/custom-fields"
 
 /** Every profile-card template renders from this same shape — real profile
  * data only, never placeholder content (unlike the /shop marketing mockups,
@@ -66,7 +67,7 @@ export { SOCIAL_BRAND }
 export function useProfileSections(profile: Profile, showContactInfo: boolean) {
   const enabledSocial = [...profile.socialLinks].filter((l) => l.enabled && l.url.trim()).sort((a, b) => a.order - b.order)
   const enabledCustom = [...profile.customLinks].filter((l) => l.enabled && l.url.trim()).sort((a, b) => a.order - b.order)
-  const customFields = [...profile.customFields].sort((a, b) => a.order - b.order)
+  const customFields = getPublicCustomFields(profile.customFields)
   const activeServices = [...profile.services].filter((s) => s.isActive).sort((a, b) => a.order - b.order)
   const showPhone = showContactInfo && Boolean(profile.phone)
   const showEmail = showContactInfo && Boolean(profile.email)

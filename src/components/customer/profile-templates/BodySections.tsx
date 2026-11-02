@@ -1,6 +1,7 @@
 import { Building2, ChevronRight, Flag, Map as MapIcon, MapPin, Navigation } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Profile } from "@/types"
+import { AdditionalInfoSection } from "./AdditionalInfoSection"
 import { getCustomLinkVisual, SOCIAL_BRAND, useProfileSections } from "./shared"
 
 /** The data sections every template shares below its unique hero: social
@@ -113,25 +114,15 @@ export function BodySections({
         </div>
       )}
 
-      {customFields.length > 0 && (
-        <div className="mt-7 w-full">
+      <AdditionalInfoSection
+        className="mt-7"
+        fields={customFields}
+        heading={
           <SectionLabel color={labelColor} accent={accent}>
-            Custom Details
+            Additional Information
           </SectionLabel>
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-            {customFields.map((field) => (
-              <div key={field.id} className="rounded-2xl border border-border/70 bg-muted/30 px-3.5 py-2.5 text-left">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  {field.label || "Untitled"}
-                </p>
-                <p className="truncate text-sm font-semibold text-foreground" title={field.value}>
-                  {field.value || "—"}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+        }
+      />
 
       {enabledCustom.length > 0 && (
         <div className="mt-7 w-full">

@@ -154,6 +154,9 @@ export function validatePincode(raw: string): string | null {
   const value = raw.trim()
   if (!value) return "Please enter your PIN code."
   if (!/^\d{6}$/.test(value)) return "PIN code must contain exactly 6 digits."
-  if (/^(\d)\1{5}$/.test(value)) return "Please enter a valid PIN code."
+  // Format only — whether the PIN exists and matches the city/district/
+  // state is checked against India Post by the backend (see
+  // AddressFormDialog's live lookup and customer_addresses/pincode.py).
+  if (/^0/.test(value) || /^(\d)\1{5}$/.test(value)) return "Please enter a valid 6-digit Indian PIN code."
   return null
 }

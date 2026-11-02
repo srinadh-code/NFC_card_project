@@ -1,5 +1,6 @@
 import { Mail, MapPin, MessageCircle, Phone, Share2, UserPlus } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { AdditionalInfoSection } from "./AdditionalInfoSection"
 import { digitsOnly, downloadVCard, SOCIAL_BRAND, TemplateFrame, useProfileSections, type TemplateProps } from "./shared"
 
 // Real-world associated color per contact action (same values
@@ -89,7 +90,7 @@ const FOOTER_MESSAGE = "Let's Grow Together"
 
 export default function Template2({ profile, onShare, showContactInfo = true }: TemplateProps) {
   const theme = TEMPLATE2_THEMES[profile.futureTheme] ?? TEMPLATE2_THEMES.green
-  const { enabledSocial, showPhone, showEmail } = useProfileSections(profile, showContactInfo)
+  const { enabledSocial, customFields, showPhone, showEmail } = useProfileSections(profile, showContactInfo)
   const companyLabel = profile.company || "VR's GATEWAY"
 
   const contactActions = [
@@ -250,6 +251,21 @@ export default function Template2({ profile, onShare, showContactInfo = true }: 
             })}
           </div>
         )}
+
+        <AdditionalInfoSection
+          className="mt-6"
+          fields={customFields}
+          heading={
+            <p className="mb-3 text-center text-xs font-bold uppercase tracking-wide" style={{ color: theme.ink }}>
+              Additional Information
+            </p>
+          }
+          itemClassName="rounded-2xl border px-4 py-2.5"
+          itemStyle={{ borderColor: theme.border }}
+          labelClassName={theme.inkSoftClass}
+          valueClassName=""
+          valueStyle={{ color: theme.ink }}
+        />
 
         <button
           type="button"

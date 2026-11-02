@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CustomFieldsEditor } from "@/components/customer/CustomFieldsEditor"
+import { validateCustomFields, type CustomFieldErrors } from "@/lib/custom-fields"
 import { ProfileNotReady } from "@/components/customer/ProfileNotReady"
 import { useEnsuredProfile } from "@/hooks/use-ensured-profile"
 import type { CustomField } from "@/types"
@@ -50,6 +51,7 @@ export default function CustomerProfile() {
 
   const [form, setForm] = useState<FormState | null>(null)
   const [customFields, setCustomFields] = useState<CustomField[]>([])
+  const [customFieldErrors, setCustomFieldErrors] = useState<CustomFieldErrors>({})
 
   useEffect(() => {
     if (profile && !form) {
@@ -92,11 +94,34 @@ export default function CustomerProfile() {
         googleMapsUrl: payload.form.googleMapsUrl,
         bio: payload.form.bio,
       })
-      await profileApi.saveCustomFields(payload.customFields)
+      try {
+        return await profileApi.saveCustomFields(payload.customFields)
+      } catch (err) {
+        // The bulk endpoint's per-row errors are index-aligned with what
+        // was sent — map them back onto the editor rows by id.
+        if (err instanceof ApiError && Array.isArray(err.errors.fields)) {
+          const rowErrors: CustomFieldErrors = {}
+          ;(err.errors.fields as Array<Record<string, string[]> | null>).forEach((rowError, i) => {
+            const field = payload.customFields[i]
+            if (!field || !rowError || Object.keys(rowError).length === 0) return
+            rowErrors[field.id] = {
+              label: rowError.label?.join(" "),
+              value: rowError.value?.join(" "),
+            }
+          })
+          setCustomFieldErrors(rowErrors)
+        }
+        throw err
+      }
     },
-    onSuccess: () => {
+    onSuccess: (savedFields) => {
+      // Real ids from the server — so the next save updates these rows
+      // in place instead of creating them again.
+      setCustomFields(savedFields)
+      setCustomFieldErrors({})
       toast.success("Profile updated successfully.")
       queryClient.invalidateQueries({ queryKey: ["profile-me"] })
+      queryClient.invalidateQueries({ queryKey: ["public-profile"] })
     },
     onError: (err) => {
       const message = err instanceof ApiError ? err.message : "Something went wrong while saving your profile."
@@ -155,7 +180,32 @@ export default function CustomerProfile() {
       toast.error("Fix the Google Map Location link before saving — or clear it.")
       return
     }
-    mutation.mutate({ form, customFields })
+    // Checked before anything is sent, so a half-filled custom field never
+    // leaves the profile details saved but the fields not.
+    const fieldErrors = validateCustomFields(customFields)
+    setCustomFieldErrors(fieldErrors)
+    if (Object.keys(fieldErrors).length > 0) {
+      toast.error("Please complete or remove the highlighted custom fields.")
+      return
+    }
+    // Rows left completely empty (an untouched "Add Field") are dropped.
+    const filled = customFields.filter((f) => f.label.trim() || f.value.trim())
+    mutation.mutate({ form, customFields: filled })
+  }
+
+  function handleCustomFieldsChange(next: CustomField[]) {
+    setCustomFields(next)
+    // Clear a row's error as soon as it's edited or removed.
+    setCustomFieldErrors((errors) => {
+      const remaining: CustomFieldErrors = {}
+      for (const field of next) {
+        const prev = customFields.find((f) => f.id === field.id)
+        if (errors[field.id] && prev && prev.label === field.label && prev.value === field.value) {
+          remaining[field.id] = errors[field.id]
+        }
+      }
+      return remaining
+    })
   }
 
   if (!customer) return null
@@ -375,7 +425,12 @@ export default function CustomerProfile() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <CustomFieldsEditor fields={customFields} onChange={setCustomFields} />
+            <CustomFieldsEditor
+              fields={customFields}
+              onChange={handleCustomFieldsChange}
+              errors={customFieldErrors}
+              disabled={mutation.isPending}
+            />
           </CardContent>
         </Card>
       </form>

@@ -5,6 +5,7 @@ import {
   Download,
   Globe,
   GraduationCap,
+  Info,
   Link2,
   Mail,
   MapPin,
@@ -17,6 +18,8 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { CustomField } from "@/types"
+import { findFieldByLabel, withoutFields } from "@/lib/custom-fields"
+import { AdditionalInfoSection } from "./AdditionalInfoSection"
 import {
   digitsOnly,
   downloadVCard,
@@ -30,12 +33,11 @@ import {
 /** Impact — premium geometric business card. A single reusable component
  * with 4 switchable color themes (`profile.impactTheme`), same approach as
  * Template 1/LuxuryTemplate.tsx and Template 2/Template2.tsx. Deliberately
- * does not render the shared BodySections block (Services/extra Custom
- * Fields/Custom Links) — this design has its own fixed section set with no
- * room for a generic block, so a customer's non-matched custom fields
- * (e.g. "GST Number") won't show here. Experience/Education/Availability/
- * Tagline are sourced from CustomField by label match rather than new
- * dedicated Profile fields — see the plan's scope note. */
+ * does not render the shared BodySections block (Services/Custom Links) —
+ * this design has its own fixed section set. Experience/Education/
+ * Availability/Tagline are featured by CustomField label match (rather
+ * than new dedicated Profile fields); every *other* custom field (e.g.
+ * "GST Number") still shows, in its own Additional Information card. */
 
 interface ImpactThemeConfig {
   // Header/footer diagonal shapes — Primary (base) + Secondary (wedge).
@@ -154,6 +156,9 @@ function darkenHex(hex: string, amount: number): string {
   return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
 }
 
+// Custom-field labels this design features in dedicated spots.
+const FEATURED_FIELD_LABELS = ["Tagline", "Experience", "Education", "Availability"]
+
 function findCustomFieldValue(fields: CustomField[], label: string): string | undefined {
   const match = fields.find((f) => f.label.trim().toLowerCase() === label.toLowerCase())
   return match?.value.trim() || undefined
@@ -173,7 +178,14 @@ function SectionHeading({ icon: Icon, title, color }: { icon: typeof User; title
 
 export default function ImpactTemplate({ profile, onShare, showContactInfo = true }: TemplateProps) {
   const theme = IMPACT_THEMES[profile.impactTheme] ?? IMPACT_THEMES.red
-  const { enabledSocial, enabledCustom, showPhone, showEmail } = useProfileSections(profile, showContactInfo)
+  const { enabledSocial, enabledCustom, customFields, showPhone, showEmail } = useProfileSections(
+    profile,
+    showContactInfo,
+  )
+  const additionalFields = withoutFields(
+    customFields,
+    FEATURED_FIELD_LABELS.map((label) => findFieldByLabel(customFields, label)?.id),
+  )
   const companyLabel = profile.company || "VR's GATEWAY"
 
   const tagline = findCustomFieldValue(profile.customFields, "Tagline")
@@ -441,6 +453,24 @@ export default function ImpactTemplate({ profile, onShare, showContactInfo = tru
           <div className={cn("mt-5 rounded-2xl p-4 shadow-sm", theme.cardSurface)}>
             <SectionHeading icon={User} title="About Me" color={theme.ink} />
             <p className={cn("mt-2 text-sm leading-relaxed", theme.inkSoftClass)}>{profile.bio}</p>
+          </div>
+        )}
+
+        {additionalFields.length > 0 && (
+          <div className={cn("mt-5 rounded-2xl p-4 shadow-sm", theme.cardSurface)}>
+            <AdditionalInfoSection
+              fields={additionalFields}
+              heading={
+                <div className="mb-3">
+                  <SectionHeading icon={Info} title="Additional Information" color={theme.ink} />
+                </div>
+              }
+              itemClassName="border-t pt-2.5 first:border-t-0 first:pt-0"
+              itemStyle={{ borderColor: theme.border }}
+              labelClassName={theme.inkSoftClass}
+              valueClassName=""
+              valueStyle={{ color: theme.ink }}
+            />
           </div>
         )}
 

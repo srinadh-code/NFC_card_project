@@ -1,6 +1,8 @@
-import { ArrowRight, Globe, Link2, Mail, MessageCircle, Phone, User, UserPlus, Zap } from "lucide-react"
+import { ArrowRight, Globe, Info, Link2, Mail, MessageCircle, Phone, User, UserPlus, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { CustomField } from "@/types"
+import { findFieldByLabel, withoutFields } from "@/lib/custom-fields"
+import { AdditionalInfoSection } from "./AdditionalInfoSection"
 import { digitsOnly, downloadVCard, SOCIAL_BRAND, TemplateFrame, useProfileSections, type TemplateProps } from "./shared"
 
 /** Nature — premium white + soft-green corporate business card. Clean,
@@ -25,7 +27,7 @@ function findCustomFieldValue(fields: CustomField[], label: string): string | un
 }
 
 export default function NatureTemplate({ profile, onShare, showContactInfo = true }: TemplateProps) {
-  const { enabledSocial, showPhone, showEmail } = useProfileSections(profile, showContactInfo)
+  const { enabledSocial, customFields, showPhone, showEmail } = useProfileSections(profile, showContactInfo)
   const companyLabel = profile.company || "VR's GATEWAY"
   const tagline = findCustomFieldValue(profile.customFields, "Tagline")
 
@@ -194,6 +196,24 @@ export default function NatureTemplate({ profile, onShare, showContactInfo = tru
             </div>
           </div>
         )}
+
+        <AdditionalInfoSection
+          className="mt-5"
+          // Tagline already shows under the name — not repeated here.
+          fields={withoutFields(customFields, [findFieldByLabel(customFields, "Tagline")?.id])}
+          heading={
+            <p
+              className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide"
+              style={{ color: DARK_GREEN }}
+            >
+              <Info className="size-3.5" style={{ color: DARK_GREEN }} />
+              Additional Information
+            </p>
+          }
+          itemClassName="rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-neutral-100"
+          labelClassName="text-neutral-500"
+          valueClassName="text-neutral-800"
+        />
 
         <div className="mt-7 flex items-center justify-center gap-3">
           <span className="h-px flex-1 bg-neutral-200" />

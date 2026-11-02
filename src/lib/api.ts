@@ -428,7 +428,6 @@ interface ApiPublicProfile {
 // platform -> backend id, refreshed on every profile fetch.
 const socialLinkIdByPlatform = new Map<string, number>()
 const customLinkIdCache = new Map<string, number>()
-const customFieldIdCache = new Map<string, number>()
 
 function idKey(id: string): number | null {
   const n = Number(id)
@@ -438,11 +437,9 @@ function idKey(id: string): number | null {
 function toFrontendProfile(p: ApiProfile): Profile {
   socialLinkIdByPlatform.clear()
   customLinkIdCache.clear()
-  customFieldIdCache.clear()
 
   for (const link of p.social_links) socialLinkIdByPlatform.set(link.platform, link.id)
   for (const link of p.custom_links) customLinkIdCache.set(String(link.id), link.id)
-  for (const field of p.custom_fields) customFieldIdCache.set(String(field.id), field.id)
 
   return {
     id: String(p.id),
@@ -480,12 +477,16 @@ function toFrontendProfile(p: ApiProfile): Profile {
       .slice()
       .sort((a, b) => a.display_order - b.display_order)
       .map((l) => ({ id: String(l.id), label: l.label, url: l.url, enabled: l.enabled, order: l.display_order })),
-    customFields: p.custom_fields
-      .slice()
-      .sort((a, b) => a.display_order - b.display_order)
-      .map((f) => ({ id: String(f.id), label: f.label, value: f.value, order: f.display_order })),
+    customFields: toFrontendCustomFields(p.custom_fields),
     services: [],
   }
+}
+
+function toFrontendCustomFields(fields: ApiCustomField[]): CustomField[] {
+  return fields
+    .slice()
+    .sort((a, b) => a.display_order - b.display_order)
+    .map((f) => ({ id: String(f.id), label: f.label, value: f.value, order: f.display_order }))
 }
 
 function toFrontendService(s: ApiCustomerService): Service {
@@ -690,10 +691,7 @@ export const profileApi = {
           .slice()
           .sort((a, b) => a.display_order - b.display_order)
           .map((l) => ({ id: String(l.id), label: l.label, url: l.url, enabled: l.enabled, order: l.display_order })),
-        customFields: p.custom_fields
-          .slice()
-          .sort((a, b) => a.display_order - b.display_order)
-          .map((f) => ({ id: String(f.id), label: f.label, value: f.value, order: f.display_order })),
+        customFields: toFrontendCustomFields(p.custom_fields),
         services: p.services
           .slice()
           .sort((a, b) => a.display_order - b.display_order)
@@ -749,33 +747,21 @@ export const profileApi = {
     }
   },
 
-  // --- Custom fields: same full-sync pattern as custom links. ---
-  saveCustomFields: async (fields: CustomField[]) => {
-    const desiredIds = new Set(fields.map((f) => idKey(f.id)).filter((v): v is number => v !== null))
-    const toDelete = Array.from(customFieldIdCache.values()).filter((id) => !desiredIds.has(id))
-    await Promise.all(toDelete.map((id) => request(`/profiles/custom-fields/${id}/`, { method: "DELETE" })))
-
-    const resolvedIds: number[] = []
-    for (const field of fields) {
-      const existingId = idKey(field.id)
-      if (existingId !== null && customFieldIdCache.has(field.id)) {
-        await request(`/profiles/custom-fields/${existingId}/`, {
-          method: "PATCH",
-          body: { label: field.label, value: field.value },
-        })
-        resolvedIds.push(existingId)
-      } else {
-        const created = await request<ApiCustomField>("/profiles/custom-fields/", {
-          method: "POST",
-          body: { label: field.label, value: field.value },
-        })
-        resolvedIds.push(created.id)
-      }
-    }
-    if (resolvedIds.length) {
-      await request("/profiles/custom-fields/reorder/", { method: "PATCH", body: { order: resolvedIds } })
-    }
-  },
+  // --- Custom fields: one atomic replace of the whole list (create /
+  // update-in-place / delete / reorder) — see profiles CustomFieldViewSet.
+  // bulk. Rows added in the editor carry a client-only UUID, sent as no id
+  // so the backend creates them; returns the saved rows with real ids so
+  // the next save updates them instead of re-creating. A half-filled row
+  // rejects the whole save (ApiError.errors.fields[i] — index-aligned). ---
+  saveCustomFields: async (fields: CustomField[]): Promise<CustomField[]> =>
+    toFrontendCustomFields(
+      await request<ApiCustomField[]>("/profiles/custom-fields/bulk/", {
+        method: "PUT",
+        body: {
+          fields: fields.map((f) => ({ id: idKey(f.id), label: f.label, value: f.value })),
+        },
+      }),
+    ),
 }
 
 // ---------------------------------------------------------------------
@@ -858,6 +844,9 @@ export interface CustomerAddressInput {
   state: string
   pincode: string
   country?: string
+  /** Customer explicitly keeps a district India Post doesn't list for this
+   * PIN — only sent after the backend asked for it (not stored). */
+  confirmDistrict?: boolean
 }
 
 function toFrontendCustomerAddress(a: ApiCustomerAddress): CustomerAddress {
@@ -893,6 +882,7 @@ function toApiAddressPayload(values: CustomerAddressInput): Record<string, unkno
     state: values.state,
     pincode: values.pincode,
     country: values.country ?? "India",
+    ...(values.confirmDistrict ? { confirm_district: true } : {}),
   }
 }
 
@@ -922,6 +912,40 @@ export const customerAddressApi = {
     toFrontendCustomerAddress(
       await request<ApiCustomerAddress>(`/customer/addresses/${id}/set-default/`, { method: "POST" }),
     ),
+
+  // India Post's state/districts/post offices for a PIN — the address
+  // form's auto-fill. Rejects (ApiError 400) for a PIN that doesn't exist,
+  // 503 when the PIN directory can't be reached.
+  lookupPincode: (pincode: string) =>
+    request<PincodeLocation>(`/customer/addresses/pincode/${encodeURIComponent(pincode)}/`),
+
+  // Re-checks a saved address against its PIN code (see customer_addresses
+  // CustomerAddressVerifyView) — checkout's only source for "verified".
+  verify: (id: string) => request<AddressVerification>(`/customer/addresses/${id}/verify/`, { method: "POST" }),
+}
+
+export interface PincodeLocation {
+  pincode: string
+  state: string
+  states: string[]
+  /** As India Post lists them — may be a pre-reorganisation district. */
+  districts: string[]
+  /** Present-day districts the PIN may fall in (legacy-district mapping). */
+  current_districts: string[]
+  post_offices: string[]
+  /** Mandals/taluks the PIN serves. */
+  blocks: string[]
+}
+
+export interface AddressVerification {
+  verified: boolean
+  /** Field-keyed messages (pincode/state/district/city/locality) when not verified. */
+  errors: Partial<Record<"pincode" | "state" | "district" | "city" | "locality", string>>
+  /** The PIN's post office/mandal the address was matched to. */
+  matched_place: string
+  /** Set when the district was accepted via the legacy mapping/confirmation. */
+  district_note: string
+  location: PincodeLocation | null
 }
 
 // ---------------------------------------------------------------------
