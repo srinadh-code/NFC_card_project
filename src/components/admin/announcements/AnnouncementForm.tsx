@@ -209,7 +209,7 @@ export function AnnouncementForm({
         <Textarea
           value={form.message}
           onChange={(e) => setField("message", e.target.value)}
-          placeholder="Get 20% OFF on NEXORA Premium NFC Cards. Limited-time offer."
+          placeholder="Get 20% OFF on VR's Gateway NFC Cards. Limited-time offer."
           rows={3}
           aria-invalid={!!errors.message}
         />

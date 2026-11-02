@@ -10,9 +10,9 @@ import type { PublicGeneralSettings } from "@/types/content"
 // resilience fallback, never a substitute for it.
 const FALLBACK_SETTINGS: PublicGeneralSettings = {
   site_name: "VR's GATEWAY",
-  site_email: "support@vrsnexora.com",
-  site_phone: "+91 90000 12345",
-  site_address: "Hyderabad, Telangana, India",
+  site_email: "vrsgateway@gmail.com",
+  site_phone: "",
+  site_address: "Mulugu, Telangana, India",
   currency: "INR",
   timezone: "Asia/Kolkata",
   office_name: "VR's GATEWAY",
@@ -20,7 +20,7 @@ const FALLBACK_SETTINGS: PublicGeneralSettings = {
   office_address_line2: "",
   office_landmark: "",
   office_locality: "",
-  office_city: "Hyderabad",
+  office_city: "Mulugu",
   office_district: "",
   office_state: "Telangana",
   office_pincode: "",
@@ -28,7 +28,7 @@ const FALLBACK_SETTINGS: PublicGeneralSettings = {
   office_phone: "",
   support_email: "",
   support_phone: "",
-  website_url: "",
+  website_url: "https://nfc-card-project-peach.vercel.app",
   company_logo_url: null,
   favicon_url: null,
 }

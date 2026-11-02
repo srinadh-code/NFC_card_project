@@ -69,7 +69,7 @@ export default function Contact() {
       <section className="bg-background px-4 py-16">
         <div className="mx-auto grid max-w-6xl gap-12 lg:grid-cols-2">
           <div className="space-y-6">
-            {INFO.map((item) => (
+            {INFO.filter((item) => item.value).map((item) => (
               <div
                 key={item.label}
                 className={cn(cardClass, "flex items-start gap-4 p-5 dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)]")}

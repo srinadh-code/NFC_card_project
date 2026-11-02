@@ -17,7 +17,7 @@
   },
   {
     title: "Intellectual Property",
-    body: "The VR's GATEWAY name, logo, website design, and platform software are the intellectual property of VR's NEXORA Technologies Pvt. Ltd. You retain ownership of the content you upload to your profile, but grant us a license to host and display it as part of the service.",
+    body: "The VR's GATEWAY name, logo, website design, and platform software are the intellectual property of VR's Gateway. You retain ownership of the content you upload to your profile, but grant us a license to host and display it as part of the service.",
   },
   {
     title: "Limitation of Liability",

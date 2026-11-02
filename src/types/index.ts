@@ -44,7 +44,7 @@ export interface Customer {
   company: string
   designation: string
   address: Address
-  profileUrl: string // vrsnexora.com/u/username
+  profileUrl: string // <site host>/u/username
   username: string
   status: CustomerStatus
   avatar: string

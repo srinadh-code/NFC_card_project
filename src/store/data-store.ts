@@ -219,7 +219,7 @@ export const useDataStore = create<DataState>()(
 
         if (!profile) {
           const username = uniqueUsername(slugifyUsername(input.name, input.email), state.profiles)
-          customer = { ...customer, username, profileUrl: `vrsnexora.com/u/${username}` }
+          customer = { ...customer, username, profileUrl: `${window.location.host}/u/${username}` }
           profile = {
             id: nextId("PRO", state.profiles),
             customerId: id,

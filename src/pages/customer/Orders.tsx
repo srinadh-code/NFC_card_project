@@ -215,8 +215,8 @@ export default function CustomerOrders() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <Mail className="size-3.5" /> Need help with an order? Email{" "}
-              <a href="mailto:support@vrsnexora.com" className="font-medium text-primary hover:underline">
-                support@vrsnexora.com
+              <a href="mailto:vrsgateway@gmail.com" className="font-medium text-primary hover:underline">
+                vrsgateway@gmail.com
               </a>
             </p>
             {orders.length > 0 && (
