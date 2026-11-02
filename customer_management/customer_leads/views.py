@@ -6,7 +6,7 @@ from common.response import success
 from common.throttling import OtpRequestThrottle
 from common.views import PaginatedAPIView
 from . import services
-from .serializers import LeadSerializer, SubmitLeadSerializer
+from .serializers import LeadSerializer, SubmitLeadSerializer, UpdateLeadStatusSerializer
 
 
 class LeadSubmitThrottle(OtpRequestThrottle):
@@ -36,14 +36,31 @@ class CustomerLeadsView(PaginatedAPIView):
 
     def get(self, request):
         search = request.query_params.get("search", "")
-        leads = services.list_leads(request.user, search=search)
+        status_filter = request.query_params.get("status", "")
+        leads = services.list_leads(request.user, search=search, status=status_filter)
         return self.paginate(leads, LeadSerializer)
 
     def post(self, request):
         serializer = SubmitLeadSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        lead = services.submit_lead(serializer.validated_data)
-        return success(LeadSerializer(lead).data, message="Thanks! Your details have been sent.", status=201)
+        lead, created = services.submit_lead(serializer.validated_data)
+        return success(
+            LeadSerializer(lead).data,
+            message="Thanks! Your enquiry has been sent.",
+            status=201 if created else 200,
+        )
+
+
+class CustomerLeadDetailView(APIView):
+    """PATCH /api/customer/leads/<id>/ - the owner updates a lead's status."""
+
+    permission_classes = [IsCustomerRole]
+
+    def patch(self, request, lead_id):
+        serializer = UpdateLeadStatusSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        lead = services.update_lead_status(request.user, lead_id, serializer.validated_data["status"])
+        return success(LeadSerializer(lead).data, message="Lead status updated.")
 
 
 class CustomerLeadsExportView(APIView):
