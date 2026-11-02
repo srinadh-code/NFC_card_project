@@ -14,6 +14,7 @@ import type {
   Profile,
   Service,
   SocialLink,
+  SocialPlatform,
   SupportTicket,
   TicketPriority,
   TicketStatus,
@@ -715,9 +716,14 @@ export const profileApi = {
     return profileApi.getMine()
   },
 
-  getPublic: async (username: string): Promise<Profile | null> => {
+  // `src: "qr"` marks this load as a QR-code scan — the backend then also
+  // records a QR_SCAN for the profile owner (profiles.views.PublicProfileView).
+  getPublic: async (username: string, src?: "qr"): Promise<Profile | null> => {
     try {
-      const p = await request<ApiPublicProfile>(`/profiles/public/${encodeURIComponent(username)}/`, { auth: false })
+      const query = src === "qr" ? "?src=qr" : ""
+      const p = await request<ApiPublicProfile>(`/profiles/public/${encodeURIComponent(username)}/${query}`, {
+        auth: false,
+      })
       return {
         id: p.username,
         customerId: p.username,
@@ -2374,6 +2380,22 @@ export const analyticsApi = {
     requestPaginated<ApiAnalyticsEvent>(`/customer/analytics/taps/?page=${page}&page_size=${pageSize}`),
   getScans: (page = 1, pageSize = 100) =>
     requestPaginated<ApiAnalyticsEvent>(`/customer/analytics/scans/?page=${page}&page_size=${pageSize}`),
+
+  /** Fire-and-forget: records a visitor's click on a social link of
+   * `username`'s public profile. Sent as a beacon (form-encoded, so no CORS
+   * preflight) so it survives the page navigating away and never delays
+   * opening the link. Failures are ignored — analytics must never break
+   * the profile. */
+  trackSocialClick: (username: string, platform: SocialPlatform) => {
+    const url = `${API_BASE_URL}/customer/analytics/track/social-click/`
+    const body = new URLSearchParams({ username, platform })
+    try {
+      if (navigator.sendBeacon?.(url, body)) return
+    } catch {
+      // fall through to fetch
+    }
+    fetch(url, { method: "POST", body, keepalive: true }).catch(() => {})
+  },
 }
 
 // ---------------------------------------------------------------------
