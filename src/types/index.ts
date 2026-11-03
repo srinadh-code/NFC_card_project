@@ -301,6 +301,8 @@ export interface CartLine {
   finalPrice?: number
   discountAmount?: number
   offerTitle?: string | null
+  // Bulk pricing tier applied to this line ("Buy 3"), from the backend cart.
+  pricingTier?: string | null
 }
 
 export interface AdminUser {

@@ -1,103 +1,64 @@
 import { useEffect, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ArrowDown, CheckCircle2, Minus, Plus } from "lucide-react"
+import { ArrowDown, PackageSearch } from "lucide-react"
 import { toast } from "sonner"
 import PageHeader from "@/components/marketing/PageHeader"
-import NexoraCardSelector from "@/components/marketing/NexoraCardSelector"
 import ProfileThemeShowcase from "@/components/marketing/ProfileThemeShowcase"
+import { ProductDetails } from "@/components/shop/ProductDetails"
+import { ProductSelection } from "@/components/shop/ProductSelection"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
-import { formatCurrency } from "@/lib/mock-api"
 import { ApiError, ordersApi, profileApi, CARD_TYPE_MAP } from "@/lib/api"
 import { publicWebsiteApi } from "@/lib/contentApi"
-import { CARD_THEME_IDS, PROFILE_THEMES, type NexoraCardType } from "@/data/constants"
+import { CARD_THEME_IDS, PROFILE_THEMES } from "@/data/constants"
 import { useCart } from "@/hooks/useCart"
-import { cn } from "@/lib/utils"
-import { cardClass, gradientClass } from "@/components/marketing/PremiumCard"
-import { NfcCardFace } from "@/components/marketing/NfcCardShowcase"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
 import { useEnsuredProfile } from "@/hooks/use-ensured-profile"
 import { resolveIcon } from "@/lib/icon-map"
+import { clampQty, unitPriceFor } from "@/lib/order-card-pricing"
 import type { OrderCardProduct } from "@/types/content"
 
-// Maps the admin-editable catalog (see Website Content → Order Card) onto
-// the exact shape NexoraCardSelector/ProfileThemeShowcase already expect —
-// those presentational components stay unchanged; only where their data
-// comes from changes.
-function toNexoraCardType(p: OrderCardProduct): NexoraCardType {
-  return {
-    id: p.slug,
-    name: p.name,
-    price: Number(p.price),
-    discountedPrice: p.discounted_price ?? undefined,
-    offerTitle: p.offer_title ?? undefined,
-    design: p.design,
-    bestFor: p.best_for,
-    templateCount: p.template_count ?? undefined,
-    features: p.features
-      .split("\n")
-      .map((f) => f.trim())
-      .filter(Boolean),
-    cardType: CARD_TYPE_MAP[p.card_type] ?? "Custom",
-    cardTone: p.card_tone || undefined,
-    image: p.image_url || undefined,
-    imageCaption: p.image_caption || undefined,
-    color: { name: p.color_name, hex: p.color_hex },
-    popular: p.popular,
-    themePlanCopy: p.theme_plan_copy || undefined,
-  }
-}
-
+/** The Order Card page: a product selection screen, and each product's
+ * details screen shown in place on the same page (no separate route). All
+ * product content comes from Website Content → Order Card. */
 export default function Shop() {
   const navigate = useNavigate()
-  const { addLine } = useCart()
-  const [selectedId, setSelectedId] = useState<string>("")
-  // The single "selected card" details section below — choosing a card
-  // (even the already-selected one) brings it into view.
-  const detailsRef = useRef<HTMLElement>(null)
+  const { addLineAsync } = useCart()
+  const { settings } = usePublicSettings()
+  const queryClient = useQueryClient()
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
+  const [pendingAction, setPendingAction] = useState<"cart" | "buy" | null>(null)
+  const topRef = useRef<HTMLDivElement>(null)
   // The "Choose Your Profile Theme" section, target of "View N Templates".
   const themesRef = useRef<HTMLElement>(null)
-  function scrollToSection(ref: React.RefObject<HTMLElement | null>) {
-    const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    requestAnimationFrame(() =>
-      ref.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" }),
-    )
-  }
-  function handleSelectCard(id: string) {
-    setSelectedId(id)
-    scrollToSection(detailsRef)
-  }
-  // "N Templates Included" on a selection card: the theme section only
-  // renders for the selected card, so select it first, then jump there.
-  function handleViewTemplates(id: string) {
-    setSelectedId(id)
-    scrollToSection(themesRef)
-  }
-  const { settings } = usePublicSettings()
-  const [qty, setQty] = useState(1)
-  const queryClient = useQueryClient()
 
-  const { data, isLoading, isError } = useQuery({
+  function scrollTo(ref: React.RefObject<HTMLElement | null>) {
+    const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    requestAnimationFrame(() => ref.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" }))
+  }
+
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["content", "public-order-card"],
     queryFn: publicWebsiteApi.getOrderCard,
   })
-  const cardTypes = (data?.products ?? []).map(toNexoraCardType)
+  const products = data?.products ?? []
+  const selected = products.find((p) => p.slug === selectedSlug) ?? null
 
-  // Default to the first product once the catalog loads — mirrors the old
-  // static array's guarantee of "always at least one card", just resolved
-  // asynchronously now instead of at module load.
+  // A product unpublished while its details are open drops back to the list.
   useEffect(() => {
-    if (cardTypes.length > 0 && !cardTypes.some((c) => c.id === selectedId)) {
-      setSelectedId(cardTypes[0].id)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data])
+    if (selectedSlug && data && !selected) setSelectedSlug(null)
+  }, [data, selected, selectedSlug])
+
+  function openProduct(slug: string | null) {
+    setSelectedSlug(slug)
+    scrollTo(topRef)
+  }
+
   // Only populated for a signed-in customer (the query is disabled without
   // one) — used purely to let a logged-in customer select their profile
   // template straight from this showcase, same as the picker in Customer
-  // Dashboard → QR Code below.
+  // Dashboard → QR Code.
   const { customer, profile } = useEnsuredProfile()
   // Same real-order check the Customer Dashboard → QR Code page uses to
   // gate template selection — shares its query key, so this is a cache hit
@@ -111,28 +72,20 @@ export default function Shop() {
     (order) => order.status !== "CANCELLED" && order.items.some((item) => item.card_type === "CUSTOM"),
   )
 
-  // Undefined only while loading/erroring/empty-catalog — guarded below
-  // before anything renders that dereferences it.
-  const selectedCard = cardTypes.find((c) => c.id === selectedId) ?? cardTypes[0]
   // Products with no profile-template entitlement (e.g. Google Review Card)
-  // simply have no entry in CARD_THEME_IDS, so this is an empty array for
-  // them — the theme section below hides itself when that happens.
-  const availableThemeIds = selectedCard ? (CARD_THEME_IDS[selectedCard.id] ?? []) : []
+  // simply have no entry in CARD_THEME_IDS, so the theme section stays
+  // hidden for them.
+  const availableThemeIds = selected ? (CARD_THEME_IDS[selected.slug] ?? []) : []
   const availableThemes = PROFILE_THEMES.filter((t) => availableThemeIds.includes(t.id))
   // Admin-uploaded image override per template id (Website Content → Order
   // Card → Profile Templates) — falls back to the code-drawn mockup for any
-  // id with no active override, so this is inert until an admin uploads one.
+  // id with no active override.
   const templateImagesById = Object.fromEntries(
-    (data?.profile_templates ?? [])
-      .filter((t) => t.is_active && t.image_url)
-      .map((t) => [t.template_id, t.image_url]),
+    (data?.profile_templates ?? []).filter((t) => t.is_active && t.image_url).map((t) => [t.template_id, t.image_url]),
   )
 
   // Same API call, same cache key, and same success/error handling as the
-  // Customer Dashboard → QR Code template picker (ProfileTemplatesSection) —
-  // reused here rather than duplicated so selecting a theme from this public
-  // showcase updates the exact same profile, immediately reflected on the
-  // customer's public profile link and in the admin view.
+  // Customer Dashboard → QR Code template picker (ProfileTemplatesSection).
   const selectTemplateMutation = useMutation({
     mutationFn: (templateId: string) => profileApi.updateSelectedTemplate(templateId),
     onSuccess: (updated) => {
@@ -144,59 +97,49 @@ export default function Shop() {
     },
   })
 
-  function buildLine() {
-    if (!selectedCard) throw new Error("No card selected")
-    return {
-      productId: `PRD-NEXORA-${selectedCard.id.toUpperCase()}`,
-      name: selectedCard.name,
-      cardType: selectedCard.cardType,
-      color: selectedCard.color,
-      qty,
-      price: selectedCard.price,
+  async function addToCart(product: OrderCardProduct, rawQty: number, action: "cart" | "buy") {
+    const qty = clampQty(rawQty)
+    setPendingAction(action)
+    try {
+      // The backend replaces name/type/price with the catalog's own values
+      // and prices the line by quantity — `price` here is only the guest
+      // cart's display value until then.
+      await addLineAsync({
+        productId: product.product_id,
+        name: product.name,
+        cardType: CARD_TYPE_MAP[product.card_type] ?? "Custom",
+        color: { name: product.color_name || "Standard", hex: product.color_hex },
+        qty,
+        price: unitPriceFor(product, qty),
+      })
+      if (action === "buy") navigate("/checkout")
+      else toast.success(`${product.name} × ${qty} added to cart.`)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't add this card to your cart. Please try again.")
+    } finally {
+      setPendingAction(null)
     }
-  }
-
-  function validate(): boolean {
-    if (!selectedCard) return false
-    if (qty < 1) {
-      toast.error("Quantity must be at least 1.")
-      return false
-    }
-    return true
-  }
-
-  function handleAddToCart() {
-    if (!validate()) return
-    addLine(buildLine())
-    toast.success("Added to cart!")
-  }
-
-  function handleBuyNow() {
-    if (!validate()) return
-    addLine(buildLine())
-    navigate("/checkout")
   }
 
   if (isError) {
     return (
-      <div>
-        <p className="py-24 text-center text-muted-foreground">
-          Couldn&apos;t load this page&apos;s content. Please try again shortly.
-        </p>
+      <div className="px-4 py-24 text-center">
+        <p className="text-muted-foreground">Couldn&apos;t load the cards right now. Please try again shortly.</p>
+        <Button variant="outline" className="mt-4" onClick={() => refetch()}>
+          Try again
+        </Button>
       </div>
     )
   }
 
-  if (isLoading || !selectedCard) {
+  if (isLoading) {
     return (
       <div>
         <PageHeader title="" subtitle="" />
-        <section className="bg-[#F8FAFC] px-4 py-16">
-          <div className="mx-auto max-w-[1320px] space-y-4">
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-              <Skeleton className="h-96 w-full rounded-[24px]" />
-              <Skeleton className="h-96 w-full rounded-[24px]" />
-            </div>
+        <section className="bg-[#F8FAFC] px-4 py-16 dark:bg-transparent">
+          <div className="mx-auto grid max-w-[1100px] grid-cols-1 gap-6 sm:grid-cols-2">
+            <Skeleton className="h-96 w-full rounded-[24px]" />
+            <Skeleton className="h-96 w-full rounded-[24px]" />
           </div>
         </section>
       </div>
@@ -204,267 +147,126 @@ export default function Shop() {
   }
 
   return (
-    <div>
-      <PageHeader title={data?.page.page_title ?? ""} subtitle={data?.page.page_subtitle} />
-
-      {/* 1. Choose Your NEXORA Card */}
-      <section className="bg-[#F8FAFC] px-4 pb-8 pt-10 sm:pb-10 sm:pt-12">
-        <div className="mx-auto max-w-[1320px]">
-          <NexoraCardSelector
-            cardTypes={cardTypes}
-            selectedId={selectedId}
-            onSelect={handleSelectCard}
-            onViewTemplates={handleViewTemplates}
-          />
-        </div>
-      </section>
-
-      {/* 2. Selected card + detailed ordering — appears exactly once, at
-          the end of the page. */}
-      {/* scroll-mt clears the sticky navbar (~78px tall) on scrollIntoView,
-          plus extra room so the card heading settles well below it. */}
-      <section ref={detailsRef} id="card-details" className="scroll-mt-28 bg-secondary px-4 py-8 sm:py-10">
-        <div
-          className={cn(
-            cardClass,
-            "mx-auto grid max-w-[1320px] gap-12 p-6 hover:translate-y-0 hover:shadow-[0_10px_30px_rgba(0,0,0,0.06)] sm:p-10 lg:grid-cols-2",
-          )}
-        >
-          {/* Left: product info + configurator */}
-          <div className="space-y-8">
-            <div>
-              <div className="flex flex-wrap items-center gap-3">
-                <h2 className="text-2xl font-bold text-foreground">{selectedCard.name}</h2>
-                {selectedCard.popular && (
-                  <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                    Most Popular
-                  </span>
-                )}
-              </div>
-              {/* A card that includes profile templates gets a jump to the
-                  theme section here instead of repeating its price (still
-                  shown on its selection card and in the summary below);
-                  any other card keeps its price. */}
-              {availableThemes.length > 0 ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="mt-3 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 focus-visible:ring-blue-400/50 dark:bg-blue-500/15 dark:text-blue-300 dark:hover:bg-blue-500/25 dark:hover:text-blue-200"
-                  onClick={() => scrollToSection(themesRef)}
-                >
-                  View {availableThemes.length} Templates
-                  <ArrowDown className="size-4" aria-hidden="true" />
-                </Button>
+    <div ref={topRef} className="scroll-mt-28">
+      {!selected ? (
+        <>
+          <PageHeader title={data?.page.page_title ?? ""} subtitle={data?.page.page_subtitle}>
+            <span className="mt-5 inline-block rounded-full bg-primary/10 px-4 py-1.5 text-xs font-bold tracking-wider text-primary">
+              SHOP NFC CARDS
+            </span>
+          </PageHeader>
+          <section className="bg-[#F8FAFC] px-4 pb-14 pt-10 dark:bg-transparent sm:pt-12">
+            <div className="mx-auto max-w-[1100px]">
+              {products.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 py-16 text-center">
+                  <PackageSearch className="size-10 text-muted-foreground" />
+                  <p className="font-semibold text-foreground">No cards are available right now</p>
+                  <p className="text-sm text-muted-foreground">Please check back soon.</p>
+                </div>
               ) : (
-                <div className="mt-3 flex flex-wrap items-baseline gap-3">
-                  <p
-                    className={cn(
-                      "bg-gradient-to-r bg-clip-text text-3xl font-bold text-transparent",
-                      gradientClass,
+                <ProductSelection products={products} currency={settings.currency} onSelect={openProduct} />
+              )}
+            </div>
+          </section>
+        </>
+      ) : (
+        <>
+          <section className="bg-[#F8FAFC] px-4 py-8 dark:bg-transparent sm:py-10">
+            <div className="mx-auto max-w-[1320px]">
+              <ProductDetails
+                key={selected.slug}
+                product={selected}
+                currency={settings.currency}
+                onBack={() => openProduct(null)}
+                onAddToCart={(qty) => addToCart(selected, qty, "cart")}
+                onBuyNow={(qty) => addToCart(selected, qty, "buy")}
+                pendingAction={pendingAction}
+                extra={
+                  <div className="space-y-4">
+                    {availableThemes.length > 0 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 focus-visible:ring-blue-400/50 dark:bg-blue-500/15 dark:text-blue-300 dark:hover:bg-blue-500/25 dark:hover:text-blue-200"
+                        onClick={() => scrollTo(themesRef)}
+                      >
+                        View {availableThemes.length} Templates
+                        <ArrowDown className="size-4" aria-hidden="true" />
+                      </Button>
                     )}
-                  >
-                    {formatCurrency(selectedCard.discountedPrice ?? selectedCard.price, settings.currency)}
-                  </p>
-                  {selectedCard.discountedPrice != null && (
-                    <>
-                      <p className="text-lg text-muted-foreground line-through">
-                        {formatCurrency(selectedCard.price, settings.currency)}
-                      </p>
-                      <span className="rounded-full bg-success/10 px-2.5 py-1 text-xs font-bold text-success">
-                        {Math.round((1 - selectedCard.discountedPrice / selectedCard.price) * 100)}% OFF
-                        {selectedCard.offerTitle ? ` · ${selectedCard.offerTitle}` : ""}
-                      </span>
-                    </>
-                  )}
-                </div>
-              )}
-              <p className="mt-3 max-w-lg text-muted-foreground">{selectedCard.design}</p>
-            </div>
-
-            {/* Selected-card summary — the only place these values are read
-                from is `selectedCard`, so switching tiers above updates
-                everything here automatically. A product with no
-                profile-template entitlement (e.g. Google Review Card) drops
-                to a two-column summary instead of showing "Templates
-                Included: 0". */}
-            <div
-              className={cn(
-                "grid gap-3 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 text-center",
-                selectedCard.templateCount ? "grid-cols-3" : "grid-cols-2",
-              )}
-            >
-              <div>
-                <p className="text-xs text-muted-foreground">Selected Card</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{selectedCard.name.replace(/^(NEXORA|GATEWAY) /, "")}</p>
-              </div>
-              <div className={cn(selectedCard.templateCount ? "border-x" : "border-l", "border-[#E2E8F0]")}>
-                <p className="text-xs text-muted-foreground">Price</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">
-                  {formatCurrency(selectedCard.discountedPrice ?? selectedCard.price, settings.currency)}
-                </p>
-              </div>
-              {!!selectedCard.templateCount && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Templates Included</p>
-                  <p className="mt-1 text-sm font-semibold text-foreground">{selectedCard.templateCount}</p>
-                </div>
-              )}
-            </div>
-
-            <ul className="space-y-3">
-              {selectedCard.features.map((feature) => (
-                <li key={feature} className="flex items-start gap-3 text-sm font-medium text-foreground">
-                  <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary" />
-                  {feature}
-                </li>
-              ))}
-            </ul>
-
-            <div>
-              <Label className="mb-3 block text-sm font-semibold text-foreground">Quantity</Label>
-              <div className="flex items-center gap-3">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setQty((q) => Math.max(1, q - 1))}
-                  aria-label="Decrease quantity"
-                >
-                  <Minus className="size-4" />
-                </Button>
-                <span className="w-10 text-center text-lg font-semibold">{qty}</span>
-                <Button variant="outline" size="icon" onClick={() => setQty((q) => q + 1)} aria-label="Increase quantity">
-                  <Plus className="size-4" />
-                </Button>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-4 rounded-[24px] border border-border bg-card p-5 shadow-[0_10px_30px_rgba(0,0,0,0.06)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Price</p>
-                <p className={cn("bg-gradient-to-r bg-clip-text text-2xl font-bold text-transparent", gradientClass)}>
-                  {formatCurrency((selectedCard.discountedPrice ?? selectedCard.price) * qty, settings.currency)}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="border-primary text-primary transition-all duration-300 hover:bg-primary/5"
-                  onClick={handleAddToCart}
-                >
-                  Add To Cart
-                </Button>
-                <Button
-                  size="lg"
-                  className="rounded-xl bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-[0_10px_30px_rgba(79,70,229,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_15px_35px_rgba(79,70,229,0.45)]"
-                  onClick={handleBuyNow}
-                >
-                  Buy Now
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {(data?.trust_badges ?? []).map((b) => {
-                const Icon = resolveIcon(b.icon)
-                return (
-                  <div
-                    key={b.id}
-                    className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 text-center"
-                  >
-                    <Icon className="size-5 text-primary" />
-                    <span className="text-xs font-medium text-muted-foreground">{b.label}</span>
+                    {(data?.trust_badges ?? []).length > 0 && (
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2">
+                        {(data?.trust_badges ?? []).map((b) => {
+                          const Icon = resolveIcon(b.icon)
+                          return (
+                            <div key={b.id} className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
+                              <Icon className="size-4 shrink-0 text-primary" />
+                              <span className="text-xs font-medium text-muted-foreground">{b.label}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Right: card showcase. Custom (and any other tone-based tier)
-              uses the drawn NfcCardFace mockup; a product with a real photo
-              (e.g. Google Review Card) renders that image instead — same
-              frame, same sizing, just a different visual inside it. */}
-          <div className="flex flex-col items-center justify-center">
-            <div className="relative flex h-80 w-full max-w-sm items-center justify-center overflow-hidden rounded-[32px] sm:h-[26rem] sm:max-w-lg lg:h-[28rem] lg:max-w-xl bg-gradient-to-br from-[#0B0F1A] via-[#12142B] to-[#1A0F2E] p-8 shadow-2xl">
-              <div className="pointer-events-none absolute left-1/4 top-1/5 size-56 rounded-full bg-[#7C3AED]/30 blur-[90px]" />
-              <div className="pointer-events-none absolute bottom-1/5 right-1/4 size-56 rounded-full bg-[#2563EB]/30 blur-[90px]" />
-              <div className="relative h-44 w-full max-w-xs animate-float-slow sm:h-56 sm:max-w-sm lg:h-64 lg:max-w-md">
-                <div className="h-full w-full -rotate-3 cursor-pointer transition-transform duration-500 ease-out hover:-rotate-1 hover:scale-[1.04]">
-                  {selectedCard.image ? (
-                    <img
-                      src={selectedCard.image}
-                      alt={selectedCard.name}
-                      className="h-full w-full object-contain drop-shadow-2xl"
-                    />
-                  ) : (
-                    <NfcCardFace tone={selectedCard.cardTone ?? "custom"} />
-                  )}
-                </div>
-              </div>
-            </div>
-            <p className="mt-6 max-w-xs text-center text-sm text-muted-foreground">
-              {selectedCard.imageCaption ??
-                `Every ${selectedCard.name} ships in this finish: ${selectedCard.design.toLowerCase()}.`}
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* 3. Choose Your Profile Theme — the final customization step,
-          appearing only here at the end of the page, before the footer.
-          Available themes are entirely driven by selectedCard above; no
-          logic here duplicates the card-selection state. Hidden entirely
-          for a product with no profile-template entitlement (e.g. Google
-          Review Card) rather than showing an empty theme grid. */}
-      {availableThemes.length > 0 && (
-        <section ref={themesRef} id="profile-themes" className="scroll-mt-20 px-4 pb-14 pt-10 sm:pb-16 sm:pt-12">
-          <div className="mx-auto max-w-[1320px]">
-            <div className="mx-auto max-w-2xl text-center">
-              <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-                {data?.page.theme_section_heading || "Choose Your Profile Theme"}
-              </h2>
-              <p className="mt-3 text-muted-foreground">{data?.page.theme_section_subtitle}</p>
-
-              <span className="mt-5 inline-block rounded-full bg-[#4F46E5]/10 px-4 py-1.5 text-xs font-bold tracking-wider text-[#4F46E5]">
-                {selectedCard.id.toUpperCase()} • {selectedCard.templateCount}{" "}
-                {selectedCard.templateCount === 1 ? "THEME" : "THEMES"} INCLUDED
-              </span>
-              <p className="mt-3 text-sm text-muted-foreground">{selectedCard.themePlanCopy}</p>
-              {customer && profile ? (
-                hasCustomCard ? (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Signed in — click a template below to set it on your profile.
-                  </p>
-                ) : (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Purchase GATEWAY Custom above to unlock template selection.
-                  </p>
-                )
-              ) : (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  <Link to="/login" className="font-semibold text-primary hover:underline">
-                    Log in
-                  </Link>{" "}
-                  to select one of these for your own profile.
-                </p>
-              )}
-            </div>
-
-            <div className="mt-8">
-              <ProfileThemeShowcase
-                themes={availableThemes}
-                selectedId={customer && profile && hasCustomCard ? profile.selectedTemplate : undefined}
-                onSelect={
-                  customer && profile && hasCustomCard
-                    ? (id) => id !== profile.selectedTemplate && selectTemplateMutation.mutate(id)
-                    : undefined
                 }
-                pendingId={selectTemplateMutation.isPending ? (selectTemplateMutation.variables ?? null) : null}
-                imagesByThemeId={templateImagesById}
               />
             </div>
-          </div>
-        </section>
+          </section>
+
+          {/* Choose Your Profile Theme — unchanged; only for a product with
+              profile templates (the NFC Custom card), never for Google
+              Review Card. */}
+          {availableThemes.length > 0 && (
+            <section ref={themesRef} id="profile-themes" className="scroll-mt-20 px-4 pb-14 pt-10 sm:pb-16 sm:pt-12">
+              <div className="mx-auto max-w-[1320px]">
+                <div className="mx-auto max-w-2xl text-center">
+                  <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                    {data?.page.theme_section_heading || "Choose Your Profile Theme"}
+                  </h2>
+                  <p className="mt-3 text-muted-foreground">{data?.page.theme_section_subtitle}</p>
+
+                  <span className="mt-5 inline-block rounded-full bg-[#4F46E5]/10 px-4 py-1.5 text-xs font-bold tracking-wider text-[#4F46E5]">
+                    {selected.slug.toUpperCase()} • {selected.template_count}{" "}
+                    {selected.template_count === 1 ? "THEME" : "THEMES"} INCLUDED
+                  </span>
+                  <p className="mt-3 text-sm text-muted-foreground">{selected.theme_plan_copy}</p>
+                  {customer && profile ? (
+                    hasCustomCard ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Signed in — click a template below to set it on your profile.
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Purchase {selected.name} above to unlock template selection.
+                      </p>
+                    )
+                  ) : (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      <Link to="/login" className="font-semibold text-primary hover:underline">
+                        Log in
+                      </Link>{" "}
+                      to select one of these for your own profile.
+                    </p>
+                  )}
+                </div>
+
+                <div className="mt-8">
+                  <ProfileThemeShowcase
+                    themes={availableThemes}
+                    selectedId={customer && profile && hasCustomCard ? profile.selectedTemplate : undefined}
+                    onSelect={
+                      customer && profile && hasCustomCard
+                        ? (id) => id !== profile.selectedTemplate && selectTemplateMutation.mutate(id)
+                        : undefined
+                    }
+                    pendingId={selectTemplateMutation.isPending ? (selectTemplateMutation.variables ?? null) : null}
+                    imagesByThemeId={templateImagesById}
+                  />
+                </div>
+              </div>
+            </section>
+          )}
+        </>
       )}
     </div>
   )

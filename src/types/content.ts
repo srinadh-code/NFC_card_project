@@ -265,9 +265,53 @@ export interface OrderCardPageSettings extends WithId {
   is_active: boolean
 }
 
+export interface OrderCardProductImage extends WithId {
+  image_url: string
+  alt_text: string
+  is_primary: boolean
+  display_order: number
+}
+
+export interface OrderCardProductFeature {
+  id?: number
+  label: string
+  // Optional lucide icon name — see lib/icon-map.ts.
+  icon: string
+  display_order?: number
+  is_active: boolean
+}
+
+// A bulk pricing tier ("Buy 3 — ₹475 / card"). The backend prices every
+// cart/order line from these (common/discounts.py); the frontend only
+// previews the same rule — see lib/order-card-pricing.ts.
+export interface OrderCardProductOffer {
+  id?: number
+  label: string
+  min_quantity: number
+  unit_price: string
+  savings_text: string
+  display_order?: number
+  is_active: boolean
+}
+
+export interface OrderCardProductTimelineStage {
+  id?: number
+  title: string
+  description: string
+  estimate: string
+  icon: string
+  display_order?: number
+  is_active: boolean
+}
+
 export interface OrderCardProduct extends WithId {
+  // "PRD-NEXORA-<SLUG>" — what cart/order lines carry.
+  product_id: string
   slug: string
   name: string
+  short_description: string
+  full_description: string
+  // Single-card ("Buy 1") price — the "From" price.
   price: string
   // Real, backend-computed automatic-offer pricing (common/discounts.py on
   // the backend) — null unless an active, automatic_apply offer currently
@@ -280,18 +324,30 @@ export interface OrderCardProduct extends WithId {
   design: string
   best_for: string
   template_count: number | null
-  // Newline-separated bullet list — split on "\n" when rendering.
+  // Read-only, newline-joined active feature labels (older clients).
   features: string
+  feature_items: OrderCardProductFeature[]
+  offers: OrderCardProductOffer[]
+  timeline_stages: OrderCardProductTimelineStage[]
+  images: OrderCardProductImage[]
   card_type: OrderCardType
   card_tone: OrderCardTone | ""
+  // Mirrors the primary gallery image.
   image_url: string
   image_caption: string
   color_name: string
   color_hex: string
   theme_plan_copy: string
+  customisation_heading: string
+  customisation_description: string
+  // One step per line.
+  customisation_instructions: string
+  customisation_notes: string
+  customisation_image_url: string
   popular: boolean
   display_order: number
   is_active: boolean
+  is_published: boolean
 }
 
 export interface OrderCardTrustBadge extends WithId {

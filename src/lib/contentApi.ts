@@ -251,9 +251,45 @@ export const featuresCTAApi = {
 
 export const orderCardPageApi = makeSingletonApi<OrderCardPageSettings>(`${ADMIN}/order-card/page`)
 
+const ORDER_CARD_PRODUCTS = `${ADMIN}/order-card/products`
+
+function imageForm(file: File, extra: Record<string, string> = {}) {
+  const formData = new FormData()
+  formData.append("image", file)
+  for (const [key, value] of Object.entries(extra)) formData.append(key, value)
+  return formData
+}
+
+// Every gallery call resolves with the whole updated product, so the editor
+// always shows exactly what the backend saved (and Cloudinary returned).
 export const orderCardProductsApi = {
-  ...makeCrudApi<OrderCardProduct>(`${ADMIN}/order-card/products`),
-  ...makeImageApi<OrderCardProduct>(`${ADMIN}/order-card/products`),
+  ...makeCrudApi<OrderCardProduct>(ORDER_CARD_PRODUCTS),
+  addImage: (productId: number, file: File, opts: { isPrimary?: boolean; altText?: string } = {}) =>
+    request<OrderCardProduct>(`${ORDER_CARD_PRODUCTS}/${productId}/images/`, {
+      method: "POST",
+      body: imageForm(file, { is_primary: opts.isPrimary ? "true" : "false", alt_text: opts.altText ?? "" }),
+      isFormData: true,
+    }),
+  replaceImage: (productId: number, imageId: number, file: File) =>
+    request<OrderCardProduct>(`${ORDER_CARD_PRODUCTS}/${productId}/images/${imageId}/`, {
+      method: "POST",
+      body: imageForm(file),
+      isFormData: true,
+    }),
+  updateImage: (productId: number, imageId: number, body: { is_primary?: boolean; alt_text?: string }) =>
+    request<OrderCardProduct>(`${ORDER_CARD_PRODUCTS}/${productId}/images/${imageId}/`, { method: "PATCH", body }),
+  removeImage: (productId: number, imageId: number) =>
+    request<OrderCardProduct>(`${ORDER_CARD_PRODUCTS}/${productId}/images/${imageId}/`, { method: "DELETE" }),
+  reorderImages: (productId: number, order: number[]) =>
+    request<OrderCardProduct>(`${ORDER_CARD_PRODUCTS}/${productId}/images/reorder/`, { method: "PATCH", body: { order } }),
+  uploadCustomisationImage: (productId: number, file: File) =>
+    request<OrderCardProduct>(`${ORDER_CARD_PRODUCTS}/${productId}/customisation-image/`, {
+      method: "POST",
+      body: imageForm(file),
+      isFormData: true,
+    }),
+  removeCustomisationImage: (productId: number) =>
+    request<OrderCardProduct>(`${ORDER_CARD_PRODUCTS}/${productId}/customisation-image/`, { method: "DELETE" }),
 }
 
 export const orderCardTrustBadgesApi = makeCrudApi<OrderCardTrustBadge>(`${ADMIN}/order-card/trust-badges`)
@@ -348,6 +384,8 @@ export const publicWebsiteApi = {
   getFeaturesPage: () =>
     request<PublicFeaturesPagePayload>(`${PUBLIC}/features/page/`, { auth: false }),
   getOrderCard: () => request<PublicOrderCardPayload>(`${PUBLIC}/order-card/`, { auth: false }),
+  getOrderCardProduct: (slug: string) =>
+    request<OrderCardProduct>(`${PUBLIC}/order-card/products/${encodeURIComponent(slug)}/`, { auth: false }),
   getHowItWorks: () => request<HowItWorksStep[]>(`${PUBLIC}/how-it-works/`, { auth: false }),
   getFaqs: () => request<Faq[]>(`${PUBLIC}/faqs/`, { auth: false }),
   getValues: () => request<Value[]>(`${PUBLIC}/values/`, { auth: false }),

@@ -101,6 +101,7 @@ export default function Cart() {
                           <p className="font-medium text-foreground">{line.name}</p>
                           <p className="text-xs text-muted-foreground">
                             {line.cardType} · {line.color.name}
+                            {line.pricingTier ? ` · ${line.pricingTier} price` : ""}
                           </p>
                         </div>
                       </div>
