@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 
 from accounts.models import User
 from admin_api.orders.services import apply_status_transition
-from common.discounts import calculate_first_order_discount, get_product_pricing
+from common.discounts import calculate_first_order_discount, get_catalog_product, get_product_pricing
 from common.pagination import StandardPagination
 from common.response import error, success
 
@@ -98,8 +98,20 @@ class CustomerOrderListCreateView(APIView):
         priced_items = []
         amount = Decimal("0")
         for item in cart_items:
+            product = get_catalog_product(item.card_type, item.product_id)
+            if product is None:
+                return error(
+                    f"{item.name} is no longer available. Please remove it from your cart to continue.",
+                    status=400,
+                )
+            tier = product.offer_for_quantity(item.qty)
             pricing = get_product_pricing(
-                item.card_type, promo_code=promo_code, customer=request.user, selected_offer_id=selected_offer_id
+                item.card_type,
+                promo_code=promo_code,
+                customer=request.user,
+                selected_offer_id=selected_offer_id,
+                product_id=item.product_id,
+                qty=item.qty,
             )
             if pricing is not None:
                 unit_price = pricing["final_price"]
@@ -114,6 +126,7 @@ class CustomerOrderListCreateView(APIView):
                         "discount_amount": pricing["discount_amount"] if offer else None,
                         "promo_code_used": promo_code if (offer and promo_code) else "",
                         "applied_offer": offer,
+                        "pricing_tier": tier.label if tier and tier.min_quantity > 1 else "",
                     }
                 )
             else:
@@ -127,6 +140,7 @@ class CustomerOrderListCreateView(APIView):
                         "discount_amount": None,
                         "promo_code_used": "",
                         "applied_offer": None,
+                        "pricing_tier": "",
                     }
                 )
             amount += priced_items[-1]["unit_price"] * item.qty
@@ -171,6 +185,7 @@ class CustomerOrderListCreateView(APIView):
                             card_type=p["item"].card_type,
                             color=p["item"].color_name,
                             qty=p["item"].qty,
+                            pricing_tier=p["pricing_tier"],
                             price=p["unit_price"],
                             original_price=p["original_price"],
                             discount_type=p["discount_type"],

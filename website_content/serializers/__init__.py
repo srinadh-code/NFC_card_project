@@ -25,7 +25,9 @@ from .features_page import (
 )
 from .order_card import (
     OrderCardPageSettingsSerializer,
+    OrderCardProductImageSerializer,
     OrderCardProductSerializer,
+    PublicOrderCardProductSerializer,
     OrderCardTrustBadgeSerializer,
     ProfileTemplatePreviewSerializer,
 )
@@ -70,6 +72,8 @@ __all__ = [
     "FeaturesCTASerializer",
     "OrderCardPageSettingsSerializer",
     "OrderCardProductSerializer",
+    "OrderCardProductImageSerializer",
+    "PublicOrderCardProductSerializer",
     "OrderCardTrustBadgeSerializer",
     "ProfileTemplatePreviewSerializer",
     "HowItWorksStepSerializer",

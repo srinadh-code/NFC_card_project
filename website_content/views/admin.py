@@ -7,9 +7,10 @@ resource, only where the spec calls for them.
 
 from django.db import transaction
 from django.utils import timezone
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.views import APIView
 
+from common.image_storage import delete_image, upload_image
 from common.pagination import StandardPagination
 from common.permissions import IsAdminRole
 from common.response import error, success
@@ -43,6 +44,7 @@ from website_content.models import (
     HowItWorksStep,
     OrderCardPageSettings,
     OrderCardProduct,
+    OrderCardProductImage,
     OrderCardTrustBadge,
     ProfileTemplatePreview,
     PaymentSettings,
@@ -411,27 +413,182 @@ class OrderCardPageSettingsAdminView(AdminSingletonAPIView):
     serializer_class = OrderCardPageSettingsSerializer
 
 
+ORDER_CARD_IMAGE_FOLDER = "website/order-card"
+MAX_PRODUCT_IMAGES = 12
+
+
+def _order_card_products():
+    return OrderCardProduct.objects.prefetch_related("images", "feature_items", "offers", "timeline_stages")
+
+
+def _sync_primary_image(product):
+    """Exactly one gallery image is primary (the first, if none is chosen),
+    and product.image_url mirrors it for everything that shows one picture."""
+    images = list(product.images.order_by("display_order", "id"))
+    primary = next((img for img in images if img.is_primary), images[0] if images else None)
+    for img in images:
+        should_be = img is primary
+        if img.is_primary != should_be:
+            img.is_primary = should_be
+            img.save(update_fields=["is_primary"])
+    url = primary.image_url if primary else ""
+    if product.image_url != url:
+        product.image_url = url
+        product.save(update_fields=["image_url"])
+
+
+def _product_response(product, message):
+    product = _order_card_products().get(pk=product.pk)
+    return success(OrderCardProductSerializer(product).data, message=message)
+
+
 class OrderCardProductAdminListView(AdminListCreateAPIView):
     model = OrderCardProduct
     serializer_class = OrderCardProductSerializer
+
+    def get_queryset(self):
+        return _order_card_products()
 
 
 class OrderCardProductAdminDetailView(AdminDetailAPIView):
     model = OrderCardProduct
     serializer_class = OrderCardProductSerializer
-    image_public_id_field = "image_public_id"
+
+    def delete(self, request, pk):
+        product = self.get_object(pk)
+        if product is None:
+            return error("Not found.", status=404)
+        public_ids = [img.image_public_id for img in product.images.all()]
+        public_ids += [product.image_public_id, product.customisation_image_public_id]
+        product.delete()
+        # Only after the row is gone — same ordering as AdminDetailAPIView.
+        for public_id in filter(None, public_ids):
+            delete_image(public_id)
+        return success(None, message="Deleted.")
 
 
 class OrderCardProductAdminReorderView(AdminReorderAPIView):
     model = OrderCardProduct
 
 
-class OrderCardProductImageAdminView(AdminImageUploadAPIView):
+class OrderCardProductImagesAdminView(APIView):
+    """POST multipart {image, alt_text?, is_primary?} — adds a gallery image
+    (uploaded to Cloudinary first; nothing is saved if that fails)."""
+
+    permission_classes = [IsAdminRole]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, pk):
+        product = OrderCardProduct.objects.filter(pk=pk).first()
+        if product is None:
+            return error("Not found.", status=404)
+        file_obj = request.FILES.get("image")
+        if not file_obj:
+            return error("No image file provided.", status=400)
+        if product.images.count() >= MAX_PRODUCT_IMAGES:
+            return error(f"A product can have at most {MAX_PRODUCT_IMAGES} images.", status=400)
+        uploaded = upload_image(file_obj, folder=ORDER_CARD_IMAGE_FOLDER, request=request)
+        last = product.images.order_by("-display_order").first()
+        make_primary = str(request.data.get("is_primary", "")).lower() in {"1", "true", "yes"}
+        with transaction.atomic():
+            if make_primary:
+                product.images.update(is_primary=False)
+            product.images.create(
+                image_url=uploaded["url"],
+                image_public_id=uploaded["public_id"],
+                alt_text=(request.data.get("alt_text") or "")[:200],
+                is_primary=make_primary,
+                display_order=(last.display_order + 1) if last else 0,
+            )
+            _sync_primary_image(product)
+        return _product_response(product, "Image uploaded.")
+
+
+class OrderCardProductImagesReorderAdminView(APIView):
+    """PATCH {"order": [image ids]} — must list every image of the product."""
+
+    permission_classes = [IsAdminRole]
+
+    def patch(self, request, pk):
+        product = OrderCardProduct.objects.filter(pk=pk).first()
+        if product is None:
+            return error("Not found.", status=404)
+        order = request.data.get("order")
+        try:
+            ids = [int(v) for v in order]
+        except (TypeError, ValueError):
+            return error("`order` must be a list of image ids.", status=400)
+        images = {img.pk: img for img in product.images.all()}
+        if sorted(ids) != sorted(images):
+            return error("`order` must list each of this product's images exactly once.", status=400)
+        for index, image_id in enumerate(ids):
+            images[image_id].display_order = index
+        OrderCardProductImage.objects.bulk_update(images.values(), ["display_order"])
+        _sync_primary_image(product)
+        return _product_response(product, "Image order updated.")
+
+
+class OrderCardProductImageAdminDetailView(APIView):
+    """PATCH {is_primary?, alt_text?} / POST multipart {image} (replace the
+    file, keeping its place) / DELETE — one gallery image."""
+
+    permission_classes = [IsAdminRole]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
+
+    def _get(self, pk, image_id):
+        return OrderCardProductImage.objects.filter(pk=image_id, product_id=pk).select_related("product").first()
+
+    def patch(self, request, pk, image_id):
+        image = self._get(pk, image_id)
+        if image is None:
+            return error("Not found.", status=404)
+        with transaction.atomic():
+            if "alt_text" in request.data:
+                image.alt_text = (request.data.get("alt_text") or "")[:200]
+                image.save(update_fields=["alt_text"])
+            if request.data.get("is_primary") in (True, "true", "1"):
+                image.product.images.exclude(pk=image.pk).update(is_primary=False)
+                image.is_primary = True
+                image.save(update_fields=["is_primary"])
+            _sync_primary_image(image.product)
+        return _product_response(image.product, "Image updated.")
+
+    def post(self, request, pk, image_id):
+        image = self._get(pk, image_id)
+        if image is None:
+            return error("Not found.", status=404)
+        file_obj = request.FILES.get("image")
+        if not file_obj:
+            return error("No image file provided.", status=400)
+        old_public_id = image.image_public_id
+        uploaded = upload_image(file_obj, folder=ORDER_CARD_IMAGE_FOLDER, request=request)
+        image.image_url = uploaded["url"]
+        image.image_public_id = uploaded["public_id"]
+        image.save(update_fields=["image_url", "image_public_id"])
+        _sync_primary_image(image.product)
+        # Only once the new file is saved.
+        delete_image(old_public_id)
+        return _product_response(image.product, "Image replaced.")
+
+    def delete(self, request, pk, image_id):
+        image = self._get(pk, image_id)
+        if image is None:
+            return error("Not found.", status=404)
+        product, public_id = image.product, image.image_public_id
+        image.delete()
+        _sync_primary_image(product)
+        delete_image(public_id)
+        return _product_response(product, "Image removed.")
+
+
+class OrderCardProductCustomisationImageAdminView(AdminImageUploadAPIView):
+    """Optional illustration in the product's customisation section."""
+
     model = OrderCardProduct
     serializer_class = OrderCardProductSerializer
-    url_field = "image_url"
-    public_id_field = "image_public_id"
-    folder = "website/order-card"
+    url_field = "customisation_image_url"
+    public_id_field = "customisation_image_public_id"
+    folder = ORDER_CARD_IMAGE_FOLDER
 
 
 class OrderCardTrustBadgeAdminListView(AdminListCreateAPIView):

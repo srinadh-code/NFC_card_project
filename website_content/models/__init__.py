@@ -26,6 +26,10 @@ from .features_page import (
 from .order_card import (
     OrderCardPageSettings,
     OrderCardProduct,
+    OrderCardProductFeature,
+    OrderCardProductImage,
+    OrderCardProductOffer,
+    OrderCardProductTimelineStage,
     OrderCardTrustBadge,
     ProfileTemplatePreview,
 )
@@ -64,6 +68,10 @@ __all__ = [
     "FeaturesCTA",
     "OrderCardPageSettings",
     "OrderCardProduct",
+    "OrderCardProductImage",
+    "OrderCardProductFeature",
+    "OrderCardProductOffer",
+    "OrderCardProductTimelineStage",
     "OrderCardTrustBadge",
     "ProfileTemplatePreview",
     "HowItWorksStep",

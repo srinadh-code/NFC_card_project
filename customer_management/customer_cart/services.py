@@ -1,6 +1,8 @@
 from decimal import Decimal
 
-from common.discounts import calculate_price, find_eligible_offer, get_product_price
+from rest_framework.exceptions import ValidationError
+
+from common.discounts import calculate_price, find_eligible_offer, get_catalog_product, get_product_price
 
 from .models import Cart, CartItem
 
@@ -27,13 +29,33 @@ def add_item(user, data):
     matching (product_id, color_name) row by increasing its qty — mirrors
     the frontend cart's pre-existing merge behavior — rather than ever
     creating a duplicate line or touching another customer's cart."""
+    # The product must be available, and its name/type/price always come
+    # from the catalog — never from whatever the request claimed.
+    product = get_catalog_product(data.get("card_type"), data["product_id"])
+    if product is None:
+        raise ValidationError({"product_id": ["This product is no longer available."]})
+    from .serializers import MAX_LINE_QTY
+
     cart = get_or_create_cart(user)
     existing = CartItem.objects.filter(cart=cart, product_id=data["product_id"], color_name=data["color_name"]).first()
+    qty = data["qty"] + (existing.qty if existing else 0)
+    if qty > MAX_LINE_QTY:
+        raise ValidationError({"qty": [f"You can order at most {MAX_LINE_QTY} of one card."]})
+    snapshot = {"name": product.name, "card_type": product.card_type, "price": product.unit_price_for(qty)}
     if existing:
-        existing.qty += data["qty"]
-        existing.save(update_fields=["qty", "updated_at"])
+        for field, value in snapshot.items():
+            setattr(existing, field, value)
+        existing.qty = qty
+        existing.save(update_fields=["qty", *snapshot, "updated_at"])
         return existing
-    return CartItem.objects.create(cart=cart, **data)
+    return CartItem.objects.create(
+        cart=cart,
+        product_id=data["product_id"],
+        color_name=data["color_name"],
+        color_hex=data.get("color_hex", ""),
+        qty=qty,
+        **snapshot,
+    )
 
 
 def apply_promo_code(user, code):

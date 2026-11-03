@@ -16,15 +16,37 @@ without any of them depending on each other.
 from decimal import ROUND_HALF_UP, Decimal
 
 
-def get_product_price(card_type):
-    """Real, current, backend-authoritative base price for `card_type` —
-    never trust a price a client claims. None if no active product exists
-    for that card_type (see website_content.models.OrderCardProduct, the
-    real product catalog — same one /shop reads)."""
-    from website_content.models import OrderCardProduct
+def get_catalog_product(card_type=None, product_id=None):
+    """The purchasable catalog product a cart/order line refers to, or None
+    if it isn't available (missing, inactive or unpublished).
 
-    product = OrderCardProduct.objects.filter(card_type=card_type, is_active=True).first()
-    return product.price if product else None
+    Looked up by the line's product_id ("PRD-NEXORA-<SLUG>") first, since
+    several products can share a card_type. A line whose product_id names
+    a real product that has since been hidden is unavailable — it never
+    falls back to some other product of the same card_type. Lines without a
+    recognisable product_id fall back to the first available product of
+    their card_type, as before product ids were checked."""
+    from website_content.models import OrderCardProduct
+    from website_content.models.order_card import PRODUCT_ID_PREFIX
+
+    available = OrderCardProduct.objects.filter(is_active=True, is_published=True).prefetch_related("offers")
+    if product_id and product_id.upper().startswith(PRODUCT_ID_PREFIX):
+        slug = product_id[len(PRODUCT_ID_PREFIX):].lower()
+        if OrderCardProduct.objects.filter(slug__iexact=slug).exists():
+            return available.filter(slug__iexact=slug).first()
+    if card_type:
+        return available.filter(card_type=card_type).first()
+    return None
+
+
+def get_product_price(card_type, product_id=None, qty=1):
+    """Real, current, backend-authoritative per-card price — never trust a
+    price a client claims. Bulk pricing tiers (OrderCardProductOffer) set
+    the price for `qty` cards. None if the product isn't available (see
+    website_content.models.OrderCardProduct, the real product catalog —
+    same one /shop reads)."""
+    product = get_catalog_product(card_type, product_id)
+    return product.unit_price_for(qty) if product else None
 
 
 def _offer_is_usable(offer, card_type, customer):
@@ -126,12 +148,13 @@ def calculate_price(original_price, offer):
     }
 
 
-def get_product_pricing(card_type, promo_code=None, customer=None, selected_offer_id=None):
+def get_product_pricing(card_type, promo_code=None, customer=None, selected_offer_id=None, product_id=None, qty=1):
     """Convenience wrapper: real base price + whichever offer applies (auto,
     promo-code, or an explicit "Apply Offer" selection) + the computed
     final price — what the public catalog, cart and checkout each actually
-    need. None if `card_type` isn't a real, active product."""
-    original_price = get_product_price(card_type)
+    need. The base price is the bulk tier price for `qty` cards; offers
+    apply on top of it. None if the product isn't available."""
+    original_price = get_product_price(card_type, product_id=product_id, qty=qty)
     if original_price is None:
         return None
     offer = find_eligible_offer(card_type, promo_code=promo_code, customer=customer, selected_offer_id=selected_offer_id)

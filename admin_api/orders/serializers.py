@@ -20,6 +20,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
             "card_type",
             "color",
             "qty",
+            "pricing_tier",
             "price",
             "original_price",
             "discount_type",

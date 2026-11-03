@@ -164,6 +164,9 @@ class OrderItem(models.Model):
     card_type = models.CharField(max_length=10)
     color = models.CharField(max_length=30)
     qty = models.PositiveIntegerField(default=1)
+    # Bulk pricing tier that set the per-unit price ("Buy 3"), snapshotted
+    # like everything else here. Blank when the single-card price applied.
+    pricing_tier = models.CharField(max_length=50, blank=True, default="")
     # The per-unit price actually paid — already discounted, if any offer
     # applied. Unchanged in meaning from before this field existed.
     price = models.DecimalField(max_digits=10, decimal_places=2)

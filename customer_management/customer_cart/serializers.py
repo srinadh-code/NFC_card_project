@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
-from common.discounts import calculate_first_order_discount, find_eligible_offer, get_product_price
+from common.discounts import calculate_first_order_discount, find_eligible_offer, get_catalog_product, get_product_price
 
 from .models import Cart, CartItem
 
@@ -18,6 +18,7 @@ class CartItemSerializer(serializers.ModelSerializer):
     discount_amount = serializers.SerializerMethodField()
     final_price = serializers.SerializerMethodField()
     offer_title = serializers.SerializerMethodField()
+    pricing_tier = serializers.SerializerMethodField()
 
     class Meta:
         model = CartItem
@@ -34,6 +35,7 @@ class CartItemSerializer(serializers.ModelSerializer):
             "discount_amount",
             "final_price",
             "offer_title",
+            "pricing_tier",
             "updated_at",
         ]
         read_only_fields = [
@@ -42,6 +44,7 @@ class CartItemSerializer(serializers.ModelSerializer):
             "discount_amount",
             "final_price",
             "offer_title",
+            "pricing_tier",
             "updated_at",
         ]
 
@@ -49,7 +52,7 @@ class CartItemSerializer(serializers.ModelSerializer):
         promo_code = self.context.get("promo_code") or ""
         customer = self.context.get("customer")
         selected_offer_id = self.context.get("selected_offer_id")
-        original_price = get_product_price(obj.card_type)
+        original_price = get_product_price(obj.card_type, product_id=obj.product_id, qty=obj.qty)
         if original_price is None:
             # No matching catalog product (e.g. a retired card_type still
             # sitting in an old cart row) — never invent a discount for it.
@@ -73,6 +76,13 @@ class CartItemSerializer(serializers.ModelSerializer):
     def get_offer_title(self, obj):
         offer = self._pricing(obj)["offer"]
         return (offer.offer_title or offer.title) if offer else None
+
+    def get_pricing_tier(self, obj):
+        """Label of the bulk tier pricing this line ("Buy 3"), or None for
+        the single-card price."""
+        product = get_catalog_product(obj.card_type, obj.product_id)
+        tier = product.offer_for_quantity(obj.qty) if product else None
+        return tier.label if tier and tier.min_quantity > 1 else None
 
 
 class CartSerializer(serializers.ModelSerializer):
@@ -211,18 +221,24 @@ class CartSerializer(serializers.ModelSerializer):
         return "This promo code is no longer valid."
 
 
+#: Largest quantity of one product a single cart/order line can hold.
+MAX_LINE_QTY = 100
+
+
 class AddCartItemSerializer(serializers.Serializer):
     product_id = serializers.CharField(max_length=40)
     name = serializers.CharField(max_length=150)
     card_type = serializers.CharField(max_length=10)
     color_name = serializers.CharField(max_length=30)
     color_hex = serializers.CharField(max_length=10, required=False, allow_blank=True, default="")
-    qty = serializers.IntegerField(min_value=1, default=1)
-    price = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0)
+    qty = serializers.IntegerField(min_value=1, max_value=MAX_LINE_QTY, default=1)
+    # Accepted for backward compatibility only — services.add_item replaces
+    # it with the catalog price; a client-sent price is never used.
+    price = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0, required=False)
 
 
 class UpdateCartItemSerializer(serializers.Serializer):
-    qty = serializers.IntegerField(min_value=1)
+    qty = serializers.IntegerField(min_value=1, max_value=MAX_LINE_QTY)
 
 
 class ApplyPromoCodeSerializer(serializers.Serializer):

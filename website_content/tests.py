@@ -243,7 +243,7 @@ class OrderCardPublicViewTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.data["data"]
-        self.assertEqual(data["page"]["page_title"], "Choose Your NEXORA Card")
+        self.assertEqual(data["page"]["page_title"], "Choose Your VR's Gateway Card")
         slugs = {p["slug"] for p in data["products"]}
         self.assertEqual(slugs, {"custom", "google-review"})
         self.assertEqual(len(data["trust_badges"]), 4)
@@ -323,7 +323,7 @@ class OrderCardProductAdminViewTests(APITestCase):
             image_public_id="website/order-card/abc123",
         )
 
-        with patch("website_content.views.base.delete_image") as mock_delete:
+        with patch("website_content.views.admin.delete_image") as mock_delete:
             response = self.client.delete(reverse("admin-order-card-product-detail", args=[product.id]))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)

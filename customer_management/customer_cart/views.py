@@ -1,5 +1,6 @@
 from rest_framework.views import APIView
 
+from common.discounts import get_product_price
 from common.permissions import IsCustomerRole
 from common.response import error, success
 
@@ -56,7 +57,9 @@ class CartItemDetailView(APIView):
         serializer = UpdateCartItemSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item.qty = serializer.validated_data["qty"]
-        item.save(update_fields=["qty", "updated_at"])
+        # Keep the stored per-card price on the line's current bulk tier.
+        item.price = get_product_price(item.card_type, product_id=item.product_id, qty=item.qty) or item.price
+        item.save(update_fields=["qty", "price", "updated_at"])
         return _cart_response(item.cart, request, message="Cart updated.")
 
     def delete(self, request, pk):

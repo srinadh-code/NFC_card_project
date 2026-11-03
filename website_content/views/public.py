@@ -68,7 +68,7 @@ from website_content.serializers import (
     HomeOurStorySerializer,
     HowItWorksStepSerializer,
     OrderCardPageSettingsSerializer,
-    OrderCardProductSerializer,
+    PublicOrderCardProductSerializer,
     OrderCardTrustBadgeSerializer,
     ProfileTemplatePreviewSerializer,
     PublicGeneralSettingsSerializer,
@@ -194,6 +194,24 @@ class FeaturesPagePublicView(APIView):
         return success(data)
 
 
+def _published_products():
+    return OrderCardProduct.objects.filter(is_active=True, is_published=True).prefetch_related(
+        "images", "feature_items", "offers", "timeline_stages"
+    )
+
+
+class OrderCardProductPublicView(APIView):
+    """GET one active, published product by slug (404 otherwise)."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, slug):
+        product = _published_products().filter(slug__iexact=slug).first()
+        if product is None:
+            return error("This product is not available.", status=404)
+        return success(PublicOrderCardProductSerializer(product).data)
+
+
 class OrderCardPublicView(APIView):
     """Composed payload for the /shop ("Order Card") page — same
     one-call-per-page pattern as Home/About/Features. Products and trust
@@ -209,9 +227,7 @@ class OrderCardPublicView(APIView):
 
         data = {
             "page": OrderCardPageSettingsSerializer(page).data,
-            "products": OrderCardProductSerializer(
-                OrderCardProduct.objects.filter(is_active=True), many=True
-            ).data,
+            "products": PublicOrderCardProductSerializer(_published_products(), many=True).data,
             "trust_badges": OrderCardTrustBadgeSerializer(
                 OrderCardTrustBadge.objects.filter(is_active=True), many=True
             ).data,
