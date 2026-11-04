@@ -4,6 +4,8 @@ import { useCustomerAuthStore } from "@/store/auth-store"
 import { useCartStore } from "@/store/cart-store"
 import { ApiError, cartApi, CARD_TYPE_MAP, type ApiCartItem } from "@/lib/api"
 import type { CardType, CartLine } from "@/types"
+import type { PublicOrderCardPayload } from "@/types/content"
+import { unitPriceFor } from "@/lib/order-card-pricing"
 
 function toFrontendCartLine(item: ApiCartItem): CartLine {
   return {
@@ -13,10 +15,14 @@ function toFrontendCartLine(item: ApiCartItem): CartLine {
     cardType: CARD_TYPE_MAP[item.card_type] ?? "Custom",
     color: { name: item.color_name, hex: item.color_hex },
     qty: item.qty,
-    price: Number(item.price),
+    // The current per-card price for this quantity (bulk tier), before any
+    // promotional offer — falls back to the stored price for a line with no
+    // catalog product.
+    price: Number(item.original_price ?? item.price),
     finalPrice: item.final_price != null ? Number(item.final_price) : undefined,
     discountAmount: item.discount_amount != null ? Number(item.discount_amount) : undefined,
     offerTitle: item.offer_title,
+    pricingTier: item.pricing_tier,
   }
 }
 
@@ -136,7 +142,16 @@ export function useCart() {
   })
 
   const backendLines = (cartQuery.data?.items ?? []).map(toFrontendCartLine)
-  const lines = customer ? backendLines : guestLines
+  // A guest line keeps the price it was added at; re-price it by its
+  // current quantity with the same bulk-tier rule the backend charges, when
+  // the catalog is already loaded. The backend re-prices everything anyway
+  // once the guest logs in and their lines move to the server cart.
+  const catalog = queryClient.getQueryData<PublicOrderCardPayload>(["content", "public-order-card"])
+  const pricedGuestLines = guestLines.map((line) => {
+    const product = catalog?.products.find((p) => p.product_id === line.productId)
+    return product ? { ...line, price: unitPriceFor(product, line.qty) } : line
+  })
+  const lines = customer ? backendLines : pricedGuestLines
   const subtotal = () =>
     customer && cartQuery.data ? cartQuery.data.subtotal : lines.reduce((sum, l) => sum + l.price * l.qty, 0)
   // A guest (pre-login) cart has no server row to price a promo code (or
@@ -188,6 +203,13 @@ export function useCart() {
       if (customer) addMutation.mutate(line)
       else guestAddLine(line)
     },
+    // Same as addLine, but resolves only once the line is really in the
+    // cart (rejects with the backend's ApiError otherwise).
+    addLineAsync: async (line: Omit<CartLine, "lineId">) => {
+      if (customer) await addMutation.mutateAsync(line)
+      else guestAddLine(line)
+    },
+    isAdding: addMutation.isPending,
     updateQty: (lineId: string, qty: number) => {
       const nextQty = Math.max(1, qty)
       if (customer) updateMutation.mutate({ lineId, qty: nextQty })

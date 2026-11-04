@@ -5,12 +5,14 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SingletonSectionCard } from "@/components/admin/content/SingletonSectionCard"
 import { ImageUploadField } from "@/components/admin/content/ImageUploadField"
+import { DEFAULT_TIMELINE, ORDER_CARD_PRODUCTS_KEY, OrderCardProductEditor } from "@/components/admin/content/OrderCardProductEditor"
+import { cloudinaryUrl } from "@/lib/order-card-pricing"
 import { IconPickerInput } from "@/components/admin/content/IconPickerInput"
 import { ResourceListPage } from "@/components/admin/content/ResourceListPage"
 import { useSingletonSection } from "@/components/admin/content/useSingletonSection"
 import { orderCardPageApi, orderCardProductsApi, orderCardTrustBadgesApi, profileTemplatePreviewsApi } from "@/lib/contentApi"
 import { CARD_THEME_IDS, PROFILE_THEMES } from "@/data/constants"
-import type { OrderCardPageSettings, OrderCardProduct, OrderCardTone, OrderCardTrustBadge, ProfileTemplatePreview } from "@/types/content"
+import type { OrderCardPageSettings, OrderCardProduct, OrderCardTrustBadge, ProfileTemplatePreview } from "@/types/content"
 
 const PROFILE_TEMPLATE_ID_OPTIONS = CARD_THEME_IDS.custom.map((id) => ({
   value: id,
@@ -20,19 +22,6 @@ const PROFILE_TEMPLATE_ID_OPTIONS = CARD_THEME_IDS.custom.map((id) => ({
 function templateLabel(templateId: string): string {
   return PROFILE_TEMPLATE_ID_OPTIONS.find((o) => o.value === templateId)?.label ?? templateId
 }
-
-const CARD_TYPE_OPTIONS: { value: OrderCardProduct["card_type"]; label: string }[] = [
-  { value: "CUSTOM", label: "Custom" },
-  { value: "WOODEN", label: "Wooden" },
-  { value: "REVIEW", label: "Google Review Card" },
-]
-
-const CARD_TONE_OPTIONS: { value: string; label: string }[] = [
-  { value: "custom", label: "Custom (multi-hue)" },
-  { value: "front", label: "Front (brand gradient)" },
-  { value: "back", label: "Back" },
-  { value: "gold", label: "Gold" },
-]
 
 function PageSettingsSection() {
   const page = useSingletonSection<OrderCardPageSettings>({
@@ -82,155 +71,80 @@ function ProductsSection() {
   return (
     <ResourceListPage<OrderCardProduct>
       api={orderCardProductsApi}
-      queryKey={["content", "order-card", "products"]}
+      queryKey={ORDER_CARD_PRODUCTS_KEY}
       resourceLabel="Product"
-      description='The purchasable cards shown on /shop (e.g. "GATEWAY Custom", "Google Review Card").'
+      description="The cards customers can buy on the Order Card page. Only active, published products are shown; drag rows to change their order."
       getRowLabel={(item) => item.name}
       searchPredicate={(item, q) => item.name.toLowerCase().includes(q) || item.slug.toLowerCase().includes(q)}
+      dialogClassName="sm:max-w-4xl"
       createDefaults={(existing) => ({
         slug: "",
         name: "",
-        price: "0.00",
+        short_description: "",
+        full_description: "",
+        price: "",
         design: "",
         best_for: "",
-        features: "",
         card_type: "CUSTOM",
         card_tone: "custom",
         image_caption: "",
         color_name: "",
         color_hex: "",
         theme_plan_copy: "",
+        feature_items: [],
+        offers: [{ label: "Buy 1", min_quantity: 1, unit_price: "", savings_text: "", is_active: true }],
+        timeline_stages: DEFAULT_TIMELINE,
+        images: [],
+        customisation_heading: "",
+        customisation_description: "",
+        customisation_instructions: "",
+        customisation_notes: "",
         popular: false,
         display_order: existing.length,
         is_active: true,
+        is_published: false,
       })}
       columns={[
         {
           key: "image",
           label: "Image",
-          render: (item) => (
-            <ImageUploadField
-              currentUrl={item.image_url}
-              onUpload={async (file) => {
-                await orderCardProductsApi.uploadImage(item.id, file)
-              }}
-              onRemove={async () => {
-                await orderCardProductsApi.removeImage(item.id)
-              }}
-            />
-          ),
+          render: (item) =>
+            item.image_url ? (
+              <img src={cloudinaryUrl(item.image_url, 160)} alt="" className="h-12 w-16 rounded-md object-cover" />
+            ) : (
+              <span className="text-xs text-muted-foreground">No image</span>
+            ),
         },
         { key: "name", label: "Name", render: (item) => item.name },
-        { key: "slug", label: "Slug", render: (item) => item.slug },
-        { key: "price", label: "Price", render: (item) => item.price },
+        { key: "price", label: "From", render: (item) => `₹${Number(item.price).toLocaleString("en-IN")}` },
+        {
+          key: "offers",
+          label: "Offers",
+          render: (item) => item.offers.filter((o) => o.is_active).map((o) => o.label).join(", ") || "—",
+        },
         { key: "card_type", label: "Type", render: (item) => item.card_type },
-      ]}
-      renderForm={({ values, setField }) => (
-        <>
-          <div className="flex flex-col gap-1.5">
-            <Label>Name</Label>
-            <Input value={values.name ?? ""} onChange={(e) => setField("name", e.target.value)} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Slug</Label>
-            <Input
-              placeholder="custom"
-              value={values.slug ?? ""}
-              onChange={(e) => setField("slug", e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))}
-            />
-            <p className="text-xs text-muted-foreground">
-              Stable identifier — also used to match this product's profile-theme entitlement.
-              Changing it after launch can break that link.
-            </p>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Price</Label>
-            <Input type="number" step="0.01" value={values.price ?? ""} onChange={(e) => setField("price", e.target.value)} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Best For</Label>
-            <Input value={values.best_for ?? ""} onChange={(e) => setField("best_for", e.target.value)} />
-          </div>
-          <div className="flex flex-col gap-1.5 sm:col-span-2">
-            <Label>Design / Short Description</Label>
-            <Input value={values.design ?? ""} onChange={(e) => setField("design", e.target.value)} />
-          </div>
-          <div className="flex flex-col gap-1.5 sm:col-span-2">
-            <Label>Features (one per line)</Label>
-            <Textarea
-              rows={6}
-              value={values.features ?? ""}
-              onChange={(e) => setField("features", e.target.value)}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Order Card Type</Label>
-            <Select value={values.card_type ?? "CUSTOM"} onValueChange={(v) => setField("card_type", v as OrderCardProduct["card_type"])}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CARD_TYPE_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">What gets sent as the order line's card type at checkout.</p>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Mockup Tone (used only when no image is uploaded)</Label>
-            <Select value={values.card_tone || "custom"} onValueChange={(v) => setField("card_tone", v as OrderCardTone)}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CARD_TONE_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Template Count (optional — leave blank for no theme entitlement)</Label>
-            <Input
-              type="number"
-              min={0}
-              value={values.template_count ?? ""}
-              onChange={(e) => setField("template_count", e.target.value ? Number(e.target.value) : null)}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Image Caption (optional)</Label>
-            <Input value={values.image_caption ?? ""} onChange={(e) => setField("image_caption", e.target.value)} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Color Name</Label>
-            <Input value={values.color_name ?? ""} onChange={(e) => setField("color_name", e.target.value)} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Color (hex)</Label>
-            <Input placeholder="#7C3AED" value={values.color_hex ?? ""} onChange={(e) => setField("color_hex", e.target.value)} />
-          </div>
-          <div className="flex flex-col gap-1.5 sm:col-span-2">
-            <Label>Theme Plan Copy (only shown when Template Count is set)</Label>
-            <Textarea
-              value={values.theme_plan_copy ?? ""}
-              onChange={(e) => setField("theme_plan_copy", e.target.value)}
-            />
-          </div>
-          <div className="flex items-center justify-between gap-3 rounded-lg border p-3 sm:col-span-2">
-            <div>
-              <p className="text-sm font-medium">"Most Popular" badge</p>
-              <p className="text-xs text-muted-foreground">Shown next to the product name on the configurator.</p>
+        {
+          key: "status",
+          label: "Status",
+          render: (item) => (
+            <div className="flex flex-wrap gap-1">
+              <span
+                className={
+                  item.is_published
+                    ? "rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success"
+                    : "rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                }
+              >
+                {item.is_published ? "Published" : "Unpublished"}
+              </span>
+              {item.popular && (
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Most Popular</span>
+              )}
             </div>
-            <Switch checked={values.popular ?? false} onCheckedChange={(v) => setField("popular", v)} />
-          </div>
-        </>
-      )}
+          ),
+        },
+      ]}
+      renderForm={({ values, setField }) => <OrderCardProductEditor values={values} setField={setField} />}
     />
   )
 }

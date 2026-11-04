@@ -1090,6 +1090,7 @@ export interface ApiCartItem {
   discount_amount: number | null
   final_price: number
   offer_title: string | null
+  pricing_tier: string | null
   updated_at: string
 }
 export interface ApiCart {
