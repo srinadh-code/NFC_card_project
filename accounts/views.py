@@ -3,7 +3,6 @@ import threading
 from datetime import timedelta
 
 from django.conf import settings
-from django.core import signing
 from django.contrib.auth.hashers import make_password
 from django.db import connection, transaction
 from django.utils import timezone
@@ -24,7 +23,7 @@ from .models import CustomerOnboarding, EmailOTP, User
 from .security import access_token_minutes
 from .serializers import (
     ChangePasswordSerializer,
-    FirstLoginCompleteSerializer,
+    AccountActivationCompleteSerializer,
     ForgotPasswordSerializer,
     GoogleLoginSerializer,
     LoginSerializer,
@@ -114,6 +113,15 @@ class RegisterView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        # Customer accounts are created only from a paid order and activated
+        # through the emailed set-password link (accounts/onboarding.py).
+        if not getattr(settings, "PUBLIC_REGISTRATION_ENABLED", False):
+            return error(
+                "New accounts are created when you order a VR's Gateway card. "
+                "After your order is processed we'll email you a link to set your password.",
+                errors={"code": "registration_closed"},
+                status=403,
+            )
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -249,27 +257,15 @@ class LoginView(APIView):
             raise
 
         user = serializer.validated_data["user"]
-        # Account created from a paid guest checkout, still on its emailed
-        # temporary password: no JWTs, only a short-lived setup token for
-        # the mandatory password change (FirstLoginCompleteView). Checked
-        # after the password matched, so it reveals nothing to a stranger.
+        # An order-created account must be activated through its emailed
+        # set-password link first. Checked after the password matched, so it
+        # reveals nothing to a stranger.
         if user.must_change_password:
-            expires = user.temporary_password_expires_at
-            if expires is None or expires <= timezone.now():
-                logger.info("auth.login.temporary_expired user_id=%s", user.id)
-                return error(
-                    "Your temporary password has expired. Request new login details to activate your account.",
-                    errors={"code": "temporary_password_expired", "email": user.email},
-                    status=403,
-                )
-            logger.info("auth.login.password_change_required user_id=%s", user.id)
-            return success(
-                {
-                    "password_change_required": True,
-                    "setup_token": _issue_setup_token(user),
-                    "email": user.email,
-                },
-                message="Please create a new password to continue.",
+            logger.info("auth.login.not_activated user_id=%s", user.id)
+            return error(
+                "Your account isn't activated yet. Use the \"Set Your Password\" link in your activation email.",
+                errors={"code": "account_not_activated"},
+                status=403,
             )
 
         # Checked only after the password matched, so this never reveals an
@@ -292,34 +288,16 @@ class LoginView(APIView):
         return success(_auth_payload(user), message="Login successful.")
 
 
-SETUP_TOKEN_SALT = "accounts.first-login-setup"
-SETUP_TOKEN_MAX_AGE_SECONDS = 15 * 60
+ACTIVATION_LINK_MESSAGES = {
+    EmailOTP.LINK_INVALID: ("This activation link is invalid.", "invalid"),
+    EmailOTP.LINK_EXPIRED: ("This activation link has expired. Please contact us for a new one.", "expired"),
+    EmailOTP.LINK_USED: ("This activation link has already been used. Please log in.", "used"),
+}
 
 
-def _issue_setup_token(user):
-    """Signed, 15-minute, single-purpose token proving "this person just
-    logged in with the temporary password". Bound to the current password
-    hash, so it stops working the moment the password changes (single
-    use). It is not a JWT and no API accepts it except
-    FirstLoginCompleteView."""
-    return signing.dumps({"uid": user.pk, "ph": user.password[-24:]}, salt=SETUP_TOKEN_SALT)
-
-
-def _user_for_setup_token(token):
-    try:
-        data = signing.loads(token, salt=SETUP_TOKEN_SALT, max_age=SETUP_TOKEN_MAX_AGE_SECONDS)
-    except signing.BadSignature:
-        return None
-    user = User.objects.filter(pk=data.get("uid"), is_active=True).first()
-    if user is None or not user.must_change_password or user.password[-24:] != data.get("ph"):
-        return None
-    return user
-
-
-class FirstLoginCompleteView(APIView):
-    """Mandatory first-login password setup for accounts created from a paid
-    order. Needs the setup token from LoginView *and* the temporary password
-    again. Only on success does the customer get normal JWTs."""
+class AccountActivationCheckView(APIView):
+    """POST {token} — whether a set-password link can still be used, and the
+    username/email it belongs to (shown on the set-password page)."""
 
     permission_classes = [AllowAny]
     authentication_classes = []
@@ -327,70 +305,53 @@ class FirstLoginCompleteView(APIView):
     throttle_scope = "first_login"
 
     def post(self, request):
-        serializer = FirstLoginCompleteSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
-
-        user = _user_for_setup_token(data["setup_token"])
-        if user is None:
-            return error(
-                "Your setup session has expired. Please log in again with your temporary password.",
-                errors={"code": "setup_token_invalid"},
-                status=400,
-            )
-        expires = user.temporary_password_expires_at
-        if expires is None or expires <= timezone.now():
-            return error(
-                "Your temporary password has expired. Request new login details to activate your account.",
-                errors={"code": "temporary_password_expired"},
-                status=403,
-            )
-        if not user.check_password(data["temporary_password"]):
-            logger.info("auth.first_login.wrong_temporary user_id=%s", user.id)
-            return error(
-                "The temporary password is incorrect.",
-                errors={"temporary_password": ["The temporary password is incorrect."]},
-                status=400,
-            )
-        if data["new_password"] == data["temporary_password"]:
-            return error(
-                "Choose a new password that is different from your temporary password.",
-                errors={"new_password": ["Must be different from the temporary password."]},
-                status=400,
-            )
-
-        with transaction.atomic():
-            user.set_password(data["new_password"])
-            user.must_change_password = False
-            user.temporary_password_expires_at = None
-            # Logging in with the password emailed to them proves the inbox.
-            user.email_verified = True
-            user.save(update_fields=["password", "must_change_password", "temporary_password_expires_at", "email_verified"])
-            CustomerOnboarding.objects.filter(user=user).update(password_set_at=timezone.now())
-        _blacklist_all_tokens_for_user(user)
-        logger.info("auth.first_login.completed user_id=%s", user.id)
-        return success(_auth_payload(user), message="Your password has been updated. Welcome to your dashboard!")
+        outcome, otp = EmailOTP.check_activation_link(str(request.data.get("token", "")))
+        if outcome != EmailOTP.LINK_VALID:
+            message, code = ACTIVATION_LINK_MESSAGES[outcome]
+            return error(message, errors={"code": code}, status=400)
+        return success(
+            {"email": otp.user.email, "username": onboarding.username_for(otp.user), "full_name": otp.user.full_name}
+        )
 
 
-class FirstLoginResendView(APIView):
-    """Send new login details for an account whose temporary password
-    expired or whose email never arrived. Always answers the same way, so it
-    can't be used to discover which emails have accounts."""
+class AccountActivationCompleteView(APIView):
+    """POST {token, new_password, confirm_password} — the customer creates
+    their own password from the emailed link (single use, expiring). Only
+    then is the account active; the customer logs in normally afterwards."""
 
     permission_classes = [AllowAny]
     authentication_classes = []
-    throttle_classes = AUTH_EMAIL_THROTTLES
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "first_login"
 
     def post(self, request):
-        email = str(request.data.get("email", "")).strip().lower()
-        user = User.objects.filter(email__iexact=email, is_active=True).first() if email else None
-        if user is not None and user.must_change_password:
-            onboarding.reissue_and_send(user)
-            logger.info("auth.first_login.resend user_id=%s", user.id)
-        else:
-            _equalize_hashing_time()
+        serializer = AccountActivationCompleteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        with transaction.atomic():
+            outcome, otp = EmailOTP.check_activation_link(data["token"])
+            if outcome != EmailOTP.LINK_VALID:
+                message, code = ACTIVATION_LINK_MESSAGES[outcome]
+                return error(message, errors={"code": code}, status=400)
+            otp = EmailOTP.objects.select_for_update().get(pk=otp.pk)
+            if otp.is_used:  # lost a race with a second submission
+                message, code = ACTIVATION_LINK_MESSAGES[EmailOTP.LINK_USED]
+                return error(message, errors={"code": code}, status=400)
+            user = otp.user
+            user.set_password(data["new_password"])
+            user.must_change_password = False
+            user.temporary_password_expires_at = None
+            user.email_verified = True
+            user.save(update_fields=["password", "must_change_password", "temporary_password_expires_at", "email_verified"])
+            otp.is_used = True
+            otp.save(update_fields=["is_used"])
+            CustomerOnboarding.objects.filter(user=user).update(password_set_at=timezone.now())
+        _blacklist_all_tokens_for_user(user)
+        logger.info("auth.activation.completed user_id=%s", user.id)
         return success(
-            message="If an account is waiting for activation at that email, we've sent new login details to it."
+            {"email": user.email, "username": onboarding.username_for(user)},
+            message="Your password is set and your account is active. You can now log in.",
         )
 
 
@@ -443,6 +404,10 @@ class ForgotPasswordView(APIView):
         email = serializer.validated_data["email"].strip().lower()
 
         user = User.objects.filter(email=email, is_active=True).first()
+        # An order-created account not yet activated sets its first password
+        # only through the activation link — treated like an unknown email.
+        if user is not None and user.must_change_password:
+            user = None
         return success({"expires_at": _issue_and_send_reset_otp(user)}, message=self.GENERIC_MESSAGE)
 
 
@@ -619,6 +584,12 @@ class GoogleLoginView(APIView):
                 user = User.objects.filter(email=email).first()
 
             created = user is None
+            if created and not getattr(settings, "PUBLIC_REGISTRATION_ENABLED", False):
+                return error(
+                    "There's no VR's Gateway account for this Google email. Accounts are created when you order a card.",
+                    errors={"code": "registration_closed"},
+                    status=403,
+                )
             if created:
                 # password=None -> Django's make_password(None) stores an
                 # unusable hash, same as User.set_unusable_password() would
@@ -655,8 +626,8 @@ class GoogleLoginView(APIView):
         # temporary-password setup first — Google can't skip that step.
         if user.must_change_password:
             return error(
-                "Please activate your account with the temporary password we emailed you, then you can use Google sign-in.",
-                errors={"code": "password_change_required", "email": user.email},
+                "Please activate your account with the \"Set Your Password\" link in your activation email first.",
+                errors={"code": "account_not_activated"},
                 status=403,
             )
 

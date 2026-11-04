@@ -1,5 +1,4 @@
 from django.db.models import Q
-from django.utils import timezone
 from rest_framework.views import APIView
 
 from accounts import onboarding
@@ -25,9 +24,9 @@ def _row(item):
         "order_id": item.source_order_id,
         "order_number": item.source_order.order_number if item.source_order else None,
         "account_created_at": user.created_at,
-        "activation_status": item.activation_status,
+        "account_status": item.account_status,
+        "account_status_display": CustomerOnboarding.AccountStatus(item.account_status).label,
         "password_set_at": item.password_set_at,
-        "temporary_password_expires_at": user.temporary_password_expires_at,
         "email_status": item.email_status,
         "email_attempts": item.email_attempts,
         "email_last_error": item.email_last_error,
@@ -38,7 +37,7 @@ def _row(item):
 
 class AdminOnboardingListView(APIView):
     """Accounts created automatically from paid orders, with activation and
-    welcome-email delivery status. Never includes any password data."""
+    activation-email delivery status. Never includes any password or link."""
 
     permission_classes = [IsAdminRole]
 
@@ -55,20 +54,21 @@ class AdminOnboardingListView(APIView):
         if email_status in CustomerOnboarding.EmailStatus.values:
             qs = qs.filter(email_status=email_status)
         activation = request.query_params.get("activation", "").strip().upper()
-        if activation == "COMPLETED":
+        if activation == "ACTIVATED":
             qs = qs.filter(user__must_change_password=False)
-        elif activation == "PENDING":
-            qs = qs.filter(user__must_change_password=True, user__temporary_password_expires_at__gt=timezone.now())
-        elif activation == "EXPIRED":
-            qs = qs.filter(user__must_change_password=True).exclude(user__temporary_password_expires_at__gt=timezone.now())
+        elif activation == "PENDING_PROCESSING":
+            qs = qs.filter(user__must_change_password=True, credentials_issued_at__isnull=True)
+        elif activation == "EMAIL_SENT":
+            qs = qs.filter(user__must_change_password=True, credentials_issued_at__isnull=False)
         paginator = StandardPagination()
         page = paginator.paginate_queryset(qs, request)
         return paginator.get_paginated_response([_row(item) for item in page])
 
 
 class AdminOnboardingResendView(APIView):
-    """Issues a NEW temporary password and emails it (the old one is never
-    recoverable). Only for accounts that haven't set their own password."""
+    """Resend activation email: issues a NEW set-password link (the previous
+    one stops working) and emails it. Only for accounts that haven't set
+    their own password, and only after the order reached Processing."""
 
     permission_classes = [IsAdminRole]
 
@@ -76,7 +76,14 @@ class AdminOnboardingResendView(APIView):
         item = CustomerOnboarding.objects.select_related("user").filter(pk=pk).first()
         if item is None:
             return error("Not found.", status=404)
-        if not onboarding.reissue_and_send(item.user):
-            return error("This customer has already set their own password.", status=400)
+        if not item.user.must_change_password:
+            return error("This customer has already activated their account.", status=400)
+        if item.credentials_issued_at is None:
+            return error(
+                "Move the customer's order to Processing first — that sends the activation email.",
+                errors={"code": "not_processing"},
+                status=400,
+            )
+        onboarding.reissue_and_send(item.user)
         item.refresh_from_db()
-        return success(_row(item), message="New login details are being emailed to the customer.")
+        return success(_row(item), message="A new activation link is being emailed to the customer.")

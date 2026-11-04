@@ -21,6 +21,11 @@ class CheckoutSession(models.Model):
         FAILED = "FAILED", "Payment failed"
         FULFILLED = "FULFILLED", "Paid and fulfilled"
 
+    class Provider(models.TextChoices):
+        RAZORPAY = "RAZORPAY", "Razorpay"
+        DUMMY = "DUMMY", "Dummy / Test Payment"
+
+    provider = models.CharField(max_length=10, choices=Provider.choices, default=Provider.RAZORPAY)
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     customer = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="checkout_sessions"

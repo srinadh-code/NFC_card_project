@@ -3,6 +3,7 @@ from unittest.mock import ANY, patch
 
 import requests
 from django.core.cache import cache
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -15,6 +16,9 @@ from profiles.models import Profile
 from .models import EmailOTP, User
 
 
+# Registration is closed by default (accounts come from paid orders);
+# these tests cover the still-available registration code path.
+@override_settings(PUBLIC_REGISTRATION_ENABLED=True)
 class RegisterViewTests(APITestCase):
     def _payload(self, **overrides):
         payload = {
@@ -80,6 +84,9 @@ class RegisterViewTests(APITestCase):
         self.assertFalse(User.objects.filter(email="newcustomer@example.com").exists())
 
 
+# Registration is closed by default (accounts come from paid orders);
+# these tests cover the still-available registration code path.
+@override_settings(PUBLIC_REGISTRATION_ENABLED=True)
 class PhoneValidationTests(APITestCase):
     """
     RegisterSerializer.validate_phone is the backstop for the signup form's
@@ -132,6 +139,9 @@ class PhoneValidationTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
 
+# Registration is closed by default (accounts come from paid orders);
+# these tests cover the still-available registration code path.
+@override_settings(PUBLIC_REGISTRATION_ENABLED=True)
 class PasswordPolicyTests(APITestCase):
     """
     The registration endpoint is the backstop for the signup form's live

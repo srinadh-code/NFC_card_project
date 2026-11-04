@@ -26,3 +26,14 @@ env/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Never commit database copies, data dumps, logs or build archives — they
+# contain customer data and (build.zip) secrets.
+db.sqlite3.backup-*
+*.sqlite3.backup*
+data*.json
+sqlite_data.json
+*.log
+build.zip
+*.zip
+cart_notif_test_out.txt

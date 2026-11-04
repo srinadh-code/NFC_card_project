@@ -11,7 +11,14 @@ from common.response import error, success
 
 from . import razorpay, sms, verification
 from .models import CheckoutSession, CheckoutVerification
-from .services import CheckoutError, create_checkout_session, fulfill_checkout, mark_failed
+from .services import (
+    CheckoutError,
+    confirm_dummy_payment,
+    create_checkout_session,
+    dummy_payments_enabled,
+    fulfill_checkout,
+    mark_failed,
+)
 
 logger = logging.getLogger("payments")
 
@@ -66,6 +73,8 @@ class RazorpayConfigView(APIView):
                 "key_id": razorpay.public_key_id() if enabled else "",
                 "currency": "INR",
                 "sms_otp_enabled": sms.is_configured(),
+                # Temporary test payments (never on the live site by default).
+                "dummy_enabled": dummy_payments_enabled(),
             }
         )
 
@@ -81,9 +90,18 @@ class RazorpayCheckoutView(APIView):
 
     def post(self, request):
         customer = _activated_customer(request)
+        # "dummy" = temporary test payment instead of Razorpay (refused unless
+        # DUMMY_PAYMENTS_ENABLED); anything else is Razorpay.
+        provider = (
+            CheckoutSession.Provider.DUMMY
+            if str(request.data.get("provider", "")).lower() == "dummy"
+            else CheckoutSession.Provider.RAZORPAY
+        )
         try:
             if customer is not None:
-                session = create_checkout_session(customer=customer, address_id=request.data.get("address_id"))
+                session = create_checkout_session(
+                    customer=customer, address_id=request.data.get("address_id"), provider=provider
+                )
             else:
                 contact = GuestContactSerializer(data=request.data.get("contact") or {})
                 address = GuestAddressSerializer(data=request.data.get("address") or {})
@@ -100,6 +118,7 @@ class RazorpayCheckoutView(APIView):
                     email_token=request.data.get("email_verification_token"),
                     phone_token=request.data.get("phone_verification_token"),
                     session_ref=request.data.get("session_ref", ""),
+                    provider=provider,
                 )
         except CheckoutError as exc:
             return error(exc.message, errors=exc.errors, status=exc.status)
@@ -118,6 +137,12 @@ class RazorpayCheckoutView(APIView):
                     "total": str(session.total),
                 },
                 "prefill": {"name": session.full_name, "email": session.email, "contact": session.phone},
+                "provider": session.provider,
+                # Server-priced lines, for the payment confirmation screen.
+                "lines": [
+                    {"name": line["name"], "qty": line["qty"], "unit_price": line["unit_price"], "pricing_tier": line["pricing_tier"]}
+                    for line in session.lines
+                ],
             },
             status=201,
         )
@@ -212,6 +237,40 @@ class RazorpayVerifyView(APIView):
                 "account_created": account_created or order.customer.must_change_password,
             },
             message="Payment verified. Your order is confirmed.",
+        )
+
+
+class DummyPaymentConfirmView(APIView):
+    """POST {checkout_id, amount} — completes a temporary test payment for a
+    checkout started with provider "dummy". Refused unless
+    DUMMY_PAYMENTS_ENABLED. Idempotent: confirming again returns the same
+    order. `amount` (paise) must match the server-priced total."""
+
+    permission_classes = [AllowAny]
+    throttle_classes = [CheckoutAnonThrottle, CheckoutUserThrottle]
+
+    def post(self, request):
+        checkout_id = str(request.data.get("checkout_id", ""))
+        amount = request.data.get("amount")
+        try:
+            amount_paise = int(amount) if amount is not None else None
+        except (TypeError, ValueError):
+            return error("Invalid amount.", status=400)
+        try:
+            session, account_created = confirm_dummy_payment(checkout_id, amount_paise=amount_paise)
+        except CheckoutError as exc:
+            return error(exc.message, errors=exc.errors, status=exc.status)
+        order = session.order
+        return success(
+            {
+                "order_id": order.pk,
+                "order_number": order.order_number,
+                "tracking_token": str(order.tracking_token),
+                "email": session.email,
+                "account_created": account_created or order.customer.must_change_password,
+                "payment_method": order.payment_method,
+            },
+            message="Test payment completed. Your order is confirmed.",
         )
 
 

@@ -65,14 +65,15 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     email_verified = models.BooleanField(default=False)
 
-    # Set on accounts created automatically after a paid guest checkout
-    # (accounts/onboarding.py): the account's password is a temporary one
-    # that was emailed to the customer, valid until
-    # `temporary_password_expires_at`. While set, login issues no JWTs —
-    # only a short-lived setup token for the mandatory password change
-    # (FirstLoginCompleteView) — and common.authentication rejects any JWT
-    # for the account, so no customer API is reachable until it's done.
+    # Set on accounts created automatically from a paid checkout
+    # (accounts/onboarding.py) until the customer sets their own password
+    # through the emailed activation link. While set the account has no
+    # usable password, login and Google sign-in are refused, password reset
+    # is ignored and common.authentication rejects any JWT, so no customer
+    # API is reachable before activation.
     must_change_password = models.BooleanField(default=False)
+    # No longer used (the old emailed temporary password); kept so existing
+    # rows and migrations stay valid.
     temporary_password_expires_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -109,6 +110,7 @@ class EmailOTP(models.Model):
     class Purpose(models.TextChoices):
         REGISTER = "REGISTER", "Register"
         RESET = "RESET", "Password Reset"
+        ACTIVATE = "ACTIVATE", "Account Activation"
 
     # Wrong-guess ceiling for `check_code()` — once reached the OTP is
     # locked out (is_used=True) and a fresh one must be requested. This is
@@ -141,6 +143,7 @@ class EmailOTP(models.Model):
     LINK_INVALID = "invalid"
     LINK_EXPIRED = "expired"
     LINK_ALREADY_VERIFIED = "already_verified"
+    LINK_USED = "used"
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="otps")
     # Hashed with the same hasher as user passwords (django.contrib.auth.hashers)
@@ -240,6 +243,42 @@ class EmailOTP(models.Model):
             return cls.LINK_EXPIRED, otp
         return cls.LINK_VALID, otp
 
+    @classmethod
+    def issue_activation_link(cls, user, lifetime_hours):
+        """Supersedes any older activation link and issues a fresh single-use
+        set-password link token ("<pk>.<secret>") for an account created from
+        a paid order. Only the secret's hash is stored, so the raw token must
+        be emailed immediately — it cannot be read back afterwards."""
+        with transaction.atomic():
+            cls._supersede(user, cls.Purpose.ACTIVATE)
+            raw_secret = secrets.token_urlsafe(32)
+            otp = cls.objects.create(
+                user=user,
+                code_hash=make_password(raw_secret),
+                purpose=cls.Purpose.ACTIVATE,
+                expires_at=timezone.now() + timedelta(hours=lifetime_hours),
+            )
+            return f"{otp.pk}.{raw_secret}"
+
+    @classmethod
+    def check_activation_link(cls, raw_token):
+        """Returns (outcome, otp) for a set-password link. The secret is
+        checked first, so nothing about an account is revealed to anyone
+        without its genuine link. A link that was used, or replaced by a
+        newer one, is LINK_USED; the account being active already is
+        LINK_USED too."""
+        pk, raw_secret = cls._split_token(raw_token)
+        if pk is None:
+            return cls.LINK_INVALID, None
+        otp = cls.objects.select_related("user").filter(pk=pk, purpose=cls.Purpose.ACTIVATE).first()
+        if otp is None or not raw_secret or not check_password(raw_secret, otp.code_hash):
+            return cls.LINK_INVALID, None
+        if otp.is_used or not otp.user.must_change_password:
+            return cls.LINK_USED, otp
+        if otp.is_expired:
+            return cls.LINK_EXPIRED, otp
+        return cls.LINK_VALID, otp
+
     @property
     def is_expired(self):
         return timezone.now() >= self.expires_at
@@ -310,12 +349,19 @@ class EmailOTP(models.Model):
 
 class CustomerOnboarding(models.Model):
     """Audit/delivery record for an account created automatically from a
-    paid order (accounts/onboarding.py) — what the admin "Account
-    Activation" view reads. Never holds a password in any form: the
-    temporary password exists only as the user's normal password hash and,
-    briefly, in memory while the welcome email is sent. A failed or lost
-    email is recovered by issuing a new temporary password, never by
-    re-reading the old one."""
+    paid order (accounts/onboarding.py) — what the admin order details and
+    "Account Activation" view read. Never holds a password or link token in
+    any form; a failed or lost activation email is recovered by issuing a
+    new link (which retires the old one).
+
+    `credentials_issued_at` is when the latest set-password link was issued
+    (first time: when an admin moved the order to Processing)."""
+
+    class AccountStatus(models.TextChoices):
+        PENDING_PROCESSING = "PENDING_PROCESSING", "Pending Processing"
+        EMAIL_SENT = "EMAIL_SENT", "Activation Email Sent"
+        EMAIL_FAILED = "EMAIL_FAILED", "Activation Email Failed"
+        ACTIVATED = "ACTIVATED", "Account Activated"
 
     class EmailStatus(models.TextChoices):
         PENDING = "PENDING", "Pending"
@@ -343,12 +389,11 @@ class CustomerOnboarding(models.Model):
         return f"Onboarding for {self.user.email}"
 
     @property
-    def activation_status(self):
-        """COMPLETED once the customer set their own password; EXPIRED when
-        the temporary password lapsed unused; otherwise PENDING."""
+    def account_status(self):
         if not self.user.must_change_password:
-            return "COMPLETED"
-        expires = self.user.temporary_password_expires_at
-        if expires is not None and expires <= timezone.now():
-            return "EXPIRED"
-        return "PENDING"
+            return self.AccountStatus.ACTIVATED
+        if self.credentials_issued_at is None:
+            return self.AccountStatus.PENDING_PROCESSING
+        if self.email_status == self.EmailStatus.FAILED:
+            return self.AccountStatus.EMAIL_FAILED
+        return self.AccountStatus.EMAIL_SENT

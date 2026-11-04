@@ -1,0 +1,22 @@
+{% autoescape off %}Hello {{ customer_name }},
+
+Thank you for ordering your VR's Gateway NFC Card.
+
+Your order is now being processed.
+
+Your customer account is ready.
+
+Username: {{ username }}
+
+Click below to create your password and activate your account.
+
+Set Your Password: {{ action_url }}
+(This link can be used once and expires in {{ expires_text }}.)
+
+After setting your password, you can log in to your VR's Gateway customer dashboard and manage your digital business profile.
+{% if order_number %}
+Order Number: {{ order_number }}
+{% endif %}
+Thank you,
+VR's Gateway Team
+{% endautoescape %}

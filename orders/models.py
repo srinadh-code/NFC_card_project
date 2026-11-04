@@ -50,6 +50,9 @@ class Order(models.Model):
         NET_BANKING = "NET_BANKING", "Net Banking"
         RAZORPAY = "RAZORPAY", "Razorpay"
         COD = "COD", "COD"
+        # Temporary test payment (payments/services.py) — local development
+        # or an explicitly enabled test environment only, never live.
+        DUMMY = "DUMMY", "Dummy / Test Payment"
 
     class PaymentStatus(models.TextChoices):
         PAID = "PAID", "Paid"

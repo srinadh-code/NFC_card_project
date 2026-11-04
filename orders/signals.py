@@ -38,8 +38,6 @@ def _notify_on_order_change(sender, instance, created, **kwargs):
         # The order confirmation email carries the customer's secure Track
         # Order link (order.tracking_token) — see accounts/emails.py. Never
         # raises, so a mail-provider outage can't roll back order creation.
-        # Skipped for an order that just created the customer's account:
-        # its welcome email (accounts/onboarding.py) carries the order.
         if not getattr(instance, "_skip_confirmation_email", False):
             send_order_confirmation_email(instance.customer, instance)
         return

@@ -1,64 +1,44 @@
-"""Automatic customer accounts for paid guest checkouts.
+"""Customer accounts for orders placed through the guest checkout.
 
-Called only from payments.services.fulfill_checkout — i.e. only after a
-Razorpay payment has been verified on the backend (signature or webhook).
+Order of events:
 
-* New email -> a CUSTOMER account is created with a random temporary
-  password (stored only as Django's normal password hash), flagged
-  `must_change_password`, valid for TEMPORARY_PASSWORD_HOURS. The plaintext
-  exists only in memory long enough to be emailed, and is never logged,
-  stored or returned by any API.
-* Existing email -> nothing about the account changes (no new account, no
-  password reset); the order is simply attached to it and the normal order
-  confirmation email goes out (orders/signals.py).
+1. Payment succeeds (payments.services.fulfill) -> provision_customer().
+   * New email: a CUSTOMER account is created *pending activation* — no
+     usable password, `must_change_password` set, profile (and with it the
+     unique username) created. Nothing is emailed about the account yet.
+   * Existing email: the order is attached to that account; nothing about
+     the account changes.
+2. An admin moves the order to Processing (admin_api.orders) ->
+   start_activation_for_order(). Only for an account still pending
+   activation, and only the first time: a single-use, expiring set-password
+   link is issued (only its hash is stored, accounts.models.EmailOTP) and
+   emailed with the username. Saving Processing again sends nothing.
+3. The customer opens the link, sets their own password
+   (accounts.views.AccountActivationCompleteView) and can then log in.
 
-The welcome email is sent after the database transaction commits, in the
-background with retries, so SMTP/Brevo availability never affects the
-payment or the order. If every attempt fails, the CustomerOnboarding row
-records it (admin "Account Activation" view) and a *new* temporary password
-can be issued and sent (admin resend, the public "send me new login
-details" form, or `manage.py retry_onboarding_emails`).
+Never emails a password. A failed or lost email is recovered with
+reissue_and_send() (admin "Resend activation email"), which issues a new
+link and retires the old one. Every attempt and error is recorded on
+CustomerOnboarding; email failures never touch the order.
 """
 
 import logging
-import secrets
-import string
 import threading
 import time
-from datetime import timedelta
 
 from django.conf import settings
 from django.db import connection, transaction
 from django.template.loader import render_to_string
 from django.utils import timezone
 
-from .models import CustomerOnboarding, User
+from .models import CustomerOnboarding, EmailOTP, User
 
 logger = logging.getLogger("accounts.onboarding")
 
-TEMPORARY_PASSWORD_HOURS = 24
-# Delays before each retry of a failed welcome-email send.
+# Delays before each retry of a failed activation-email send.
 EMAIL_RETRY_DELAYS_SECONDS = (2, 10)
 
-WELCOME_SUBJECT = "Welcome to VRS GATEWAY – Your Order Is Confirmed!"
-
-# No look-alike characters (0/O, 1/l/I) — the customer types this by hand.
-_LOWER = "abcdefghijkmnopqrstuvwxyz"
-_UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ"
-_DIGITS = "23456789"
-_SPECIAL = "@#$%&*?!"
-
-
-def generate_temporary_password(length=12):
-    """Cryptographically random password that satisfies the project's
-    password policy (accounts/validators.py: lower, upper, digit, special,
-    at most 12 characters)."""
-    pools = [_LOWER, _UPPER, _DIGITS, _SPECIAL]
-    chars = [secrets.choice(pool) for pool in pools]
-    everything = "".join(pools)
-    chars += [secrets.choice(everything) for _ in range(length - len(chars))]
-    secrets.SystemRandom().shuffle(chars)
-    return "".join(chars)
+ACTIVATION_SUBJECT = "Your VR's Gateway Customer Account Is Ready!"
 
 
 def normalize_email(email):
@@ -69,77 +49,64 @@ def find_customer_by_email(email):
     return User.objects.filter(email__iexact=normalize_email(email)).first()
 
 
-def issue_temporary_password(user):
-    """Gives `user` a fresh temporary password (replacing any previous one)
-    and returns the plaintext for immediate emailing. Only for accounts
-    still waiting for their first password setup."""
-    raw = generate_temporary_password()
-    user.set_password(raw)
-    user.must_change_password = True
-    user.temporary_password_expires_at = timezone.now() + timedelta(hours=TEMPORARY_PASSWORD_HOURS)
-    user.save(update_fields=["password", "must_change_password", "temporary_password_expires_at"])
-    CustomerOnboarding.objects.filter(user=user).update(
-        credentials_issued_at=timezone.now(),
-        email_status=CustomerOnboarding.EmailStatus.PENDING,
-        email_last_error="",
-    )
-    return raw
-
-
 def provision_customer(*, email, full_name, phone):
-    """Returns (user, temporary_password). temporary_password is None when
-    an account already existed for this email — that account is used as-is.
-    Must run inside the caller's transaction (fulfill_checkout)."""
+    """Returns (user, created). A new account is pending activation (no
+    usable password). An existing account is returned unchanged. Must run
+    inside the caller's transaction (payments.services.fulfill)."""
     email = normalize_email(email)
     existing = find_customer_by_email(email)
     if existing is not None:
-        return existing, None
+        return existing, False
 
     user = User.objects.create_user(
         email=email,
-        password=None,
+        password=None,  # unusable until the customer sets their own
         full_name=full_name.strip(),
         phone=phone.strip(),
         role=User.Role.CUSTOMER,
         is_active=True,
-        # Proven when they log in with the password that was emailed to them.
-        email_verified=False,
+        # The checkout proved this inbox with an emailed OTP.
+        email_verified=True,
+        must_change_password=True,
     )
     CustomerOnboarding.objects.create(user=user)
-    # Profiles are normally created at registration (accounts/views.py
-    # RegisterView); do the same here so the dashboard works on first login.
+    # Creates the profile and its unique username (the login username).
     from profiles.models import Profile
 
     Profile.ensure_for_user(user)
-    raw = issue_temporary_password(user)
     logger.info("onboarding.account_created user_id=%s", user.pk)
-    return user, raw
+    return user, True
 
 
-def _dashboard_login_url():
-    return f"{settings.FRONTEND_URL.rstrip('/')}/login"
+def username_for(user):
+    from profiles.models import Profile
+
+    return Profile.ensure_for_user(user).username
 
 
-def _render_welcome(user, raw_password, order):
-    first_item = order.items.first() if order is not None else None
-    quantity = sum(i.qty for i in order.items.all()) if order is not None else 0
-    product_names = ", ".join(dict.fromkeys(i.name for i in order.items.all())) if order is not None else ""
+def _activation_url(raw_token):
+    return f"{settings.FRONTEND_URL.rstrip('/')}/set-password?token={raw_token}"
+
+
+def _render_activation(user, raw_token, order):
+    name = user.full_name or user.email
+    hours = settings.ACCOUNT_ACTIVATION_LINK_HOURS
     context = {
-        "subject": WELCOME_SUBJECT,
-        "customer_name": user.full_name or user.email,
-        "customer_email": user.email,
-        "temporary_password": raw_password,
-        "customer_dashboard_url": _dashboard_login_url(),
-        "expiry_hours": TEMPORARY_PASSWORD_HOURS,
-        "order_id": order.order_number if order is not None else "",
-        "product_name": product_names or (first_item.name if first_item else ""),
-        "quantity": quantity,
-        "amount": f"₹{order.total:,.2f}" if order is not None else "",
-        "order_status": order.get_status_display() if order is not None else "",
+        # accounts/emails/base.html's layout fields
+        "subject": ACTIVATION_SUBJECT,
+        "heading": "Your customer account is ready!",
+        "name": name,
+        "action_url": _activation_url(raw_token),
+        "action_label": "Set Your Password",
+        "expires_text": f"{hours} hours" if hours != 1 else "1 hour",
+        # this email's own fields
+        "customer_name": name,
+        "username": username_for(user),
+        "order_number": order.order_number if order is not None else "",
     }
     return (
-        render_to_string("accounts/emails/welcome_credentials.html", context),
-        render_to_string("accounts/emails/welcome_credentials.txt", context),
+        render_to_string("accounts/emails/account_activation.html", context),
+        render_to_string("accounts/emails/account_activation.txt", context),
     )
 
 
@@ -195,23 +162,24 @@ def real_delivery_available():
 
 
 def _send(user, subject, html, text):
-    return send_email(user.email, subject, html, text, f"purpose=welcome user_id={user.pk}")
+    return send_email(user.email, subject, html, text, f"purpose=activation user_id={user.pk}")
 
 
-def deliver_welcome_email(onboarding_id, raw_password):
-    """Sends the welcome/credentials email with retries and records the
-    outcome on CustomerOnboarding. Never raises, never logs the password."""
+def deliver_activation_email(onboarding_id, raw_token):
+    """Sends the activation email with retries and records every attempt on
+    CustomerOnboarding. Never raises, never logs the link."""
     onboarding = CustomerOnboarding.objects.select_related("user", "source_order").filter(pk=onboarding_id).first()
     if onboarding is None:
         return False
     user = onboarding.user
-    html, text = _render_welcome(user, raw_password, onboarding.source_order)
+    html, text = _render_activation(user, raw_token, onboarding.source_order)
     delays = (0, *EMAIL_RETRY_DELAYS_SECONDS)
+    error_text = ""
     for attempt, delay in enumerate(delays, start=1):
         if delay and not getattr(settings, "ONBOARDING_EMAIL_SYNC", False):
             time.sleep(delay)
         try:
-            ok = _send(user, WELCOME_SUBJECT, html, text)
+            ok = _send(user, ACTIVATION_SUBJECT, html, text)
             error_text = "" if ok else "Email provider rejected the message"
         except Exception as exc:  # noqa: BLE001 — recorded, never propagated
             ok, error_text = False, type(exc).__name__
@@ -229,35 +197,66 @@ def deliver_welcome_email(onboarding_id, raw_password):
     return False
 
 
-def dispatch_welcome_email(onboarding_id, raw_password, *, sync=False):
-    """Runs deliver_welcome_email after the current transaction commits —
+def dispatch_activation_email(onboarding_id, raw_token, *, sync=False):
+    """Runs deliver_activation_email after the current transaction commits —
     in a background thread normally, inline when ONBOARDING_EMAIL_SYNC is
-    set (tests). The payment/order response never waits on email."""
+    set (tests). The admin's request never waits on email."""
 
     def run():
         try:
-            deliver_welcome_email(onboarding_id, raw_password)
+            deliver_activation_email(onboarding_id, raw_token)
         finally:
             connection.close()
 
     def start():
         if sync or getattr(settings, "ONBOARDING_EMAIL_SYNC", False):
-            deliver_welcome_email(onboarding_id, raw_password)
+            deliver_activation_email(onboarding_id, raw_token)
         else:
             threading.Thread(target=run, daemon=True).start()
 
     transaction.on_commit(start)
 
 
+def _issue_and_dispatch(onboarding, *, sync=False):
+    raw_token = EmailOTP.issue_activation_link(onboarding.user, settings.ACCOUNT_ACTIVATION_LINK_HOURS)
+    CustomerOnboarding.objects.filter(pk=onboarding.pk).update(
+        credentials_issued_at=timezone.now(),
+        email_status=CustomerOnboarding.EmailStatus.PENDING,
+        email_last_error="",
+    )
+    dispatch_activation_email(onboarding.pk, raw_token, sync=sync)
+
+
+def start_activation_for_order(order, *, sync=False):
+    """Called when an admin moves a paid order to Processing. Returns what
+    happened: "sent" (link issued and email queued), "already_sent" (this
+    account's activation was already started — nothing sent again),
+    "active" (an existing, activated account — nothing to send; its
+    password is never touched) or "no_onboarding"."""
+    user = order.customer
+    if not user.must_change_password:
+        return "active"
+    with transaction.atomic():
+        onboarding = CustomerOnboarding.objects.select_for_update().filter(user=user).first()
+        if onboarding is None:
+            return "no_onboarding"
+        if onboarding.credentials_issued_at is not None:
+            return "already_sent"
+        if onboarding.source_order_id is None:
+            onboarding.source_order = order
+            onboarding.save(update_fields=["source_order"])
+        _issue_and_dispatch(onboarding, sync=sync)
+    logger.info("onboarding.activation_started user_id=%s order=%s", user.pk, order.pk)
+    return "sent"
+
+
 def reissue_and_send(user, *, sync=False):
-    """New temporary password + welcome email for an account still waiting
-    for its first password setup (email failed, lost, or expired). Returns
-    False — and changes nothing — for an account that already set its own
-    password."""
+    """Admin "Resend activation email": a fresh link (the old one stops
+    working) for an account still pending activation. Returns False — and
+    changes nothing — for an account that already set its password."""
     if not user.must_change_password:
         return False
-    onboarding, _ = CustomerOnboarding.objects.get_or_create(user=user)
     with transaction.atomic():
-        raw = issue_temporary_password(user)
-        dispatch_welcome_email(onboarding.pk, raw, sync=sync)
+        onboarding, _ = CustomerOnboarding.objects.select_for_update().get_or_create(user=user)
+        _issue_and_dispatch(onboarding, sync=sync)
     return True

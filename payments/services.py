@@ -1,12 +1,13 @@
 import logging
+import uuid
 from decimal import Decimal
 from types import SimpleNamespace
 
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from accounts import onboarding
-from admin_api.orders.services import apply_status_transition
 from accounts.models import CustomerOnboarding
 from common.discounts import calculate_first_order_discount, get_catalog_product
 from customer_management.customer_addresses import pincode as pincode_service
@@ -127,6 +128,7 @@ def create_checkout_session(
     email_token=None,
     phone_token=None,
     session_ref="",
+    provider=CheckoutSession.Provider.RAZORPAY,
 ):
     """Prices the checkout server-side, stores it as a CheckoutSession and
     opens the matching Razorpay order. Returns the session.
@@ -135,8 +137,14 @@ def create_checkout_session(
     addresses (`address_id`). Guest: `contact` (full_name/email/phone),
     `address` (address fields), `items` ([{product_id, qty}]) and the
     verification token proving the email was OTP-verified (`email_token`;
-    `phone_token` too when the mobile number was verified)."""
-    if not razorpay.is_configured():
+    `phone_token` too when the mobile number was verified).
+
+    `provider` DUMMY skips Razorpay entirely: the session is then paid with
+    confirm_dummy_payment(). Only allowed when DUMMY_PAYMENTS_ENABLED."""
+    if provider == CheckoutSession.Provider.DUMMY:
+        if not dummy_payments_enabled():
+            raise CheckoutError("Test payments aren't available here.", errors={"code": "dummy_payments_disabled"}, status=403)
+    elif not razorpay.is_configured():
         raise CheckoutError("Online payment isn't available right now.", errors={"code": "payments_unavailable"}, status=503)
 
     promo_code = ""
@@ -211,6 +219,7 @@ def create_checkout_session(
     first_order = calculate_first_order_discount(subtotal, pricing_customer, assume_eligible=assume_new)
 
     session = CheckoutSession.objects.create(
+        provider=provider,
         customer=customer,
         **contact_values,
         **verified,
@@ -223,6 +232,8 @@ def create_checkout_session(
         amount=first_order["final_amount"],
         shipping=Decimal("0"),
     )
+    if provider == CheckoutSession.Provider.DUMMY:
+        return session
     try:
         rp_order = razorpay.create_order(
             session.amount_paise, receipt=str(session.public_id), notes={"checkout": str(session.public_id)}
@@ -236,104 +247,141 @@ def create_checkout_session(
     return session
 
 
+def dummy_payments_enabled():
+    """Temporary test payments — see settings.DUMMY_PAYMENTS_ENABLED."""
+    return bool(getattr(settings, "DUMMY_PAYMENTS_ENABLED", False))
+
+
 def _provision_user(session):
-    """(user, temporary_password or None). Safe against two payments for the
-    same new email landing at once — the loser of the unique-email race just
-    uses the account the winner created."""
+    """(user, account_created). Safe against two payments for the same new
+    email landing at once — the loser of the unique-email race just uses
+    the account the winner created."""
     if session.customer_id:
-        return session.customer, None
+        return session.customer, False
     try:
         with transaction.atomic():
             return onboarding.provision_customer(email=session.email, full_name=session.full_name, phone=session.phone)
     except IntegrityError:
-        return onboarding.find_customer_by_email(session.email), None
+        return onboarding.find_customer_by_email(session.email), False
+
+
+PAYMENT_METHOD_FOR_PROVIDER = {
+    CheckoutSession.Provider.RAZORPAY: Order.PaymentMethod.RAZORPAY,
+    CheckoutSession.Provider.DUMMY: Order.PaymentMethod.DUMMY,
+}
+
+
+def _fulfill(session, *, via, payment_ref=None):
+    """Turns a paid, row-locked CheckoutSession into the real order — exactly
+    once (a FULFILLED session just returns). Must run inside the caller's
+    transaction. The order starts as Pending with payment Paid; the customer
+    account (new ones pending activation) is linked now, and activated when
+    an admin moves the order to Processing (accounts/onboarding.py)."""
+    if session.status == CheckoutSession.Status.FULFILLED:
+        return False
+
+    user, account_created = _provision_user(session)
+    method = PAYMENT_METHOD_FOR_PROVIDER[session.provider]
+
+    order = Order(
+        customer=user,
+        amount=session.amount,
+        first_order_discount_percentage=session.first_order_discount_percentage,
+        first_order_discount_amount=session.first_order_discount_amount,
+        shipping=session.shipping,
+        payment_method=method,
+        payment_status=Order.PaymentStatus.PAID,
+        **compose_shipping_snapshot(session),
+    )
+    order.save()
+    OrderItem.objects.bulk_create(
+        [
+            OrderItem(
+                order=order,
+                product_id=line["product_id"],
+                name=line["name"],
+                card_type=line["card_type"],
+                color=line["color"],
+                qty=line["qty"],
+                pricing_tier=line["pricing_tier"],
+                price=Decimal(line["unit_price"]),
+                original_price=Decimal(line["original_price"]) if line["original_price"] else None,
+                discount_type=line["discount_type"],
+                discount_value=Decimal(line["discount_value"]) if line["discount_value"] else None,
+                discount_amount=Decimal(line["discount_amount"]) if line["discount_amount"] else None,
+                promo_code_used=line["promo_code_used"],
+                applied_offer_id=line["applied_offer_id"],
+            )
+            for line in session.lines
+        ]
+    )
+    Transaction.objects.create(order=order, amount=session.total, method=method, status=Order.PaymentStatus.PAID)
+
+    if account_created:
+        CustomerAddress.objects.create(
+            customer=user,
+            label="Home",
+            full_name=session.full_name,
+            phone=session.phone,
+            is_default=True,
+            latitude=session.latitude,
+            longitude=session.longitude,
+            **{f: getattr(session, f) for f in ADDRESS_FIELDS},
+        )
+        CustomerOnboarding.objects.filter(user=user, source_order__isnull=True).update(source_order=order)
+    if session.customer_id:
+        clear_cart(session.customer)
+
+    session.status = CheckoutSession.Status.FULFILLED
+    session.order = order
+    session.razorpay_payment_id = payment_ref
+    session.fulfilled_via = via
+    session.paid_at = timezone.now()
+    session.save(update_fields=["status", "order", "razorpay_payment_id", "fulfilled_via", "paid_at"])
+    logger.info(
+        "payments.fulfilled session=%s order=%s via=%s provider=%s new_account=%s",
+        session.public_id, order.pk, via, session.provider, account_created,
+    )
+    return account_created
 
 
 def fulfill_checkout(razorpay_order_id, razorpay_payment_id, *, via):
-    """Turns a verified, paid CheckoutSession into the real order — exactly
-    once. Called by both the verify endpoint and the webhook; the row lock
-    and the status check make retries/duplicates a no-op that returns the
-    existing order. Returns (session, account_created)."""
+    """Razorpay: called by both the verify endpoint and the webhook; the row
+    lock and the status check make retries/duplicates a no-op that returns
+    the existing order. Returns (session, account_created)."""
     with transaction.atomic():
         session = CheckoutSession.objects.select_for_update().filter(razorpay_order_id=razorpay_order_id).first()
         if session is None:
             raise CheckoutError("Unknown payment.", status=404)
-        if session.status == CheckoutSession.Status.FULFILLED:
-            return session, False
+        account_created = _fulfill(session, via=via, payment_ref=razorpay_payment_id)
+    return session, account_created
 
-        user, temporary_password = _provision_user(session)
-        account_created = temporary_password is not None
 
-        order = Order(
-            customer=user,
-            amount=session.amount,
-            first_order_discount_percentage=session.first_order_discount_percentage,
-            first_order_discount_amount=session.first_order_discount_amount,
-            shipping=session.shipping,
-            payment_method=Order.PaymentMethod.RAZORPAY,
-            payment_status=Order.PaymentStatus.PAID,
-            **compose_shipping_snapshot(session),
+def confirm_dummy_payment(checkout_id, *, amount_paise=None):
+    """Temporary test payment for a DUMMY CheckoutSession. Re-checks that test
+    payments are enabled and, when `amount_paise` is sent, that it equals the
+    server-priced amount. Confirming the same checkout again (double click,
+    refresh) returns the order already created. Returns (session,
+    account_created)."""
+    if not dummy_payments_enabled():
+        raise CheckoutError("Test payments aren't available here.", errors={"code": "dummy_payments_disabled"}, status=403)
+    try:
+        checkout_uuid = uuid.UUID(str(checkout_id))
+    except ValueError:
+        raise CheckoutError("This checkout wasn't found. Please start again.", status=404)
+    with transaction.atomic():
+        session = (
+            CheckoutSession.objects.select_for_update()
+            .filter(public_id=checkout_uuid, provider=CheckoutSession.Provider.DUMMY)
+            .first()
         )
-        # A new account's welcome email already carries the order details —
-        # don't also send the separate confirmation (orders/signals.py).
-        order._skip_confirmation_email = account_created
-        order.save()
-        OrderItem.objects.bulk_create(
-            [
-                OrderItem(
-                    order=order,
-                    product_id=line["product_id"],
-                    name=line["name"],
-                    card_type=line["card_type"],
-                    color=line["color"],
-                    qty=line["qty"],
-                    pricing_tier=line["pricing_tier"],
-                    price=Decimal(line["unit_price"]),
-                    original_price=Decimal(line["original_price"]) if line["original_price"] else None,
-                    discount_type=line["discount_type"],
-                    discount_value=Decimal(line["discount_value"]) if line["discount_value"] else None,
-                    discount_amount=Decimal(line["discount_amount"]) if line["discount_amount"] else None,
-                    promo_code_used=line["promo_code_used"],
-                    applied_offer_id=line["applied_offer_id"],
-                )
-                for line in session.lines
-            ]
-        )
-        Transaction.objects.create(
-            order=order,
-            amount=session.total,
-            method=Order.PaymentMethod.RAZORPAY,
-            status=Order.PaymentStatus.PAID,
-        )
-        # Verified payment moves the order into Processing through the
-        # regular status workflow (stamps confirmed_at like an admin would).
-        apply_status_transition(order, Order.Status.PROCESSING)
-
-        if account_created:
-            CustomerAddress.objects.create(
-                customer=user,
-                label="Home",
-                full_name=session.full_name,
-                phone=session.phone,
-                is_default=True,
-                latitude=session.latitude,
-                longitude=session.longitude,
-                **{f: getattr(session, f) for f in ADDRESS_FIELDS},
-            )
-            onboarding_row = CustomerOnboarding.objects.get(user=user)
-            onboarding_row.source_order = order
-            onboarding_row.save(update_fields=["source_order"])
-            onboarding.dispatch_welcome_email(onboarding_row.pk, temporary_password)
-        if session.customer_id:
-            clear_cart(session.customer)
-
-        session.status = CheckoutSession.Status.FULFILLED
-        session.order = order
-        session.razorpay_payment_id = razorpay_payment_id
-        session.fulfilled_via = via
-        session.paid_at = timezone.now()
-        session.save(update_fields=["status", "order", "razorpay_payment_id", "fulfilled_via", "paid_at"])
-    logger.info("payments.fulfilled session=%s order=%s via=%s new_account=%s", session.public_id, order.pk, via, account_created)
+        if session is None:
+            raise CheckoutError("This checkout wasn't found. Please start again.", status=404)
+        if session.status == CheckoutSession.Status.FAILED:
+            raise CheckoutError("This checkout can no longer be paid. Please start again.", status=409)
+        if amount_paise is not None and int(amount_paise) != session.amount_paise:
+            raise CheckoutError("The order amount changed. Please review your order and try again.", errors={"code": "amount_mismatch"}, status=409)
+        account_created = _fulfill(session, via="dummy", payment_ref=f"TEST-{session.public_id.hex[:20].upper()}")
     return session, account_created
 
 

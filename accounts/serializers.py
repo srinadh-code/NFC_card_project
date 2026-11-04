@@ -78,12 +78,27 @@ class ResendOtpSerializer(serializers.Serializer):
     purpose = serializers.ChoiceField(choices=["REGISTER", "RESET"], default="REGISTER")
 
 
+def resolve_login_email(identifier):
+    """Login accepts an email address or a profile username; returns the
+    email to authenticate with (unchanged input when nothing matches, so a
+    wrong username fails exactly like a wrong email)."""
+    value = (identifier or "").strip()
+    if "@" in value:
+        return value.lower()
+    from profiles.models import Profile
+
+    profile = Profile.objects.filter(username__iexact=value).select_related("user").first()
+    return profile.user.email.lower() if profile else value.lower()
+
+
 class LoginSerializer(serializers.Serializer):
-    email = serializers.EmailField()
+    # Email address or profile username (the username emailed to customers
+    # whose account was created from an order).
+    email = serializers.CharField(max_length=254)
     password = serializers.CharField(write_only=True)
 
     def validate(self, attrs):
-        email = attrs["email"].strip().lower()
+        email = resolve_login_email(attrs["email"])
         user = authenticate(
             request=self.context.get("request"), username=email, password=attrs["password"]
         )
@@ -135,9 +150,8 @@ class GoogleLoginSerializer(serializers.Serializer):
     credential = serializers.CharField()
 
 
-class FirstLoginCompleteSerializer(serializers.Serializer):
-    setup_token = serializers.CharField(write_only=True)
-    temporary_password = serializers.CharField(write_only=True)
+class AccountActivationCompleteSerializer(serializers.Serializer):
+    token = serializers.CharField(write_only=True)
     new_password = serializers.CharField(write_only=True)
     confirm_password = serializers.CharField(write_only=True)
 

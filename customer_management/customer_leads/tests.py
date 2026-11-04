@@ -1,4 +1,7 @@
+from datetime import timedelta
+
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 
 from common.test_utils import AuthenticatedAPITestCase
@@ -146,6 +149,8 @@ class ListLeadsViewTests(AuthenticatedAPITestCase):
         older = self._create_lead(self.user, name="Older")
         self._create_lead(self.user, name="Contacted", status=Lead.Status.CONTACTED)
         newer = self._create_lead(self.user, name="Newer")
+        # Rows created in the same instant would tie on created_at.
+        Lead.objects.filter(pk=older.pk).update(created_at=timezone.now() - timedelta(minutes=5))
 
         response = self.client.get(reverse("customer-leads"), {"status": "NEW"})
 

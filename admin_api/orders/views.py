@@ -4,12 +4,13 @@ from django.db import transaction
 from django.db.models import Q
 from rest_framework.views import APIView
 
+from accounts import onboarding
 from accounts.models import User
 from admin_api.permissions import IsAdminRole
 from common.pagination import StandardPagination
 from common.response import error, success
 from nfc_cards.models import NfcCard
-from orders.models import Order, OrderItem
+from orders.models import Order, OrderItem, Transaction
 
 from .serializers import (
     AdminOrderAssignCardSerializer,
@@ -24,7 +25,7 @@ class AdminOrderListCreateView(APIView):
     permission_classes = [IsAdminRole]
 
     def get(self, request):
-        qs = Order.objects.select_related("customer").prefetch_related("items").all()
+        qs = Order.objects.select_related("customer", "checkout_session").prefetch_related("items").all()
 
         search = request.query_params.get("search", "").strip()
         if search:
@@ -89,7 +90,12 @@ class AdminOrderDetailView(APIView):
     permission_classes = [IsAdminRole]
 
     def get(self, request, pk):
-        order = Order.objects.select_related("customer").prefetch_related("items").filter(pk=pk).first()
+        order = (
+            Order.objects.select_related("customer", "customer__onboarding", "checkout_session")
+            .prefetch_related("items")
+            .filter(pk=pk)
+            .first()
+        )
         if order is None:
             return error("Order not found.", status=404)
         return success(AdminOrderSerializer(order).data)
@@ -105,13 +111,42 @@ class AdminOrderStatusView(APIView):
 
         serializer = AdminOrderStatusSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        new_status = serializer.validated_data["status"]
+        previous_status = order.status
 
+        # Processing starts fulfilment and the customer's account activation,
+        # so the order must really be paid: Paid status *and* a successful
+        # payment record.
+        if new_status == Order.Status.PROCESSING and previous_status != Order.Status.PROCESSING:
+            paid = order.payment_status == Order.PaymentStatus.PAID and Transaction.objects.filter(
+                order=order, status=Order.PaymentStatus.PAID
+            ).exists()
+            if not paid:
+                return error(
+                    "This order has no successful payment yet, so it can't move to Processing.",
+                    errors={"code": "payment_required"},
+                    status=400,
+                )
+
+        activation = None
         try:
-            apply_status_transition(order, serializer.validated_data["status"])
+            with transaction.atomic():
+                apply_status_transition(order, new_status)
+                # Only on the move into Processing — re-saving Processing (or any
+                # other status) never sends the activation email again, and
+                # start_activation_for_order itself sends at most once per account.
+                if new_status == Order.Status.PROCESSING and previous_status != Order.Status.PROCESSING:
+                    activation = onboarding.start_activation_for_order(order)
         except ValueError as exc:
             return error(str(exc), status=400)
 
-        return success(AdminOrderSerializer(order).data, message="Order status updated.")
+        message = {
+            "sent": "Order is Processing. The account activation email is being sent to the customer.",
+            "already_sent": "Order is Processing. This customer's activation email was already sent earlier.",
+            "active": "Order is Processing. The customer already has an active account.",
+        }.get(activation, "Order status updated.")
+        order.refresh_from_db()
+        return success({**AdminOrderSerializer(order).data, "activation_result": activation}, message=message)
 
 
 class AdminOrderAssignCardView(APIView):

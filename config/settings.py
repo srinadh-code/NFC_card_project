@@ -238,6 +238,20 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 # commit them. RAZORPAY_KEY_ID/SECRET fall back to Admin Settings > Payment
 # when unset; the webhook secret is env-only. RAZORPAY_API_BASE is only
 # overridden to point tests at a local mock.
+# Temporary dummy/test payment (payments/services.py) until Razorpay is
+# live. On by default only in local development; any other environment
+# (a test server) must opt in with DUMMY_PAYMENTS_ENABLED=true. Production
+# (DJANGO_ENV=production, automatic on Render) is off unless explicitly set.
+DUMMY_PAYMENTS_ENABLED = env_bool("DUMMY_PAYMENTS_ENABLED", DJANGO_ENV == "development")
+
+# Customer accounts are created only from paid orders (accounts/onboarding.py);
+# public sign-up and first-time Google sign-up are closed unless this is set.
+PUBLIC_REGISTRATION_ENABLED = env_bool("PUBLIC_REGISTRATION_ENABLED", False)
+
+# How long the emailed "set your password" link for an order-created
+# account stays valid (accounts/onboarding.py).
+ACCOUNT_ACTIVATION_LINK_HOURS = int(os.environ.get("ACCOUNT_ACTIVATION_LINK_HOURS", "48"))
+
 RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "").strip()
 RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "").strip()
 RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "").strip()

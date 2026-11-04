@@ -2,7 +2,6 @@ import hashlib
 import hmac
 import json
 import re
-import smtplib
 from datetime import timedelta
 from unittest import mock
 
@@ -46,11 +45,6 @@ def _guest_payload(email="new.buyer@example.com", product_id="PRD-NEXORA-CUSTOM"
     }
 
 
-def _temporary_password(message):
-    match = re.search(r"Temporary Password: (\S+)", message.body)
-    return match.group(1) if match else None
-
-
 @override_settings(
     RAZORPAY_KEY_ID="rzp_test_key",
     RAZORPAY_KEY_SECRET=KEY_SECRET,
@@ -58,6 +52,7 @@ def _temporary_password(message):
     ONBOARDING_EMAIL_SYNC=True,
     BREVO_API_KEY="",
     EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    DUMMY_PAYMENTS_ENABLED=False,
 )
 class RazorpayOnboardingTests(APITestCase):
     def setUp(self):
@@ -134,84 +129,11 @@ class RazorpayOnboardingTests(APITestCase):
     def _login(self, email, password):
         return self.client.post(reverse("auth-login"), {"email": email, "password": password}, format="json")
 
-    def _complete(self, setup_token, temporary, new=NEW_PASSWORD, confirm=None):
-        return self.client.post(
-            reverse("auth-first-login-complete"),
-            {
-                "setup_token": setup_token,
-                "temporary_password": temporary,
-                "new_password": new,
-                "confirm_password": confirm or new,
-            },
-            format="json",
-        )
-
     def _buy_as_new_customer(self, product_id="PRD-NEXORA-CUSTOM", email="new.buyer@example.com"):
         checkout = self._checkout(_guest_payload(email=email, product_id=product_id))
         response = self._verify(checkout)
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
         return checkout, response
-
-    # --- Scenario A / B: new customer, both products -----------------
-    def _assert_full_new_customer_flow(self, product_id, expected_amount):
-        checkout, response = self._buy_as_new_customer(product_id)
-        self.assertEqual(checkout["amount"], expected_amount)
-        data = response.data["data"]
-        self.assertTrue(data["account_created"])
-
-        user = User.objects.get(email="new.buyer@example.com")
-        self.assertEqual(user.role, User.Role.CUSTOMER)
-        self.assertFalse(user.is_staff)
-        self.assertTrue(user.must_change_password)
-        self.assertTrue(user.temporary_password_expires_at > timezone.now() + timedelta(hours=23))
-
-        order = Order.objects.get(pk=data["order_id"])
-        self.assertEqual(order.customer, user)
-        self.assertEqual(order.payment_status, Order.PaymentStatus.PAID)
-        self.assertEqual(order.status, Order.Status.PROCESSING)
-        self.assertIsNotNone(order.confirmed_at)
-        self.assertEqual(order.payment_method, Order.PaymentMethod.RAZORPAY)
-        self.assertEqual(order.items.get().product_id, product_id)
-        self.assertEqual(user.addresses.get().pincode, "500001")
-
-        self.assertEqual(len(mail.outbox), 1)
-        message = mail.outbox[0]
-        self.assertEqual(message.subject, "Welcome to VRS GATEWAY – Your Order Is Confirmed!")
-        self.assertIn("Order Status: Processing", message.body)
-        temporary = _temporary_password(message)
-        self.assertTrue(temporary)
-        self.assertIn(order.order_number, message.body)
-        self.assertNotIn(temporary, user.password)
-        self.assertTrue(user.check_password(temporary))
-        onboarding = CustomerOnboarding.objects.get(user=user)
-        self.assertEqual(onboarding.email_status, CustomerOnboarding.EmailStatus.SENT)
-        self.assertEqual(onboarding.source_order, order)
-
-        login = self._login("NEW.BUYER@example.com", temporary)
-        self.assertEqual(login.status_code, status.HTTP_200_OK)
-        self.assertTrue(login.data["data"]["password_change_required"])
-        self.assertNotIn("access", login.data["data"])
-        self.assertNotIn("refresh", login.data["data"])
-
-        done = self._complete(login.data["data"]["setup_token"], temporary)
-        self.assertEqual(done.status_code, status.HTTP_200_OK, done.content)
-        access = done.data["data"]["access"]
-        user.refresh_from_db()
-        self.assertFalse(user.must_change_password)
-        self.assertTrue(user.email_verified)
-        self.assertTrue(user.check_password(NEW_PASSWORD))
-        self.assertIsNotNone(CustomerOnboarding.objects.get(user=user).password_set_at)
-
-        me = self.client.get(reverse("auth-me"), HTTP_AUTHORIZATION=f"Bearer {access}")
-        self.assertEqual(me.status_code, status.HTTP_200_OK)
-        self.assertEqual(self._login("new.buyer@example.com", NEW_PASSWORD).data["data"].get("password_change_required"), None)
-
-    def test_scenario_a_new_customer_nfc_card(self):
-        # 999.00 with the 20% first-order discount -> 799.20 -> 79920 paise.
-        self._assert_full_new_customer_flow("PRD-NEXORA-CUSTOM", 79920)
-
-    def test_scenario_b_new_customer_google_review_card(self):
-        self._assert_full_new_customer_flow("PRD-NEXORA-GOOGLE-REVIEW", 39920)
 
     # --- Scenario C: existing customer --------------------------------
     def test_scenario_c_existing_customer(self):
@@ -230,41 +152,7 @@ class RazorpayOnboardingTests(APITestCase):
         self.assertEqual(Order.objects.get(pk=response.data["data"]["order_id"]).customer, existing)
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("is confirmed", mail.outbox[0].subject)
-        self.assertIsNone(_temporary_password(mail.outbox[0]))
-
-    # --- Scenario D: wrong temporary password ------------------------
-    def test_scenario_d_wrong_temporary_password(self):
-        self._buy_as_new_customer()
-        response = self._login("new.buyer@example.com", "Wrong@Pass1")
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertNotIn("setup_token", json.dumps(response.data))
-        self.assertNotIn("access", json.dumps(response.data))
-
-    # --- Scenario E: expired temporary password ----------------------
-    def test_scenario_e_expired_temporary_password_and_resend(self):
-        self._buy_as_new_customer()
-        temporary = _temporary_password(mail.outbox[0])
-        User.objects.filter(email="new.buyer@example.com").update(
-            temporary_password_expires_at=timezone.now() - timedelta(minutes=1)
-        )
-        response = self._login("new.buyer@example.com", temporary)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data["errors"]["code"], "temporary_password_expired")
-
-        resend = self.client.post(reverse("auth-first-login-resend"), {"email": "new.buyer@example.com"}, format="json")
-        self.assertEqual(resend.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(mail.outbox), 2)
-        fresh = _temporary_password(mail.outbox[1])
-        self.assertNotEqual(fresh, temporary)
-        self.assertEqual(self._login("new.buyer@example.com", temporary).status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertTrue(self._login("new.buyer@example.com", fresh).data["data"]["password_change_required"])
-
-    def test_resend_answers_the_same_for_unknown_and_activated_emails(self):
-        make_user(email="active@example.com")
-        for email in ["nobody@example.com", "active@example.com"]:
-            response = self.client.post(reverse("auth-first-login-resend"), {"email": email}, format="json")
-            self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(mail.outbox), 0)
+        self.assertNotIn("password", mail.outbox[0].body.lower())
 
     # --- Scenario F: security ---------------------------------------
     def test_scenario_f_temporary_account_cannot_use_customer_apis(self):
@@ -274,24 +162,6 @@ class RazorpayOnboardingTests(APITestCase):
         for name in ["auth-me", "customer-addresses"]:
             response = self.client.get(reverse(name), HTTP_AUTHORIZATION=f"Bearer {token}")
             self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED, name)
-
-    def test_scenario_f_password_setup_rules(self):
-        self._buy_as_new_customer()
-        temporary = _temporary_password(mail.outbox[0])
-        setup = self._login("new.buyer@example.com", temporary).data["data"]["setup_token"]
-
-        self.assertEqual(self._complete(setup, "Wrong@Pass1").status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(self._complete("not-a-token", temporary).status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(self._complete(setup, temporary, new=temporary).status_code, status.HTTP_400_BAD_REQUEST)
-        mismatch = self._complete(setup, temporary, new=NEW_PASSWORD, confirm="Other@Pass1")
-        self.assertIn("confirm_password", mismatch.data["errors"])
-        weak = self._complete(setup, temporary, new="short")
-        self.assertEqual(weak.status_code, status.HTTP_400_BAD_REQUEST)
-
-        self.assertEqual(self._complete(setup, temporary).status_code, status.HTTP_200_OK)
-        # Single use: the setup token and the temporary password are both dead now.
-        self.assertEqual(self._complete(setup, temporary).status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(self._login("new.buyer@example.com", temporary).status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_scenario_f_duplicate_verify_and_webhook_are_idempotent(self):
         checkout, first = self._buy_as_new_customer()
@@ -334,20 +204,6 @@ class RazorpayOnboardingTests(APITestCase):
         self.assertEqual(CheckoutSession.objects.get().status, CheckoutSession.Status.FAILED)
         self.assertFalse(User.objects.filter(email="new.buyer@example.com").exists())
 
-    def test_scenario_f_passwords_never_in_api_responses(self):
-        checkout = self._checkout()
-        response = self._verify(checkout)
-        temporary = _temporary_password(mail.outbox[0])
-        login = self._login("new.buyer@example.com", temporary)
-        for r in (response, login):
-            self.assertNotIn(temporary, r.content.decode())
-        admin = make_user(email="admin@example.com", role=User.Role.ADMIN, is_staff=True)
-        self.client.force_authenticate(admin)
-        listing = self.client.get(reverse("admin-onboarding"))
-        self.assertEqual(listing.status_code, status.HTTP_200_OK)
-        self.assertNotIn(temporary, listing.content.decode())
-        self.assertNotIn("password\"", listing.content.decode().replace("password_set_at", "").replace("temporary_password_expires_at", ""))
-
     def test_client_cannot_set_prices(self):
         payload = _guest_payload()
         payload["items"] = [{"product_id": "PRD-NEXORA-CUSTOM", "qty": 1, "price": "1.00"}]
@@ -363,45 +219,6 @@ class RazorpayOnboardingTests(APITestCase):
         response = self.client.post(reverse("razorpay-checkout"), self._with_token(payload), format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(CheckoutSession.objects.count(), 0)
-
-    # --- Scenario G: email failure -----------------------------------
-    def test_scenario_g_email_failure_then_admin_resend(self):
-        with mock.patch("accounts.onboarding._send", side_effect=smtplib.SMTPException("down")):
-            checkout, response = self._buy_as_new_customer()
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        order = Order.objects.get()
-        self.assertEqual(order.payment_status, Order.PaymentStatus.PAID)
-        onboarding = CustomerOnboarding.objects.get()
-        self.assertEqual(onboarding.email_status, CustomerOnboarding.EmailStatus.FAILED)
-        self.assertEqual(onboarding.email_attempts, 3)
-        self.assertEqual(onboarding.email_last_error, "SMTPException")
-        self.assertEqual(len(mail.outbox), 0)
-
-        # A retried webhook doesn't create a second account or order.
-        self._webhook("payment.captured", checkout["razorpay_order_id"], checkout["amount"])
-        self.assertEqual(User.objects.filter(email="new.buyer@example.com").count(), 1)
-
-        admin = make_user(email="admin@example.com", role=User.Role.ADMIN, is_staff=True)
-        self.client.force_authenticate(admin)
-        listing = self.client.get(reverse("admin-onboarding"), {"email_status": "FAILED"})
-        self.assertEqual(listing.data["data"][0]["email_status"], "FAILED")
-        resend = self.client.post(reverse("admin-onboarding-resend", args=[onboarding.pk]))
-        self.assertEqual(resend.status_code, status.HTTP_200_OK)
-        self.client.force_authenticate(None)
-        onboarding.refresh_from_db()
-        self.assertEqual(onboarding.email_status, CustomerOnboarding.EmailStatus.SENT)
-        temporary = _temporary_password(mail.outbox[0])
-        self.assertTrue(self._login("new.buyer@example.com", temporary).data["data"]["password_change_required"])
-
-    def test_admin_resend_refused_after_password_set(self):
-        self._buy_as_new_customer()
-        temporary = _temporary_password(mail.outbox[0])
-        setup = self._login("new.buyer@example.com", temporary).data["data"]["setup_token"]
-        self._complete(setup, temporary)
-        admin = make_user(email="admin@example.com", role=User.Role.ADMIN, is_staff=True)
-        self.client.force_authenticate(admin)
-        resend = self.client.post(reverse("admin-onboarding-resend", args=[CustomerOnboarding.objects.get().pk]))
-        self.assertEqual(resend.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_onboarding_admin_api_requires_admin(self):
         self.client.force_authenticate(make_user(email="cust@example.com"))
@@ -442,7 +259,7 @@ class RazorpayOnboardingTests(APITestCase):
 
     def test_config_exposes_only_public_key(self):
         response = self.client.get(reverse("razorpay-config"))
-        self.assertEqual(response.data["data"], {"enabled": True, "key_id": "rzp_test_key", "currency": "INR", "sms_otp_enabled": False})
+        self.assertEqual(response.data["data"], {"enabled": True, "key_id": "rzp_test_key", "currency": "INR", "sms_otp_enabled": False, "dummy_enabled": False})
         self.assertNotIn(KEY_SECRET, response.content.decode())
 
     # --- checkout OTP verification ---------------------------------------
@@ -536,7 +353,8 @@ class RazorpayOnboardingTests(APITestCase):
         self.assertEqual(row["customer_phone"], "9876543210")
         self.assertTrue(row["email_verified_by_otp"])
         self.assertTrue(row["phone_verified_by_otp"])
-        self.assertEqual(row["order_status"], "PROCESSING")
+        # A paid order waits for an admin to move it to Processing.
+        self.assertEqual(row["order_status"], "PENDING")
         self.assertNotIn(code, json.dumps(row, default=str))
 
     @override_settings(MSG91_AUTH_KEY="test-msg91-key", MSG91_OTP_TEMPLATE_ID="tmpl-1")

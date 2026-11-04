@@ -44,6 +44,10 @@ class AdminOrderSerializer(serializers.ModelSerializer):
     address = serializers.SerializerMethodField()
     tracking = serializers.SerializerMethodField()
     assigned_card_id = serializers.IntegerField(read_only=True)
+    payment_method_display = serializers.CharField(source="get_payment_method_display", read_only=True)
+    payment_status_display = serializers.SerializerMethodField()
+    delivery = serializers.SerializerMethodField()
+    account = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -64,9 +68,13 @@ class AdminOrderSerializer(serializers.ModelSerializer):
             "shipping",
             "total",
             "payment_method",
+            "payment_method_display",
             "payment_status",
+            "payment_status_display",
             "status",
             "address",
+            "delivery",
+            "account",
             "tracking",
             "assigned_card_id",
             "placed_at",
@@ -89,6 +97,69 @@ class AdminOrderSerializer(serializers.ModelSerializer):
             "state": obj.shipping_state,
             "pincode": obj.shipping_pincode,
             "country": obj.shipping_country,
+        }
+
+    def get_payment_status_display(self, obj):
+        label = obj.get_payment_status_display()
+        if obj.payment_method == Order.PaymentMethod.DUMMY and obj.payment_status == Order.PaymentStatus.PAID:
+            return f"{label} (Test)"
+        return label
+
+    def get_delivery(self, obj):
+        """Full delivery details: every field the buyer entered at checkout
+        when the order came from one, otherwise the order's own snapshot."""
+        session = getattr(obj, "checkout_session", None)
+        if session is not None:
+            return {
+                "full_name": session.full_name,
+                "phone": session.phone,
+                "email": session.email,
+                "address_line1": session.address_line1,
+                "address_line2": session.address_line2,
+                "landmark": session.landmark,
+                "locality": session.locality,
+                "city": session.city,
+                "district": session.district,
+                "state": session.state,
+                "pincode": session.pincode,
+                "country": session.country,
+            }
+        return {
+            "full_name": obj.customer.full_name,
+            "phone": obj.customer.phone,
+            "email": obj.customer.email,
+            "address_line1": obj.shipping_line1,
+            "address_line2": "",
+            "landmark": "",
+            "locality": "",
+            "city": obj.shipping_city,
+            "district": "",
+            "state": obj.shipping_state,
+            "pincode": obj.shipping_pincode,
+            "country": obj.shipping_country,
+        }
+
+    def get_account(self, obj):
+        """Customer account status for this order (accounts/onboarding.py)."""
+        from accounts.models import CustomerOnboarding
+
+        user = obj.customer
+        item = CustomerOnboarding.objects.filter(user=user).first()
+        if item is None:
+            status = CustomerOnboarding.AccountStatus.ACTIVATED if not user.must_change_password else CustomerOnboarding.AccountStatus.PENDING_PROCESSING
+            return {"status": status, "status_display": status.label, "onboarding_id": None, "created_from_order": False}
+        status = item.account_status
+        return {
+            "status": status,
+            "status_display": CustomerOnboarding.AccountStatus(status).label,
+            "onboarding_id": item.pk,
+            "created_from_order": True,
+            "email_status": item.email_status,
+            "email_attempts": item.email_attempts,
+            "email_last_error": item.email_last_error,
+            "email_sent_at": item.email_sent_at,
+            "activation_link_issued_at": item.credentials_issued_at,
+            "password_set_at": item.password_set_at,
         }
 
     def get_tracking(self, obj):
