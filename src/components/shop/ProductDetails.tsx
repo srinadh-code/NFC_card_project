@@ -2,7 +2,7 @@ import { useState, type CSSProperties, type ReactNode } from "react"
 import { CheckCircle2, ChevronLeft, ChevronRight, Loader2, Minus, Palette, Plus, ShoppingCart, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { NfcCardFace } from "@/components/marketing/NfcCardShowcase"
+import { ProductImage } from "@/components/shop/ProductImage"
 import { cardClass, gradientClass } from "@/components/marketing/PremiumCard"
 import { resolveIcon } from "@/lib/icon-map"
 import { formatCurrency } from "@/lib/mock-api"
@@ -340,18 +340,14 @@ function Gallery({ product }: { product: OrderCardProduct }) {
   return (
     <div className="space-y-3">
       <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-[24px] border border-border bg-gradient-to-br from-secondary to-accent">
-        {current ? (
-          <img
-            key={current.image_url}
-            src={cloudinaryUrl(current.image_url, 1000)}
-            alt={current.alt_text || product.name}
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="h-44 w-72 -rotate-3 sm:h-52 sm:w-80">
-            <NfcCardFace tone={product.card_tone || "custom"} />
-          </div>
-        )}
+        <ProductImage
+          url={current?.image_url}
+          alt={current?.alt_text || product.name}
+          width={1000}
+          tone={product.card_tone}
+          className="h-full w-full object-cover"
+          mockupClassName="h-44 w-72 -rotate-3 sm:h-52 sm:w-80"
+        />
         {images.length > 1 && (
           <>
             <GalleryArrow side="left" onClick={() => step(-1)} />
@@ -383,7 +379,15 @@ function Gallery({ product }: { product: OrderCardProduct }) {
                   i === index ? "border-primary" : "border-transparent opacity-75 hover:opacity-100",
                 )}
               >
-                <img src={cloudinaryUrl(img.image_url, 200)} alt="" loading="lazy" className="h-full w-full object-cover" />
+                <ProductImage
+                  url={img.image_url}
+                  alt=""
+                  width={200}
+                  tone={product.card_tone}
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                  mockupClassName="h-full w-full scale-75"
+                />
               </button>
             ))}
           </div>

@@ -1,9 +1,9 @@
 import { ArrowRight, Crown } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { NfcCardFace } from "@/components/marketing/NfcCardShowcase"
+import { ProductImage } from "@/components/shop/ProductImage"
 import { cardClass, gradientClass } from "@/components/marketing/PremiumCard"
 import { formatCurrency } from "@/lib/mock-api"
-import { cloudinaryUrl, galleryOf, unitPriceFor } from "@/lib/order-card-pricing"
+import { galleryOf, unitPriceFor } from "@/lib/order-card-pricing"
 import { cn } from "@/lib/utils"
 import type { OrderCardProduct } from "@/types/content"
 
@@ -38,17 +38,13 @@ export function ProductSelection({ products, currency = "INR", onSelect }: Produ
               aria-label={`View ${product.name}`}
               className="flex aspect-[16/10] items-center justify-center overflow-hidden bg-gradient-to-br from-secondary to-accent"
             >
-              {image ? (
-                <img
-                  src={cloudinaryUrl(image.image_url, 900)}
-                  alt={image.alt_text || product.name}
-                  className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.03]"
-                />
-              ) : (
-                <div className="h-40 w-64 -rotate-3">
-                  <NfcCardFace tone={product.card_tone || "custom"} />
-                </div>
-              )}
+              <ProductImage
+                url={image?.image_url}
+                alt={image?.alt_text || product.name}
+                width={900}
+                tone={product.card_tone}
+                className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.03]"
+              />
             </button>
             <div className="flex flex-1 flex-col p-6">
               <h3 className="text-xl font-bold text-foreground">{product.name}</h3>
