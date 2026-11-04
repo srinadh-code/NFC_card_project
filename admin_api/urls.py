@@ -57,6 +57,7 @@ from .testimonials.views import (
     AdminTestimonialStatsView,
     AdminTestimonialToggleActiveView,
 )
+from .onboarding.views import AdminOnboardingListView, AdminOnboardingResendView
 from .transactions.views import (
     AdminTransactionDetailView,
     AdminTransactionListCreateView,
@@ -86,6 +87,8 @@ urlpatterns = [
     path("orders/<int:pk>/status/", AdminOrderStatusView.as_view(), name="admin-order-status"),
     path("orders/<int:pk>/assign-card/", AdminOrderAssignCardView.as_view(), name="admin-order-assign-card"),
     # Transactions
+    path("customer-onboarding/", AdminOnboardingListView.as_view(), name="admin-onboarding"),
+    path("customer-onboarding/<int:pk>/resend/", AdminOnboardingResendView.as_view(), name="admin-onboarding-resend"),
     path("transactions/", AdminTransactionListCreateView.as_view(), name="admin-transactions"),
     path("transactions/summary/", AdminTransactionSummaryView.as_view(), name="admin-transaction-summary"),
     path("transactions/<int:pk>/", AdminTransactionDetailView.as_view(), name="admin-transaction-detail"),

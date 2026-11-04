@@ -202,16 +202,20 @@ def is_first_order_eligible(customer):
     )
 
 
-def calculate_first_order_discount(amount, customer):
+def calculate_first_order_discount(amount, customer, *, assume_eligible=False):
     """`amount` is the cart/order's line-items total *after* whichever
     promotional Announcement/Offer discount already applied (see this
     module's stacking-rule note above) — never the raw catalog subtotal.
     Returns the additional first-order discount on top of that, or a
     no-op result (0 discount, amount unchanged) when disabled or the
     customer isn't eligible. Clamped the same way calculate_price() is, so
-    a discount can never exceed the amount it's taken from."""
+    a discount can never exceed the amount it's taken from.
+
+    `assume_eligible` is for a guest checkout by someone with no account
+    yet (payments/services.py) — they have never ordered, but there's no
+    customer row for is_first_order_eligible() to check."""
     amount = Decimal(amount)
-    eligible = FIRST_ORDER_DISCOUNT_ENABLED and is_first_order_eligible(customer)
+    eligible = FIRST_ORDER_DISCOUNT_ENABLED and (assume_eligible or is_first_order_eligible(customer))
     if not eligible:
         return {
             "is_first_order": False,

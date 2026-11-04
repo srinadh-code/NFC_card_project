@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 
 from accounts.models import User
 from admin_api.orders.services import apply_status_transition
-from common.discounts import calculate_first_order_discount, get_catalog_product, get_product_pricing
+from common.discounts import calculate_first_order_discount
 from common.pagination import StandardPagination
 from common.response import error, success
 
@@ -17,6 +17,7 @@ from customer_management.customer_addresses.models import CustomerAddress
 from customer_management.customer_cart.services import clear_cart, get_or_create_cart
 
 from .models import Order, OrderItem, Transaction
+from .pricing import ProductUnavailable, price_lines
 from .serializers import (
     CustomerOrderCreateSerializer,
     OrderSerializer,
@@ -88,62 +89,19 @@ class CustomerOrderListCreateView(APIView):
             return error("Your cart is empty.", status=400)
 
         # Real, backend-computed pricing per line — never the price a
-        # client claims. common.discounts is the single source of truth
-        # for whether an offer/promo code applies and what it's worth;
-        # the cart's own stored `price` is only ever a fallback for a
-        # card_type with no matching catalog product at all (shouldn't
-        # normally happen, but must never crash checkout if it does).
-        promo_code = cart.promo_code or None
-        selected_offer_id = cart.applied_offer_id
-        priced_items = []
-        amount = Decimal("0")
-        for item in cart_items:
-            product = get_catalog_product(item.card_type, item.product_id)
-            if product is None:
-                return error(
-                    f"{item.name} is no longer available. Please remove it from your cart to continue.",
-                    status=400,
-                )
-            tier = product.offer_for_quantity(item.qty)
-            pricing = get_product_pricing(
-                item.card_type,
-                promo_code=promo_code,
+        # client claims (see orders.pricing.price_lines).
+        try:
+            priced_items, amount = price_lines(
+                cart_items,
                 customer=request.user,
-                selected_offer_id=selected_offer_id,
-                product_id=item.product_id,
-                qty=item.qty,
+                promo_code=cart.promo_code or None,
+                selected_offer_id=cart.applied_offer_id,
             )
-            if pricing is not None:
-                unit_price = pricing["final_price"]
-                offer = pricing["offer"]
-                priced_items.append(
-                    {
-                        "item": item,
-                        "unit_price": unit_price,
-                        "original_price": pricing["original_price"],
-                        "discount_type": offer.discount_type if offer else "",
-                        "discount_value": pricing["discount_value"] if offer else None,
-                        "discount_amount": pricing["discount_amount"] if offer else None,
-                        "promo_code_used": promo_code if (offer and promo_code) else "",
-                        "applied_offer": offer,
-                        "pricing_tier": tier.label if tier and tier.min_quantity > 1 else "",
-                    }
-                )
-            else:
-                priced_items.append(
-                    {
-                        "item": item,
-                        "unit_price": item.price,
-                        "original_price": None,
-                        "discount_type": "",
-                        "discount_value": None,
-                        "discount_amount": None,
-                        "promo_code_used": "",
-                        "applied_offer": None,
-                        "pricing_tier": "",
-                    }
-                )
-            amount += priced_items[-1]["unit_price"] * item.qty
+        except ProductUnavailable as exc:
+            return error(
+                f"{exc.name} is no longer available. Please remove it from your cart to continue.",
+                status=400,
+            )
 
         shipping = data.get("shipping") or Decimal("0")
         shipping_snapshot = compose_shipping_snapshot(address)

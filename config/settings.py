@@ -80,6 +80,7 @@ INSTALLED_APPS = [
     "customer_management.customer_services",
     "customer_management.customer_addresses",
     "customer_management.customer_cart",
+    "payments",
     "website_content",
 ]
 
@@ -220,6 +221,10 @@ else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "vrsgateway@gmail.com")
+# Development only: lets checkout OTP "send" through the console backend
+# (code printed in the server log) when no real email provider is set up.
+# Off by default so a missing provider is reported instead of faked.
+ALLOW_CONSOLE_EMAIL_OTP = env_bool("ALLOW_CONSOLE_EMAIL_OTP", False)
 
 
 # Frontend / CORS
@@ -228,6 +233,21 @@ DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "vrsgateway@gmail.com"
 # frontend can actually be served from must be listed explicitly here.
 # Wildcards are deliberately never used in either list below.
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+
+# Razorpay (payments/razorpay.py). Keys come from the environment — never
+# commit them. RAZORPAY_KEY_ID/SECRET fall back to Admin Settings > Payment
+# when unset; the webhook secret is env-only. RAZORPAY_API_BASE is only
+# overridden to point tests at a local mock.
+RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "").strip()
+RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "").strip()
+RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "").strip()
+RAZORPAY_API_BASE = os.environ.get("RAZORPAY_API_BASE", "https://api.razorpay.com/v1").strip()
+
+# MSG91 SMS for checkout mobile OTP (payments/sms.py) — env only. Mobile
+# verification is offered only when both are set.
+MSG91_AUTH_KEY = os.environ.get("MSG91_AUTH_KEY", "").strip()
+MSG91_OTP_TEMPLATE_ID = os.environ.get("MSG91_OTP_TEMPLATE_ID", "").strip()
+MSG91_API_BASE = os.environ.get("MSG91_API_BASE", "https://control.msg91.com/api/v5").strip()
 CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS", FRONTEND_URL)
 CORS_ALLOW_CREDENTIALS = True
 
@@ -336,7 +356,9 @@ STORAGES = {
 # Django REST Framework
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        # simplejwt's JWTAuthentication, plus: accounts still waiting for
+        # their mandatory first password change are rejected outright.
+        "common.authentication.ActivatedJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_PAGINATION_CLASS": "common.pagination.StandardPagination",
@@ -349,6 +371,10 @@ REST_FRAMEWORK = {
         "lead_submit": "10/min",
         "testimonial_submit": "10/hour",
         "pincode_lookup": "60/min",
+        "checkout": "20/min",
+        "checkout_otp": "10/min",
+        "auth_login": "30/min",
+        "first_login": "10/min",
         # Map search-as-you-type + pin lookups on the address form.
         "geocode": "60/min",
     },

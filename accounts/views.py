@@ -3,10 +3,12 @@ import threading
 from datetime import timedelta
 
 from django.conf import settings
+from django.core import signing
 from django.contrib.auth.hashers import make_password
 from django.db import connection, transaction
 from django.utils import timezone
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
@@ -15,12 +17,14 @@ from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, Ou
 from common.response import error, success
 from common.throttling import AuthEmailHourlyThrottle, AuthEmailIPThrottle, OtpRequestThrottle
 
+from . import onboarding
 from .emails import send_password_reset_otp_email, send_verification_email
 from .google_oauth import GoogleTokenError, verify_google_id_token
-from .models import EmailOTP, User
+from .models import CustomerOnboarding, EmailOTP, User
 from .security import access_token_minutes
 from .serializers import (
     ChangePasswordSerializer,
+    FirstLoginCompleteSerializer,
     ForgotPasswordSerializer,
     GoogleLoginSerializer,
     LoginSerializer,
@@ -232,6 +236,8 @@ class LoginView(APIView):
     """
 
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_login"
 
     def post(self, request):
         email = str(request.data.get("email", "")).strip().lower()
@@ -243,6 +249,29 @@ class LoginView(APIView):
             raise
 
         user = serializer.validated_data["user"]
+        # Account created from a paid guest checkout, still on its emailed
+        # temporary password: no JWTs, only a short-lived setup token for
+        # the mandatory password change (FirstLoginCompleteView). Checked
+        # after the password matched, so it reveals nothing to a stranger.
+        if user.must_change_password:
+            expires = user.temporary_password_expires_at
+            if expires is None or expires <= timezone.now():
+                logger.info("auth.login.temporary_expired user_id=%s", user.id)
+                return error(
+                    "Your temporary password has expired. Request new login details to activate your account.",
+                    errors={"code": "temporary_password_expired", "email": user.email},
+                    status=403,
+                )
+            logger.info("auth.login.password_change_required user_id=%s", user.id)
+            return success(
+                {
+                    "password_change_required": True,
+                    "setup_token": _issue_setup_token(user),
+                    "email": user.email,
+                },
+                message="Please create a new password to continue.",
+            )
+
         # Checked only after the password matched, so this never reveals an
         # account's verification status to someone without its password.
         # Admins are never blocked (they're created verified).
@@ -261,6 +290,108 @@ class LoginView(APIView):
             _dashboard_url_for(user),
         )
         return success(_auth_payload(user), message="Login successful.")
+
+
+SETUP_TOKEN_SALT = "accounts.first-login-setup"
+SETUP_TOKEN_MAX_AGE_SECONDS = 15 * 60
+
+
+def _issue_setup_token(user):
+    """Signed, 15-minute, single-purpose token proving "this person just
+    logged in with the temporary password". Bound to the current password
+    hash, so it stops working the moment the password changes (single
+    use). It is not a JWT and no API accepts it except
+    FirstLoginCompleteView."""
+    return signing.dumps({"uid": user.pk, "ph": user.password[-24:]}, salt=SETUP_TOKEN_SALT)
+
+
+def _user_for_setup_token(token):
+    try:
+        data = signing.loads(token, salt=SETUP_TOKEN_SALT, max_age=SETUP_TOKEN_MAX_AGE_SECONDS)
+    except signing.BadSignature:
+        return None
+    user = User.objects.filter(pk=data.get("uid"), is_active=True).first()
+    if user is None or not user.must_change_password or user.password[-24:] != data.get("ph"):
+        return None
+    return user
+
+
+class FirstLoginCompleteView(APIView):
+    """Mandatory first-login password setup for accounts created from a paid
+    order. Needs the setup token from LoginView *and* the temporary password
+    again. Only on success does the customer get normal JWTs."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "first_login"
+
+    def post(self, request):
+        serializer = FirstLoginCompleteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        user = _user_for_setup_token(data["setup_token"])
+        if user is None:
+            return error(
+                "Your setup session has expired. Please log in again with your temporary password.",
+                errors={"code": "setup_token_invalid"},
+                status=400,
+            )
+        expires = user.temporary_password_expires_at
+        if expires is None or expires <= timezone.now():
+            return error(
+                "Your temporary password has expired. Request new login details to activate your account.",
+                errors={"code": "temporary_password_expired"},
+                status=403,
+            )
+        if not user.check_password(data["temporary_password"]):
+            logger.info("auth.first_login.wrong_temporary user_id=%s", user.id)
+            return error(
+                "The temporary password is incorrect.",
+                errors={"temporary_password": ["The temporary password is incorrect."]},
+                status=400,
+            )
+        if data["new_password"] == data["temporary_password"]:
+            return error(
+                "Choose a new password that is different from your temporary password.",
+                errors={"new_password": ["Must be different from the temporary password."]},
+                status=400,
+            )
+
+        with transaction.atomic():
+            user.set_password(data["new_password"])
+            user.must_change_password = False
+            user.temporary_password_expires_at = None
+            # Logging in with the password emailed to them proves the inbox.
+            user.email_verified = True
+            user.save(update_fields=["password", "must_change_password", "temporary_password_expires_at", "email_verified"])
+            CustomerOnboarding.objects.filter(user=user).update(password_set_at=timezone.now())
+        _blacklist_all_tokens_for_user(user)
+        logger.info("auth.first_login.completed user_id=%s", user.id)
+        return success(_auth_payload(user), message="Your password has been updated. Welcome to your dashboard!")
+
+
+class FirstLoginResendView(APIView):
+    """Send new login details for an account whose temporary password
+    expired or whose email never arrived. Always answers the same way, so it
+    can't be used to discover which emails have accounts."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = AUTH_EMAIL_THROTTLES
+
+    def post(self, request):
+        email = str(request.data.get("email", "")).strip().lower()
+        user = User.objects.filter(email__iexact=email, is_active=True).first() if email else None
+        if user is not None and user.must_change_password:
+            onboarding.reissue_and_send(user)
+            logger.info("auth.first_login.resend user_id=%s", user.id)
+        else:
+            _equalize_hashing_time()
+        return success(
+            message="If an account is waiting for activation at that email, we've sent new login details to it."
+        )
 
 
 class LogoutView(APIView):
@@ -404,9 +535,14 @@ class ResetPasswordView(APIView):
             otp.consume_reset_token()
             otp.user.set_password(data["new_password"])
             # Entering a code sent to this inbox proves the customer controls
-            # it — the same thing email verification checks.
+            # it — the same thing email verification checks. It also
+            # completes a pending first-login setup: they chose this password.
             otp.user.email_verified = True
-            otp.user.save(update_fields=["password", "email_verified"])
+            otp.user.must_change_password = False
+            otp.user.temporary_password_expires_at = None
+            otp.user.save(
+                update_fields=["password", "email_verified", "must_change_password", "temporary_password_expires_at"]
+            )
 
         _blacklist_all_tokens_for_user(otp.user)
         logger.info("auth.reset_password.success user_id=%s", otp.user.id)
@@ -514,6 +650,15 @@ class GoogleLoginView(APIView):
                 user.save(update_fields=update_fields)
 
             Profile.ensure_for_user(user)
+
+        # An account created from a paid order must finish its emailed
+        # temporary-password setup first — Google can't skip that step.
+        if user.must_change_password:
+            return error(
+                "Please activate your account with the temporary password we emailed you, then you can use Google sign-in.",
+                errors={"code": "password_change_required", "email": user.email},
+                status=403,
+            )
 
         logger.info(
             "auth.google.success user_id=%s created=%s role=%s",
