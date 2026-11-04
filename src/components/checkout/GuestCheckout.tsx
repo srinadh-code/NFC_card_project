@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DesignerContactNotice } from "@/components/checkout/DesignerContactNotice"
+import { DummyPaymentDialog } from "@/components/checkout/DummyPaymentDialog"
 import { OtpVerifier } from "@/components/checkout/OtpVerifier"
 import { INDIAN_STATES } from "@/data/indian-states"
 import { useCart } from "@/hooks/useCart"
@@ -22,7 +23,14 @@ import {
   validatePincode,
   validateState,
 } from "@/lib/address-validation"
-import { ApiError, customerAddressApi, paymentsApi, type GuestCheckoutInput } from "@/lib/api"
+import {
+  ApiError,
+  customerAddressApi,
+  paymentsApi,
+  type GuestCheckoutInput,
+  type RazorpayCheckout,
+  type VerifiedPayment,
+} from "@/lib/api"
 import { formatCurrency } from "@/lib/mock-api"
 import { PaymentCancelled, payWithRazorpay } from "@/lib/razorpay"
 import { cn } from "@/lib/utils"
@@ -107,6 +115,13 @@ export function GuestCheckout() {
   const [errors, setErrors] = useState<Errors>({})
   const [paying, setPaying] = useState(false)
   const [payError, setPayError] = useState<string | null>(null)
+  // Temporary test payment (until Razorpay is live): the server-priced
+  // checkout waiting for "Confirm Payment", and the details it was made for —
+  // Pay Now with unchanged details reopens it instead of starting another.
+  const [dummy, setDummy] = useState<{ checkout: RazorpayCheckout; key: string } | null>(null)
+  const [dummyOpen, setDummyOpen] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [dummyError, setDummyError] = useState<string | null>(null)
 
   const emailReady = isFresh(verifiedEmail)
   const pinOk = validatePincode(address.pincode) === null
@@ -206,24 +221,28 @@ export function GuestCheckout() {
       session_ref: sessionRef,
     }
 
+    const useDummy = !config.data?.enabled && Boolean(config.data?.dummy_enabled)
+    if (useDummy) {
+      const key = JSON.stringify(payload)
+      if (dummy && dummy.key === key) {
+        setDummyError(null)
+        setDummyOpen(true)
+        return
+      }
+    }
+
     setPaying(true)
     try {
+      if (useDummy) {
+        const checkout = await paymentsApi.createGuestCheckout({ ...payload, provider: "dummy" })
+        setDummy({ checkout, key: JSON.stringify(payload) })
+        setDummyError(null)
+        setDummyOpen(true)
+        return
+      }
       const checkout = await paymentsApi.createGuestCheckout(payload)
       const paid = await payWithRazorpay(checkout, settings.site_name)
-      const result = await paymentsApi.verifyPayment(paid)
-      clearCart()
-      clear()
-      navigate("/order-success", {
-        replace: true,
-        state: {
-          orderId: String(result.order_id),
-          orderNumber: result.order_number,
-          trackingToken: result.tracking_token,
-          customerName: fullName.trim(),
-          accountCreated: result.account_created,
-          email: result.email,
-        },
-      })
+      finishOrder(await paymentsApi.verifyPayment(paid))
     } catch (err) {
       if (err instanceof PaymentCancelled) {
         setPayError("Payment was cancelled. You can try again whenever you're ready.")
@@ -255,6 +274,44 @@ export function GuestCheckout() {
     }
   }
 
+  function finishOrder(result: VerifiedPayment) {
+    clearCart()
+    clear()
+    navigate("/order-success", {
+      replace: true,
+      state: {
+        orderId: String(result.order_id),
+        orderNumber: result.order_number,
+        trackingToken: result.tracking_token,
+        customerName: fullName.trim(),
+        accountCreated: result.account_created,
+        email: result.email,
+        testPayment: result.payment_method === "DUMMY",
+      },
+    })
+  }
+
+  async function confirmDummyPayment() {
+    if (!dummy || confirming) return
+    setConfirming(true)
+    setDummyError(null)
+    try {
+      // Idempotent on the backend: a repeated click returns the same order.
+      finishOrder(await paymentsApi.confirmDummyPayment(dummy.checkout.checkout_id, dummy.checkout.amount))
+    } catch (err) {
+      if (err instanceof ApiError && firstError(err.errors?.code) === "amount_mismatch") {
+        // Prices changed since this checkout was priced — start a fresh one.
+        setDummy(null)
+        setDummyOpen(false)
+        setPayError(err.message)
+      } else {
+        setDummyError(err instanceof Error ? err.message : "Couldn't confirm the payment. Please try again.")
+      }
+    } finally {
+      setConfirming(false)
+    }
+  }
+
   // OTP verification is mandatory for guests — no verified contact, no checkout.
   if (!isFresh(contact)) return <Navigate to="/checkout/verify?redirect=%2Fcheckout" replace />
 
@@ -267,7 +324,16 @@ export function GuestCheckout() {
     )
   }
 
-  const paymentsEnabled = Boolean(config.data?.enabled)
+  // Razorpay when configured; otherwise the temporary test payment where the
+  // backend allows it (never on the live site by default).
+  const paymentsEnabled = Boolean(config.data?.enabled || config.data?.dummy_enabled)
+  const testPayments = !config.data?.enabled && Boolean(config.data?.dummy_enabled)
+  const deliveryLines = [
+    [address.address_line1, address.address_line2].filter(Boolean).join(", "),
+    [address.landmark, address.locality].filter(Boolean).join(", "),
+    [address.city, address.district && `Dist. ${address.district}`].filter(Boolean).join(", "),
+    `${address.state} - ${address.pincode}`,
+  ].filter((line) => line.trim())
 
   return (
     <form onSubmit={handlePay} noValidate className="grid gap-8 lg:grid-cols-3">
@@ -440,6 +506,11 @@ export function GuestCheckout() {
             <span>Online payment isn&apos;t configured yet, so orders can&apos;t be paid right now. Please try again later or contact us.</span>
           </div>
         )}
+        {testPayments && (
+          <p className="mt-4 rounded-xl border border-dashed p-3 text-xs text-muted-foreground">
+            Online payment isn&apos;t live yet — Pay Now completes a <strong>test payment</strong> (no money is charged).
+          </p>
+        )}
         {payError && (
           <p role="alert" className="mt-4 text-sm text-destructive">
             {payError}
@@ -463,6 +534,17 @@ export function GuestCheckout() {
           <p className="mt-2 text-center text-xs text-muted-foreground">Verify your email address to continue.</p>
         )}
       </div>
+
+      <DummyPaymentDialog
+        checkout={dummyOpen && dummy ? dummy.checkout : null}
+        email={verifiedEmail?.destination ?? ""}
+        delivery={{ fullName: fullName.trim(), phone: phone.replace(/\D/g, "").slice(-10), lines: deliveryLines }}
+        currency={settings.currency}
+        confirming={confirming}
+        error={dummyError}
+        onConfirm={confirmDummyPayment}
+        onCancel={() => setDummyOpen(false)}
+      />
     </form>
   )
 }

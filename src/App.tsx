@@ -51,10 +51,9 @@ import AdminWebsiteContent from "@/pages/admin/content"
 
 import Login from "@/pages/Login"
 import VerifyEmail from "@/pages/VerifyEmail"
-import FirstLogin from "@/pages/FirstLogin"
+import SetPassword from "@/pages/SetPassword"
 import CheckoutVerify from "@/pages/public/CheckoutVerify"
 import AdminLogin from "@/pages/admin/AdminLogin"
-import CustomerRegister from "@/pages/customer/Register"
 import CustomerDashboard from "@/pages/customer/Dashboard"
 import CustomerMyCard from "@/pages/customer/MyCard"
 import CustomerProfile from "@/pages/customer/Profile"
@@ -135,10 +134,12 @@ function App() {
             it automatically gets AuthLayout. */}
         <Route element={<AuthLayout />}>
           <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<CustomerRegister />} />
+          {/* No public sign-up: accounts are created from a paid order. */}
+          <Route path="/register" element={<Navigate to="/shop" replace />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
-          {/* Mandatory first-login password setup (auto-created accounts). */}
-          <Route path="/first-login" element={<FirstLogin />} />
+          {/* Account activation for order-created accounts (emailed link). */}
+          <Route path="/set-password" element={<SetPassword />} />
+          <Route path="/first-login" element={<Navigate to="/login" replace />} />
           <Route path="/admin/login" element={<AdminLogin />} />
         </Route>
 

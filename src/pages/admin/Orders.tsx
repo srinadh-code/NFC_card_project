@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Search, Download, Eye, CheckCircle2, Circle, MapPin, PackageCheck, Nfc, Truck } from "lucide-react"
+import { Search, Download, Eye, CheckCircle2, Circle, MapPin, PackageCheck, Nfc, Truck, Mail } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -25,10 +25,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { StatusBadge } from "@/components/admin/StatusBadge"
+import { AccountStatusBadge } from "@/components/admin/AccountStatusBadge"
 import { TablePagination } from "@/components/admin/TablePagination"
 import { downloadCsv } from "@/components/admin/export-csv"
 import { CopyTrackingIdButton } from "@/components/orders/OrderTrackingView"
-import { adminOrderApi, adminNfcApi, ApiError } from "@/lib/api"
+import { adminOrderApi, adminNfcApi, adminOnboardingApi, ApiError } from "@/lib/api"
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/mock-api"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
 import {
@@ -117,16 +118,26 @@ export default function AdminOrders() {
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: OrderStatus }) => adminOrderApi.updateStatus(id, status),
-    onSuccess: (order, vars) => {
+    onSuccess: ({ order, message }, vars) => {
       invalidate()
-      toast.success(`Order ${order.orderNumber ?? vars.id} marked as ${vars.status}.`)
+      toast.success(message || `Order ${order.orderNumber ?? vars.id} marked as ${vars.status}.`)
     },
-    onError: () => toast.error("Couldn't update the order status. Please try again."),
+    // e.g. "This order has no successful payment yet, so it can't move to Processing."
+    onError: (err) => toast.error(errorMessage(err, "Couldn't update the order status. Please try again.")),
+  })
+
+  const resendActivationMutation = useMutation({
+    mutationFn: (onboardingId: number) => adminOnboardingApi.resend(onboardingId),
+    onSuccess: () => {
+      invalidate()
+      toast.success("A new activation link is being emailed to the customer.")
+    },
+    onError: (err) => toast.error(errorMessage(err, "Couldn't resend the activation email.")),
   })
 
   const deliveredMutation = useMutation({
     mutationFn: (id: string) => adminOrderApi.updateStatus(id, "Delivered"),
-    onSuccess: (order, id) => {
+    onSuccess: ({ order }, id) => {
       invalidate()
       toast.success(`Order ${order.orderNumber ?? id} marked as Delivered.`)
     },
@@ -258,7 +269,9 @@ export default function AdminOrders() {
                     <TableHead>Phone</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Product</TableHead>
+                    <TableHead>Qty</TableHead>
                     <TableHead>Total</TableHead>
+                    <TableHead>Payment</TableHead>
                     <TableHead>Shipping</TableHead>
                     <TableHead>Current Status</TableHead>
                     <TableHead>Estimated Delivery</TableHead>
@@ -277,7 +290,12 @@ export default function AdminOrders() {
                       <TableCell className="text-muted-foreground">{o.customerPhone || "—"}</TableCell>
                       <TableCell className="text-muted-foreground">{o.customerEmail}</TableCell>
                       <TableCell>{productSummary(o)}</TableCell>
+                      <TableCell>{o.items.reduce((sum, item) => sum + item.qty, 0)}</TableCell>
                       <TableCell>{formatCurrency(o.total)}</TableCell>
+                      <TableCell>
+                        <p className="whitespace-nowrap text-xs text-muted-foreground">{o.paymentMethod}</p>
+                        <StatusBadge status={o.paymentStatusLabel ?? o.paymentStatus} />
+                      </TableCell>
                       <TableCell className="text-muted-foreground">
                         {o.shipping === 0 ? "Free" : formatCurrency(o.shipping)}
                       </TableCell>
@@ -325,7 +343,7 @@ export default function AdminOrders() {
                   })}
                   {orders.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={11} className="py-14 text-center">
+                      <TableCell colSpan={13} className="py-14 text-center">
                         <div className="flex flex-col items-center gap-2">
                           <span className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
                             <Truck className="size-5" />
@@ -443,17 +461,86 @@ export default function AdminOrders() {
                   <p className="mb-2 text-sm font-medium">Payment</p>
                   <div className="flex items-center justify-between rounded-lg border p-3 text-sm">
                     <span className="text-muted-foreground">{viewing.paymentMethod}</span>
-                    <StatusBadge status={viewing.paymentStatus} />
+                    <StatusBadge status={viewing.paymentStatusLabel ?? viewing.paymentStatus} />
                   </div>
                 </div>
 
                 <div>
-                  <p className="mb-2 text-sm font-medium">Shipping Address</p>
-                  <p className="rounded-lg border p-3 text-sm text-muted-foreground">
-                    {viewing.address.line1}, {viewing.address.city}, {viewing.address.state}{" "}
-                    {viewing.address.pincode}, {viewing.address.country}
-                  </p>
+                  <p className="mb-2 text-sm font-medium">Delivery Details</p>
+                  {viewing.delivery ? (
+                    <div className="space-y-0.5 rounded-lg border p-3 text-sm">
+                      <p className="font-medium text-foreground">
+                        {viewing.delivery.fullName} · {viewing.delivery.phone}
+                      </p>
+                      <p className="text-muted-foreground">{viewing.delivery.email}</p>
+                      {[
+                        viewing.delivery.addressLine1,
+                        viewing.delivery.addressLine2,
+                        viewing.delivery.landmark && `Landmark: ${viewing.delivery.landmark}`,
+                        viewing.delivery.locality,
+                        [viewing.delivery.city, viewing.delivery.district && `Dist. ${viewing.delivery.district}`]
+                          .filter(Boolean)
+                          .join(", "),
+                        `${viewing.delivery.state} - ${viewing.delivery.pincode}, ${viewing.delivery.country}`,
+                      ]
+                        .filter(Boolean)
+                        .map((line, i) => (
+                          <p key={i} className="text-muted-foreground">
+                            {line}
+                          </p>
+                        ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-lg border p-3 text-sm text-muted-foreground">
+                      {viewing.address.line1}, {viewing.address.city}, {viewing.address.state}{" "}
+                      {viewing.address.pincode}, {viewing.address.country}
+                    </p>
+                  )}
                 </div>
+
+                {viewing.account && (
+                  <div>
+                    <p className="mb-2 text-sm font-medium">Customer Account</p>
+                    <div className="space-y-2 rounded-lg border p-3 text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <AccountStatusBadge status={viewing.account.status} />
+                        {viewing.account.onboardingId !== null &&
+                          (viewing.account.status === "EMAIL_SENT" || viewing.account.status === "EMAIL_FAILED") && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={resendActivationMutation.isPending}
+                              onClick={() => resendActivationMutation.mutate(viewing.account!.onboardingId!)}
+                            >
+                              <Mail className="size-3.5" /> Resend Activation Email
+                            </Button>
+                          )}
+                      </div>
+                      {viewing.account.status === "PENDING_PROCESSING" && (
+                        <p className="text-xs text-muted-foreground">
+                          Moving this paid order to Processing emails the customer a secure link to set their password.
+                        </p>
+                      )}
+                      {viewing.account.status === "EMAIL_FAILED" && (
+                        <p className="text-xs text-destructive">
+                          Email delivery failed after {viewing.account.emailAttempts ?? 0} attempts
+                          {viewing.account.emailLastError ? ` (${viewing.account.emailLastError})` : ""}. Use Resend
+                          once email is working.
+                        </p>
+                      )}
+                      {viewing.account.status === "EMAIL_SENT" && viewing.account.emailSentAt && (
+                        <p className="text-xs text-muted-foreground">Sent {formatDateTime(viewing.account.emailSentAt)}</p>
+                      )}
+                      {viewing.account.status === "ACTIVATED" && (
+                        <p className="text-xs text-muted-foreground">
+                          {viewing.account.createdFromOrder
+                            ? `Password set${viewing.account.passwordSetAt ? ` ${formatDateTime(viewing.account.passwordSetAt)}` : ""}.`
+                            : "Existing customer account — no activation needed."}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <Separator />
 

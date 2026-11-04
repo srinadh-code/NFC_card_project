@@ -141,36 +141,14 @@ type LoginResult =
       success: false
       error: string
       unverifiedEmail?: string
-      // Backend error code, e.g. "temporary_password_expired".
+      // Backend error code, e.g. "account_not_activated".
       code?: string
-      // Account created from a paid order, still on its emailed temporary
-      // password: no session yet — the login page sends the customer to
-      // the mandatory password setup with this short-lived setup token.
-      passwordChangeRequired?: { setupToken: string; email: string }
     }
-
-/** Starts the customer session from the JWTs FirstLoginCompleteView issues
- * once the mandatory first-login password setup succeeds. */
-export function completeCustomerFirstLogin(payload: AuthPayload) {
-  setTokens(payload.access, payload.refresh, "customer")
-  useCustomerSessionStore.getState().setUser(payload.user)
-}
 
 async function performLogin(email: string, password: string, expectedRole: "ADMIN" | "CUSTOMER"): Promise<LoginResult> {
   const area: SessionArea = expectedRole === "ADMIN" ? "admin" : "customer"
   try {
-    const response = await authApi.login({ email, password })
-    if ("password_change_required" in response) {
-      // Only customer accounts are ever created this way; the admin portal
-      // answers exactly like a wrong password.
-      if (expectedRole !== "CUSTOMER") return { success: false, error: "Invalid email or password." }
-      return {
-        success: false,
-        error: "",
-        passwordChangeRequired: { setupToken: response.setup_token, email: response.email },
-      }
-    }
-    const payload = response
+    const payload = await authApi.login({ email, password })
     if (payload.user.role !== expectedRole) {
       if (import.meta.env.DEV) {
         // Temporary, dev-only — pairs with ProtectedRoute.tsx's and

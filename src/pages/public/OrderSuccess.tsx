@@ -21,9 +21,12 @@ export default function OrderSuccess() {
         orderNumber?: string | null
         trackingToken?: string
         customerName?: string
-        // Guest checkout: an account was created and its login details emailed.
+        // Guest checkout: an account was created for this email; its
+        // set-password link is emailed once the order is being processed.
         accountCreated?: boolean
         email?: string
+        // Paid with the temporary test payment (no money charged).
+        testPayment?: boolean
       }
     | null
   const rawOrderId = state?.orderId ?? null
@@ -41,20 +44,23 @@ export default function OrderSuccess() {
       <h1 className="mt-6 text-3xl font-bold text-foreground">Thank You!</h1>
       <p className="mt-2 text-muted-foreground">Your order has been placed successfully.</p>
       {orderNumber && <p className="mt-4 font-mono text-lg font-bold text-primary">Order ID: {orderNumber}</p>}
+      {state?.testPayment && (
+        <p className="mt-2 rounded-full bg-warning/10 px-3 py-1 text-xs font-medium text-foreground">
+          Payment: Paid (Test) — no money was charged
+        </p>
+      )}
       <p className="mt-6 text-sm text-muted-foreground">
         A confirmation email with your order details has been sent to your inbox. Your card will
         be delivered within 5-7 business days.
       </p>
       {state?.accountCreated && (
         <div className="mt-6 w-full rounded-2xl border border-primary/30 bg-primary/5 p-4 text-left text-sm">
-          <p className="font-semibold text-foreground">Your Customer Dashboard account is ready</p>
+          <p className="font-semibold text-foreground">Your Customer Dashboard account</p>
           <p className="mt-1 text-muted-foreground">
-            We&apos;ve emailed your login details{state.email ? <> to <span className="font-medium text-foreground break-all">{state.email}</span></> : null}.
-            Log in with the temporary password within 24 hours — you&apos;ll then create your own password.
+            Once your order is being processed, we&apos;ll email a &quot;Set Your Password&quot; link and your username
+            {state.email ? <> to <span className="font-medium text-foreground break-all">{state.email}</span></> : null}.
+            Use it to create your password, then log in to manage your digital business profile.
           </p>
-          <Button className="mt-3" size="sm" onClick={() => navigate("/login")}>
-            Go to Login
-          </Button>
         </div>
       )}
       <div className="mt-10 flex flex-wrap justify-center gap-4">

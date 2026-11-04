@@ -20,6 +20,7 @@ import type {
   TicketStatus,
   Transaction,
   TrackingStep,
+  OrderAccount,
 } from "@/types"
 
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || "http://localhost:8000/api"
@@ -290,12 +291,6 @@ export interface ApiUser {
   email_verified: boolean
 }
 
-export interface FirstLoginRequired {
-  password_change_required: true
-  setup_token: string
-  email: string
-}
-
 export interface AuthPayload {
   user: ApiUser
   // Server-computed convenience field ("/admin/dashboard" or "/dashboard")
@@ -333,24 +328,22 @@ export const authApi = {
   resendOtp: (data: { email: string; purpose?: "REGISTER" | "RESET" }) =>
     request<{ expires_at?: string } | null>("/auth/resend-otp/", { method: "POST", body: data, auth: false }),
 
-  // An account created automatically from a paid order answers with a
-  // FirstLoginRequired (setup token, no JWTs) until its emailed temporary
-  // password has been replaced — see accounts/views.py LoginView.
+  // `email` may also be the profile username emailed to customers whose
+  // account was created from an order. Such an account answers 403
+  // "account_not_activated" until its set-password link has been used.
   login: (data: { email: string; password: string }) =>
-    request<AuthPayload | FirstLoginRequired>("/auth/login/", { method: "POST", body: data, auth: false }),
+    request<AuthPayload>("/auth/login/", { method: "POST", body: data, auth: false }),
 
-  // Mandatory first-login password setup; only this returns normal JWTs.
-  completeFirstLogin: (data: {
-    setup_token: string
-    temporary_password: string
-    new_password: string
-    confirm_password: string
-  }) => request<AuthPayload>("/auth/first-login/complete/", { method: "POST", body: data, auth: false }),
-
-  // Issues new emailed login details for an account still awaiting setup.
-  // Always the same response, whether or not such an account exists.
-  resendFirstLogin: (email: string) =>
-    request<null>("/auth/first-login/resend/", { method: "POST", body: { email }, auth: false }),
+  // The emailed /set-password?token=... link for an order-created account
+  // (single use, expiring — accounts/views.py AccountActivation*View).
+  checkActivation: (token: string) =>
+    request<{ email: string; username: string; full_name: string }>("/auth/activation/check/", {
+      method: "POST",
+      body: { token },
+      auth: false,
+    }),
+  completeActivation: (data: { token: string; new_password: string; confirm_password: string }) =>
+    request<{ email: string; username: string }>("/auth/activation/complete/", { method: "POST", body: data, auth: false }),
 
   logout: (refresh: string, area?: SessionArea) =>
     request<null>("/auth/logout/", { method: "POST", body: { refresh }, area }),
@@ -1560,6 +1553,7 @@ const PAYMENT_METHOD_MAP: Record<string, PaymentMethod> = {
   NET_BANKING: "Net Banking",
   RAZORPAY: "Razorpay",
   COD: "COD",
+  DUMMY: "Dummy / Test Payment",
 }
 const PAYMENT_METHOD_REVERSE_MAP: Record<PaymentMethod, string> = {
   UPI: "UPI",
@@ -1567,6 +1561,7 @@ const PAYMENT_METHOD_REVERSE_MAP: Record<PaymentMethod, string> = {
   "Net Banking": "NET_BANKING",
   Razorpay: "RAZORPAY",
   COD: "COD",
+  "Dummy / Test Payment": "DUMMY",
 }
 const PAYMENT_STATUS_MAP: Record<string, PaymentStatus> = {
   PAID: "Paid",
@@ -1696,6 +1691,32 @@ interface ApiAdminOrder {
   tracking: { label: string; date: string | null; done: boolean }[]
   assigned_card_id: number | null
   placed_at: string
+  // Admin order API only.
+  payment_status_display?: string
+  delivery?: {
+    full_name: string
+    phone: string
+    email: string
+    address_line1: string
+    address_line2: string
+    landmark: string
+    locality: string
+    city: string
+    district: string
+    state: string
+    pincode: string
+    country: string
+  }
+  account?: {
+    status: OrderAccount["status"]
+    status_display: string
+    onboarding_id: number | null
+    created_from_order: boolean
+    email_attempts?: number
+    email_last_error?: string
+    email_sent_at?: string | null
+    password_set_at?: string | null
+  }
 }
 
 // Exported so customer-facing code (pages/customer/Orders.tsx) can reuse
@@ -1729,6 +1750,31 @@ export function toFrontendOrder(o: ApiAdminOrder): Order {
     address: o.address,
     tracking: o.tracking as TrackingStep[],
     assignedCardId: o.assigned_card_id !== null ? String(o.assigned_card_id) : null,
+    paymentStatusLabel: o.payment_status_display,
+    delivery: o.delivery && {
+      fullName: o.delivery.full_name,
+      phone: o.delivery.phone,
+      email: o.delivery.email,
+      addressLine1: o.delivery.address_line1,
+      addressLine2: o.delivery.address_line2,
+      landmark: o.delivery.landmark,
+      locality: o.delivery.locality,
+      city: o.delivery.city,
+      district: o.delivery.district,
+      state: o.delivery.state,
+      pincode: o.delivery.pincode,
+      country: o.delivery.country,
+    },
+    account: o.account && {
+      status: o.account.status,
+      statusLabel: o.account.status_display,
+      onboardingId: o.account.onboarding_id,
+      createdFromOrder: o.account.created_from_order,
+      emailAttempts: o.account.email_attempts,
+      emailLastError: o.account.email_last_error,
+      emailSentAt: o.account.email_sent_at ?? null,
+      passwordSetAt: o.account.password_set_at ?? null,
+    },
   }
 }
 
@@ -1756,13 +1802,15 @@ export const adminOrderApi = {
 
   get: async (id: string): Promise<Order> => toFrontendOrder(await request<ApiAdminOrder>(`/admin/orders/${id}/`)),
 
-  updateStatus: async (id: string, status: OrderStatus): Promise<Order> =>
-    toFrontendOrder(
-      await request<ApiAdminOrder>(`/admin/orders/${id}/status/`, {
-        method: "POST",
-        body: { status: ORDER_STATUS_REVERSE_MAP[status] },
-      }),
-    ),
+  // Resolves with the server's message too — moving a paid order to
+  // Processing reports whether the customer's activation email was sent.
+  updateStatus: async (id: string, status: OrderStatus): Promise<{ order: Order; message: string }> => {
+    const envelope = await requestRaw<ApiAdminOrder>(`/admin/orders/${id}/status/`, {
+      method: "POST",
+      body: { status: ORDER_STATUS_REVERSE_MAP[status] },
+    })
+    return { order: toFrontendOrder(envelope.data as ApiAdminOrder), message: envelope.message ?? "" }
+  },
 
   assignCard: async (id: string, cardId: string): Promise<Order> =>
     toFrontendOrder(
@@ -2807,7 +2855,12 @@ export interface PaymentConfig {
   key_id: string
   currency: string
   sms_otp_enabled: boolean
+  // Temporary test payments until Razorpay is live — never on by default
+  // on the live site (backend settings.DUMMY_PAYMENTS_ENABLED).
+  dummy_enabled: boolean
 }
+
+export type PaymentProvider = "razorpay" | "dummy"
 
 export interface GuestCheckoutInput {
   contact: { full_name: string; email: string; phone: string }
@@ -2828,16 +2881,21 @@ export interface GuestCheckoutInput {
   email_verification_token: string
   phone_verification_token?: string
   session_ref: string
+  provider?: PaymentProvider
 }
 
 export interface RazorpayCheckout {
   checkout_id: string
-  razorpay_order_id: string
+  // null for a dummy (test) payment
+  razorpay_order_id: string | null
   key_id: string
   amount: number
   currency: string
   summary: { subtotal: string; first_order_discount_amount: string; shipping: string; total: string }
   prefill: { name: string; email: string; contact: string }
+  provider: "RAZORPAY" | "DUMMY"
+  // Server-priced lines, for the payment confirmation screen.
+  lines: { name: string; qty: number; unit_price: string; pricing_tier: string }[]
 }
 
 export interface VerifiedPayment {
@@ -2846,6 +2904,8 @@ export interface VerifiedPayment {
   tracking_token: string
   email: string
   account_created: boolean
+  // Set by the dummy (test) payment confirmation.
+  payment_method?: string
 }
 
 export const paymentsApi = {
@@ -2869,12 +2929,22 @@ export const paymentsApi = {
   // Guest: full details + tokens. Signed-in customer: their saved address.
   createGuestCheckout: (data: GuestCheckoutInput) =>
     request<RazorpayCheckout>("/payments/razorpay/checkout/", { method: "POST", body: data, auth: false }),
-  createCustomerCheckout: (addressId: number) =>
-    request<RazorpayCheckout>("/payments/razorpay/checkout/", { method: "POST", body: { address_id: addressId } }),
+  createCustomerCheckout: (addressId: number, provider: PaymentProvider = "razorpay") =>
+    request<RazorpayCheckout>("/payments/razorpay/checkout/", {
+      method: "POST",
+      body: { address_id: addressId, provider },
+    }),
+
+  // Completes a temporary test payment started with provider "dummy".
+  // Idempotent — confirming again returns the same order.
+  confirmDummyPayment: (checkoutId: string, amount: number) =>
+    request<VerifiedPayment>("/payments/dummy/confirm/", { method: "POST", body: { checkout_id: checkoutId, amount } }),
 
   verifyPayment: (data: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) =>
     request<VerifiedPayment>("/payments/razorpay/verify/", { method: "POST", body: data, auth: false }),
 }
+
+export type AccountStatus = "PENDING_PROCESSING" | "EMAIL_SENT" | "EMAIL_FAILED" | "ACTIVATED"
 
 // Admin → Account Activation: accounts created automatically from paid
 // orders (accounts.CustomerOnboarding). Never carries password data.
@@ -2890,9 +2960,9 @@ export interface ApiCustomerOnboarding {
   order_number: string | null
   order_status: string | null
   account_created_at: string
-  activation_status: "PENDING" | "EXPIRED" | "COMPLETED"
+  account_status: AccountStatus
+  account_status_display: string
   password_set_at: string | null
-  temporary_password_expires_at: string | null
   email_status: "PENDING" | "SENT" | "FAILED"
   email_attempts: number
   email_last_error: string

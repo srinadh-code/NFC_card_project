@@ -10,10 +10,19 @@ import { PinnedLocationLink } from "@/components/customer/PinnedLocationLink"
 import { OffersSection } from "@/components/checkout/OffersSection"
 import { DesignerContactNotice } from "@/components/checkout/DesignerContactNotice"
 import { GuestCheckout } from "@/components/checkout/GuestCheckout"
+import { DummyPaymentDialog } from "@/components/checkout/DummyPaymentDialog"
 import { useCart } from "@/hooks/useCart"
 import { sanitizeCartLines } from "@/store/cart-store"
 import { useCustomerAuthStore } from "@/store/auth-store"
-import { ordersApi, customerAddressApi, paymentsApi, ApiError, type CreateOrderPayload } from "@/lib/api"
+import {
+  ordersApi,
+  customerAddressApi,
+  paymentsApi,
+  ApiError,
+  type CreateOrderPayload,
+  type RazorpayCheckout,
+  type VerifiedPayment,
+} from "@/lib/api"
 import { PaymentCancelled, payWithRazorpay } from "@/lib/razorpay"
 import { formatCurrency } from "@/lib/mock-api"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
@@ -144,22 +153,49 @@ export default function Checkout() {
   // pay-on-confirmation order flow below.
   const paymentConfig = useQuery({ queryKey: ["payments-config"], queryFn: paymentsApi.config, staleTime: 60_000 })
   const [paying, setPaying] = useState(false)
+  // Temporary test payment (until Razorpay is live) waiting for confirmation.
+  const [dummyCheckout, setDummyCheckout] = useState<RazorpayCheckout | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const [dummyError, setDummyError] = useState<string | null>(null)
+
+  function finishOrder(result: VerifiedPayment) {
+    clearCart()
+    navigate("/order-success", {
+      state: {
+        orderId: String(result.order_id),
+        orderNumber: result.order_number,
+        trackingToken: result.tracking_token,
+        customerName: customer?.name,
+        testPayment: result.payment_method === "DUMMY",
+      },
+    })
+  }
+
+  async function confirmDummyPayment() {
+    if (!dummyCheckout || confirming) return
+    setConfirming(true)
+    setDummyError(null)
+    try {
+      // Idempotent on the backend: a repeated click returns the same order.
+      finishOrder(await paymentsApi.confirmDummyPayment(dummyCheckout.checkout_id, dummyCheckout.amount))
+    } catch (err) {
+      setDummyError(err instanceof Error ? err.message : "Couldn't confirm the payment. Please try again.")
+    } finally {
+      setConfirming(false)
+    }
+  }
 
   async function payOnline(addressId: number) {
     setPaying(true)
     try {
+      if (!paymentConfig.data?.enabled && paymentConfig.data?.dummy_enabled) {
+        setDummyError(null)
+        setDummyCheckout(await paymentsApi.createCustomerCheckout(addressId, "dummy"))
+        return
+      }
       const checkout = await paymentsApi.createCustomerCheckout(addressId)
       const paid = await payWithRazorpay(checkout, settings.site_name)
-      const result = await paymentsApi.verifyPayment(paid)
-      clearCart()
-      navigate("/order-success", {
-        state: {
-          orderId: String(result.order_id),
-          orderNumber: result.order_number,
-          trackingToken: result.tracking_token,
-          customerName: customer?.name,
-        },
-      })
+      finishOrder(await paymentsApi.verifyPayment(paid))
     } catch (err) {
       if (err instanceof PaymentCancelled) toast.info("Payment cancelled. You can try again whenever you're ready.")
       else toast.error(err instanceof Error ? err.message : "Something went wrong with the payment.")
@@ -208,7 +244,9 @@ export default function Checkout() {
     )
   }
 
-  const onlinePayment = Boolean(paymentConfig.data?.enabled)
+  // Razorpay when configured; otherwise the temporary test payment where the
+  // backend allows it; otherwise the pay-on-confirmation order below.
+  const onlinePayment = Boolean(paymentConfig.data?.enabled || paymentConfig.data?.dummy_enabled)
   const busy = placeOrderMutation.isPending || paying
 
   function handleAddressSaved(address: CustomerAddress) {
@@ -461,6 +499,28 @@ export default function Checkout() {
           </Button>
         </div>
       </form>
+
+      <DummyPaymentDialog
+        checkout={dummyCheckout}
+        email={customer.email}
+        delivery={{
+          fullName: selectedAddress?.fullName ?? customer.name,
+          phone: selectedAddress?.phone ?? "",
+          lines: selectedAddress
+            ? [
+                [selectedAddress.addressLine1, selectedAddress.addressLine2].filter(Boolean).join(", "),
+                [selectedAddress.landmark, selectedAddress.locality].filter(Boolean).join(", "),
+                [selectedAddress.city, selectedAddress.district && `Dist. ${selectedAddress.district}`].filter(Boolean).join(", "),
+                `${selectedAddress.state} - ${selectedAddress.pincode}`,
+              ].filter((line) => line.trim())
+            : [],
+        }}
+        currency={settings.currency}
+        confirming={confirming}
+        error={dummyError}
+        onConfirm={confirmDummyPayment}
+        onCancel={() => setDummyCheckout(null)}
+      />
 
       <AddressFormDialog
         open={formOpen}

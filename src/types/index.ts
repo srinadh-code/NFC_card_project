@@ -23,7 +23,7 @@ export type OrderStatus =
   | "Completed"
   | "Cancelled"
 export type PaymentStatus = "Paid" | "Refunded" | "Failed" | "Pending"
-export type PaymentMethod = "UPI" | "Card" | "Net Banking" | "Razorpay" | "COD"
+export type PaymentMethod = "UPI" | "Card" | "Net Banking" | "Razorpay" | "COD" | "Dummy / Test Payment"
 
 export type TicketStatus = "Open" | "In Progress" | "Resolved" | "Closed"
 export type TicketPriority = "Low" | "Medium" | "High"
@@ -139,6 +139,38 @@ export interface Order {
   tracking: TrackingStep[]
   // Set once admin assigns a physical NFC card to fulfill this order.
   assignedCardId: string | null
+  // Admin API only — see admin_api/orders/serializers.py.
+  paymentStatusLabel?: string // e.g. "Paid (Test)" for a dummy payment
+  delivery?: OrderDelivery
+  account?: OrderAccount
+}
+
+// Every delivery field the buyer entered at checkout (admin order details).
+export interface OrderDelivery {
+  fullName: string
+  phone: string
+  email: string
+  addressLine1: string
+  addressLine2: string
+  landmark: string
+  locality: string
+  city: string
+  district: string
+  state: string
+  pincode: string
+  country: string
+}
+
+// The customer account behind an order (accounts.CustomerOnboarding).
+export interface OrderAccount {
+  status: "PENDING_PROCESSING" | "EMAIL_SENT" | "EMAIL_FAILED" | "ACTIVATED"
+  statusLabel: string
+  onboardingId: number | null
+  createdFromOrder: boolean
+  emailAttempts?: number
+  emailLastError?: string
+  emailSentAt?: string | null
+  passwordSetAt?: string | null
 }
 
 export interface Transaction {

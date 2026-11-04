@@ -10,17 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TablePagination } from "@/components/admin/TablePagination"
+import { AccountStatusBadge } from "@/components/admin/AccountStatusBadge"
 import { ApiError, adminOnboardingApi, type ApiCustomerOnboarding } from "@/lib/api"
 import { formatDate, formatDateTime } from "@/lib/mock-api"
 
 const PAGE_SIZE = 10
-
-const ACTIVATION_LABEL: Record<ApiCustomerOnboarding["activation_status"], string> = {
-  PENDING: "Activation Pending",
-  EXPIRED: "Temporary Credential Expired",
-  COMPLETED: "Password Setup Completed",
-}
-const ACTIVATION_VARIANT = { PENDING: "warning", EXPIRED: "destructive", COMPLETED: "success" } as const
 
 const EMAIL_LABEL: Record<ApiCustomerOnboarding["email_status"], string> = {
   PENDING: "Email Pending",
@@ -39,10 +33,11 @@ function titleCase(value: string | null) {
 }
 
 /**
- * Accounts created automatically after a paid order (accounts.
- * CustomerOnboarding): verification, activation and welcome-email status.
- * Passwords and OTPs are never shown — "Resend login details" issues a new
- * temporary password straight to the customer's inbox.
+ * Accounts created automatically from a paid order (accounts.
+ * CustomerOnboarding): verification, activation and activation-email
+ * status. The activation email (a single-use "Set Your Password" link) is
+ * sent when the order is moved to Processing; "Resend" issues a new link
+ * and retires the old one. Passwords and links are never shown.
  */
 export default function AdminAccountActivation() {
   const queryClient = useQueryClient()
@@ -69,10 +64,10 @@ export default function AdminAccountActivation() {
   const resend = useMutation({
     mutationFn: (id: number) => adminOnboardingApi.resend(id),
     onSuccess: () => {
-      toast.success("New login details are being emailed to the customer.")
+      toast.success("A new activation link is being emailed to the customer.")
       queryClient.invalidateQueries({ queryKey: ["admin-onboarding"] })
     },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't resend the login details."),
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't resend the activation email."),
   })
 
   return (
@@ -105,10 +100,10 @@ export default function AdminAccountActivation() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ALL">All activation statuses</SelectItem>
-                <SelectItem value="PENDING">Activation Pending</SelectItem>
-                <SelectItem value="EXPIRED">Temporary Credential Expired</SelectItem>
-                <SelectItem value="COMPLETED">Password Setup Completed</SelectItem>
+                <SelectItem value="ALL">All account statuses</SelectItem>
+                <SelectItem value="PENDING_PROCESSING">Pending Processing</SelectItem>
+                <SelectItem value="EMAIL_SENT">Activation Email Sent</SelectItem>
+                <SelectItem value="ACTIVATED">Account Activated</SelectItem>
               </SelectContent>
             </Select>
             <Select value={emailStatus} onValueChange={(v) => { setEmailStatus(v); setPage(1) }}>
@@ -147,8 +142,8 @@ export default function AdminAccountActivation() {
                     <TableHead>OTP Verification</TableHead>
                     <TableHead>Order</TableHead>
                     <TableHead>Account Created</TableHead>
-                    <TableHead>Activation</TableHead>
-                    <TableHead>Welcome Email</TableHead>
+                    <TableHead>Account Status</TableHead>
+                    <TableHead>Activation Email</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -170,16 +165,17 @@ export default function AdminAccountActivation() {
                       </TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(r.account_created_at)}</TableCell>
                       <TableCell>
-                        <Badge variant={ACTIVATION_VARIANT[r.activation_status]}>{ACTIVATION_LABEL[r.activation_status]}</Badge>
-                        {r.activation_status === "COMPLETED" && r.password_set_at && (
+                        <AccountStatusBadge status={r.account_status} />
+                        {r.account_status === "ACTIVATED" && r.password_set_at && (
                           <p className="mt-1 text-xs text-muted-foreground">{formatDateTime(r.password_set_at)}</p>
-                        )}
-                        {r.activation_status !== "COMPLETED" && r.temporary_password_expires_at && (
-                          <p className="mt-1 text-xs text-muted-foreground">Expires {formatDateTime(r.temporary_password_expires_at)}</p>
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={EMAIL_VARIANT[r.email_status]}>{EMAIL_LABEL[r.email_status]}</Badge>
+                        {r.credentials_issued_at ? (
+                          <Badge variant={EMAIL_VARIANT[r.email_status]}>{EMAIL_LABEL[r.email_status]}</Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Sent when the order moves to Processing</span>
+                        )}
                         {r.email_status === "FAILED" && r.email_last_error && (
                           <p className="mt-1 text-xs text-muted-foreground">
                             {r.email_attempts} attempts · {r.email_last_error}
@@ -187,14 +183,14 @@ export default function AdminAccountActivation() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        {r.activation_status !== "COMPLETED" ? (
+                        {r.account_status === "EMAIL_SENT" || r.account_status === "EMAIL_FAILED" ? (
                           <Button
                             variant="outline"
                             size="sm"
                             disabled={resend.isPending}
                             onClick={() => resend.mutate(r.id)}
-                            aria-label={`Resend login details to ${r.customer_email}`}
-                            title="Email a new temporary password"
+                            aria-label={`Resend activation email to ${r.customer_email}`}
+                            title="Email a new set-password link"
                           >
                             <Mail className="size-3.5" /> Resend
                           </Button>
