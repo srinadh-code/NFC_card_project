@@ -23,6 +23,7 @@ urlpatterns = [
     # app/Order model, just a much narrower response (see
     # PublicOrderTrackingSerializer) for the public /track-order page.
     path("api/orders/", include("orders.public_urls")),
+    path("api/payments/", include("payments.urls")),
     path("api/customer/leads/", include("customer_management.customer_leads.urls")),
     path("api/customer/notifications/", include("customer_management.customer_notifications.urls")),
     # Public, unauthenticated counterpart to the line above — same

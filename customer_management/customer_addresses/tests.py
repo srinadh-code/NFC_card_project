@@ -368,10 +368,12 @@ class GeocodeReverseViewTests(AuthenticatedAPITestCase):
             response = self.client.get(self.url, {"lat": 17.385, "lng": 78.4867})
         self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
 
-    def test_requires_customer_login(self):
+    def test_available_to_guests_for_guest_checkout(self):
         self.client.force_authenticate(user=None)
-        response = self.client.get(self.url, {"lat": 17.385, "lng": 78.4867})
-        self.assertIn(response.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN))
+        response, _ = self._reverse(
+            _nominatim({"road": "Abids Road", "city": "Hyderabad", "state": "Telangana", "postcode": "500001", "country_code": "in"})
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
 
 def _photon_feature(lng, lat, **props):

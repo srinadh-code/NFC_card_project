@@ -65,6 +65,16 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     email_verified = models.BooleanField(default=False)
 
+    # Set on accounts created automatically after a paid guest checkout
+    # (accounts/onboarding.py): the account's password is a temporary one
+    # that was emailed to the customer, valid until
+    # `temporary_password_expires_at`. While set, login issues no JWTs —
+    # only a short-lived setup token for the mandatory password change
+    # (FirstLoginCompleteView) — and common.authentication rejects any JWT
+    # for the account, so no customer API is reachable until it's done.
+    must_change_password = models.BooleanField(default=False)
+    temporary_password_expires_at = models.DateTimeField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -296,3 +306,49 @@ class EmailOTP(models.Model):
         self.reset_token_expires_at = None
         self.is_used = True
         self.save(update_fields=["reset_token_hash", "reset_token_expires_at", "is_used"])
+
+
+class CustomerOnboarding(models.Model):
+    """Audit/delivery record for an account created automatically from a
+    paid order (accounts/onboarding.py) — what the admin "Account
+    Activation" view reads. Never holds a password in any form: the
+    temporary password exists only as the user's normal password hash and,
+    briefly, in memory while the welcome email is sent. A failed or lost
+    email is recovered by issuing a new temporary password, never by
+    re-reading the old one."""
+
+    class EmailStatus(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        SENT = "SENT", "Sent"
+        FAILED = "FAILED", "Failed"
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="onboarding")
+    source_order = models.ForeignKey(
+        "orders.Order", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    email_status = models.CharField(max_length=10, choices=EmailStatus.choices, default=EmailStatus.PENDING)
+    email_attempts = models.PositiveIntegerField(default=0)
+    # Exception class/short reason only — never message bodies or credentials.
+    email_last_error = models.CharField(max_length=255, blank=True, default="")
+    email_sent_at = models.DateTimeField(null=True, blank=True)
+    credentials_issued_at = models.DateTimeField(null=True, blank=True)
+    password_set_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Onboarding for {self.user.email}"
+
+    @property
+    def activation_status(self):
+        """COMPLETED once the customer set their own password; EXPIRED when
+        the temporary password lapsed unused; otherwise PENDING."""
+        if not self.user.must_change_password:
+            return "COMPLETED"
+        expires = self.user.temporary_password_expires_at
+        if expires is not None and expires <= timezone.now():
+            return "EXPIRED"
+        return "PENDING"

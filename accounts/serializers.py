@@ -135,6 +135,23 @@ class GoogleLoginSerializer(serializers.Serializer):
     credential = serializers.CharField()
 
 
+class FirstLoginCompleteSerializer(serializers.Serializer):
+    setup_token = serializers.CharField(write_only=True)
+    temporary_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True)
+    confirm_password = serializers.CharField(write_only=True)
+
+    def validate_new_password(self, value):
+        validate_password(value)
+        enforce_password_policy(value)
+        return value
+
+    def validate(self, attrs):
+        if attrs["new_password"] != attrs["confirm_password"]:
+            raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
+        return attrs
+
+
 class ChangePasswordSerializer(serializers.Serializer):
     current_password = serializers.CharField(write_only=True)
     new_password = serializers.CharField(write_only=True)

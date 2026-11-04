@@ -1,0 +1,13 @@
+{% autoescape off %}Hello,
+
+Your VRS GATEWAY verification code is:
+
+{{ code }}
+
+This OTP is valid for {{ minutes }} minutes.
+
+Do not share this code with anyone.
+
+Regards,
+VRS GATEWAY Team
+{% endautoescape %}

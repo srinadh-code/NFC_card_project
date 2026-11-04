@@ -1,3 +1,4 @@
+from rest_framework.permissions import AllowAny
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
@@ -78,7 +79,8 @@ class PincodeLookupView(APIView):
     post offices India Post has for a PIN. Purely informational — the
     authoritative check is CustomerAddressSerializer.validate."""
 
-    permission_classes = [IsCustomerRole]
+    # Public (rate-limited per IP): guest checkout uses it too.
+    permission_classes = [AllowAny]
     throttle_classes = [PincodeLookupThrottle]
 
     def get(self, request, pincode):
@@ -135,7 +137,8 @@ class GeocodeSearchView(APIView):
     """The address form's map search box (autocomplete): places in India
     matching ?q=, ranked near ?lat=&lng= (the map's view) when given."""
 
-    permission_classes = [IsCustomerRole]
+    # Public (rate-limited per IP): guest checkout uses it too.
+    permission_classes = [AllowAny]
     throttle_classes = [GeocodeThrottle]
 
     def get(self, request):
@@ -153,7 +156,8 @@ class GeocodeReverseView(APIView):
     Not verification: the saved address is still checked against India
     Post by CustomerAddressSerializer."""
 
-    permission_classes = [IsCustomerRole]
+    # Public (rate-limited per IP): guest checkout uses it too.
+    permission_classes = [AllowAny]
     throttle_classes = [GeocodeThrottle]
 
     def get(self, request):
