@@ -13,6 +13,7 @@ import {
   LogOut,
   Zap,
   Newspaper,
+  UserCheck,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAdminAuthStore } from "@/store/auth-store"
@@ -21,6 +22,7 @@ import { BrandMark } from "@/components/layout/BrandMark"
 const NAV_ITEMS = [
   { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/admin/customers", label: "Customers", icon: Users },
+  { to: "/admin/account-activation", label: "Account Activation", icon: UserCheck },
   { to: "/admin/cards", label: "NFC Cards", icon: Nfc },
   { to: "/admin/orders", label: "Orders", icon: ShoppingCart },
   { to: "/admin/transactions", label: "Transactions", icon: Wallet },

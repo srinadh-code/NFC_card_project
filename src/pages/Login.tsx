@@ -11,6 +11,7 @@ import { ForgotPasswordDialog } from "@/components/auth/ForgotPasswordDialog"
 import { ResendVerificationButton } from "@/components/auth/ResendVerificationButton"
 import { BrandMark } from "@/components/layout/BrandMark"
 import { useCustomerAuthStore } from "@/store/auth-store"
+import { authApi } from "@/lib/api"
 import { sanitizeRedirect } from "@/lib/utils"
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
@@ -48,6 +49,9 @@ export default function Login() {
   // Set when the password was right but the email isn't verified yet — the
   // backend refuses to log in until the emailed link has been opened.
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null)
+  // Temporary password (from an automatically created account) has expired.
+  const [expiredEmail, setExpiredEmail] = useState<string | null>(null)
+  const [resendingDetails, setResendingDetails] = useState(false)
 
   if (customer) return <Navigate to={redirectTo} replace />
 
@@ -56,6 +60,7 @@ export default function Login() {
     setSubmitting(true)
     setError(null)
     setUnverifiedEmail(null)
+    setExpiredEmail(null)
     try {
       const result = await customerLogin(email, password)
       if (result.success) {
@@ -63,12 +68,38 @@ export default function Login() {
         navigate(redirectTo)
         return
       }
+      if (result.passwordChangeRequired) {
+        // Valid temporary password — no session yet. The setup token travels
+        // in router state only (never the URL); the password is re-entered
+        // on the setup page rather than carried over.
+        navigate("/first-login", {
+          replace: true,
+          state: { ...result.passwordChangeRequired, redirectTo },
+        })
+        return
+      }
       const message = result.error ?? "Invalid credentials."
       setError(message)
       setUnverifiedEmail(result.unverifiedEmail ?? null)
+      if (result.code === "temporary_password_expired") setExpiredEmail(email.trim())
       toast.error(message)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleResendLoginDetails() {
+    if (!expiredEmail) return
+    setResendingDetails(true)
+    try {
+      await authApi.resendFirstLogin(expiredEmail)
+      toast.success("New login details are on their way. Please check your inbox.")
+      setError(null)
+      setExpiredEmail(null)
+    } catch {
+      toast.error("We couldn't send new login details right now. Please try again in a moment.")
+    } finally {
+      setResendingDetails(false)
     }
   }
 
@@ -201,6 +232,24 @@ export default function Login() {
                 <ResendVerificationButton email={unverifiedEmail} className="w-full" />
               </div>
             )}
+            {expiredEmail && (
+              <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-3 text-sm">
+                <p className="text-muted-foreground">
+                  We can email a new temporary password to{" "}
+                  <span className="font-medium text-foreground break-all">{expiredEmail}</span>. It will be valid for 24
+                  hours.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={resendingDetails}
+                  onClick={handleResendLoginDetails}
+                >
+                  {resendingDetails ? "Sending..." : "Send new login details"}
+                </Button>
+              </div>
+            )}
 
             <div className="flex items-center justify-between text-sm">
               <label className="flex items-center gap-2 text-muted-foreground">
@@ -245,12 +294,23 @@ export default function Login() {
             </p>
           )}
 
-          <p className="text-center text-sm text-muted-foreground">
-            Don&apos;t have an account?{" "}
-            <Link to={`/register${redirectQuery}`} className="font-medium text-primary hover:underline">
-              Sign Up
-            </Link>
-          </p>
+          {redirectTo.startsWith("/checkout") ? (
+            // Ordering without an account goes through OTP verification —
+            // the account is created automatically after payment.
+            <p className="text-center text-sm text-muted-foreground">
+              New customer?{" "}
+              <Link to="/checkout/verify?redirect=%2Fcheckout" className="font-medium text-primary hover:underline">
+                Continue with OTP verification
+              </Link>
+            </p>
+          ) : (
+            <p className="text-center text-sm text-muted-foreground">
+              Don&apos;t have an account?{" "}
+              <Link to={`/register${redirectQuery}`} className="font-medium text-primary hover:underline">
+                Sign Up
+              </Link>
+            </p>
+          )}
 
           <p className="text-center text-xs text-muted-foreground">
             <Link to="/admin/login" className="hover:underline">
