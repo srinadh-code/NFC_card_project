@@ -8,10 +8,13 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { AddressFormDialog } from "@/components/customer/AddressFormDialog"
 import { PinnedLocationLink } from "@/components/customer/PinnedLocationLink"
 import { OffersSection } from "@/components/checkout/OffersSection"
+import { DesignerContactNotice } from "@/components/checkout/DesignerContactNotice"
+import { GuestCheckout } from "@/components/checkout/GuestCheckout"
 import { useCart } from "@/hooks/useCart"
 import { sanitizeCartLines } from "@/store/cart-store"
 import { useCustomerAuthStore } from "@/store/auth-store"
-import { ordersApi, customerAddressApi, ApiError, type CreateOrderPayload } from "@/lib/api"
+import { ordersApi, customerAddressApi, paymentsApi, ApiError, type CreateOrderPayload } from "@/lib/api"
+import { PaymentCancelled, payWithRazorpay } from "@/lib/razorpay"
 import { formatCurrency } from "@/lib/mock-api"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
 import { cn } from "@/lib/utils"
@@ -137,12 +140,48 @@ export default function Checkout() {
   // top and nothing here is recomputed client-side.
   const total = cartTotal
 
+  // Online payment (Razorpay) when configured; otherwise the existing
+  // pay-on-confirmation order flow below.
+  const paymentConfig = useQuery({ queryKey: ["payments-config"], queryFn: paymentsApi.config, staleTime: 60_000 })
+  const [paying, setPaying] = useState(false)
+
+  async function payOnline(addressId: number) {
+    setPaying(true)
+    try {
+      const checkout = await paymentsApi.createCustomerCheckout(addressId)
+      const paid = await payWithRazorpay(checkout, settings.site_name)
+      const result = await paymentsApi.verifyPayment(paid)
+      clearCart()
+      navigate("/order-success", {
+        state: {
+          orderId: String(result.order_id),
+          orderNumber: result.order_number,
+          trackingToken: result.tracking_token,
+          customerName: customer?.name,
+        },
+      })
+    } catch (err) {
+      if (err instanceof PaymentCancelled) toast.info("Payment cancelled. You can try again whenever you're ready.")
+      else toast.error(err instanceof Error ? err.message : "Something went wrong with the payment.")
+      if (err instanceof ApiError && err.errors.address_id) {
+        queryClient.invalidateQueries({ queryKey: ["address-verification"] })
+      }
+    } finally {
+      setPaying(false)
+    }
+  }
+
   const placeOrderMutation = useMutation({
     mutationFn: (payload: CreateOrderPayload) => ordersApi.create(payload),
     onSuccess: (order) => {
       clearCart()
       navigate("/order-success", {
-        state: { orderId: String(order.id), trackingToken: order.tracking_token, customerName: customer?.name },
+        state: {
+          orderId: String(order.id),
+          orderNumber: order.order_number,
+          trackingToken: order.tracking_token,
+          customerName: customer?.name,
+        },
       })
     },
     onError: (err) => {
@@ -157,8 +196,20 @@ export default function Checkout() {
   })
 
   if (!customer) {
-    return null
+    // No account yet: verify by OTP, enter details and pay online. The
+    // account is created automatically after the payment is verified.
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-12">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Checkout</h1>
+        <div className="mt-8">
+          <GuestCheckout />
+        </div>
+      </div>
+    )
   }
+
+  const onlinePayment = Boolean(paymentConfig.data?.enabled)
+  const busy = placeOrderMutation.isPending || paying
 
   function handleAddressSaved(address: CustomerAddress) {
     queryClient.invalidateQueries({ queryKey: ["customer-addresses"] })
@@ -174,7 +225,7 @@ export default function Checkout() {
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (placeOrderMutation.isPending) return
+    if (busy) return
     if (lines.length === 0) {
       toast.error("Your cart is empty.")
       return
@@ -195,6 +246,11 @@ export default function Checkout() {
     const validLines = sanitizeCartLines(lines)
     if (validLines.length === 0) {
       toast.error("Your cart no longer contains any available products. Please add an item to continue.")
+      return
+    }
+
+    if (onlinePayment) {
+      payOnline(Number(selectedAddress.id))
       return
     }
 
@@ -351,13 +407,15 @@ export default function Checkout() {
             </div>
           )}
 
-          <div className="flex items-start gap-2 rounded-2xl border bg-muted/30 p-4 text-sm text-muted-foreground">
-            <Info className="mt-0.5 size-4 shrink-0" />
-            <p>
-              Online payment isn&apos;t available yet — placing an order reserves your card and our team will
-              contact you to confirm payment and shipping.
-            </p>
-          </div>
+          {!onlinePayment && (
+            <div className="flex items-start gap-2 rounded-2xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+              <Info className="mt-0.5 size-4 shrink-0" />
+              <p>
+                Online payment isn&apos;t available yet — placing an order reserves your card and our team will
+                contact you to confirm payment and shipping.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="h-fit rounded-2xl border bg-card p-6 shadow-sm">
@@ -397,13 +455,9 @@ export default function Checkout() {
               <span>{formatCurrency(total, settings.currency)}</span>
             </div>
           </div>
-          <Button
-            type="submit"
-            size="lg"
-            className="mt-6 w-full"
-            disabled={!addressVerified || placeOrderMutation.isPending}
-          >
-            {placeOrderMutation.isPending ? "Placing Order…" : "Place Order"}
+          <DesignerContactNotice className="mt-6" />
+          <Button type="submit" size="lg" className="mt-4 w-full" disabled={!addressVerified || busy}>
+            {busy ? (onlinePayment ? "Processing…" : "Placing Order…") : onlinePayment ? "Pay Now" : "Place Order"}
           </Button>
         </div>
       </form>

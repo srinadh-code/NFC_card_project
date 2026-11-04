@@ -290,7 +290,13 @@ export interface ApiUser {
   email_verified: boolean
 }
 
-interface AuthPayload {
+export interface FirstLoginRequired {
+  password_change_required: true
+  setup_token: string
+  email: string
+}
+
+export interface AuthPayload {
   user: ApiUser
   // Server-computed convenience field ("/admin/dashboard" or "/dashboard")
   // — the frontend still derives its own redirect from `user.role` via
@@ -327,8 +333,24 @@ export const authApi = {
   resendOtp: (data: { email: string; purpose?: "REGISTER" | "RESET" }) =>
     request<{ expires_at?: string } | null>("/auth/resend-otp/", { method: "POST", body: data, auth: false }),
 
+  // An account created automatically from a paid order answers with a
+  // FirstLoginRequired (setup token, no JWTs) until its emailed temporary
+  // password has been replaced — see accounts/views.py LoginView.
   login: (data: { email: string; password: string }) =>
-    request<AuthPayload>("/auth/login/", { method: "POST", body: data, auth: false }),
+    request<AuthPayload | FirstLoginRequired>("/auth/login/", { method: "POST", body: data, auth: false }),
+
+  // Mandatory first-login password setup; only this returns normal JWTs.
+  completeFirstLogin: (data: {
+    setup_token: string
+    temporary_password: string
+    new_password: string
+    confirm_password: string
+  }) => request<AuthPayload>("/auth/first-login/complete/", { method: "POST", body: data, auth: false }),
+
+  // Issues new emailed login details for an account still awaiting setup.
+  // Always the same response, whether or not such an account exists.
+  resendFirstLogin: (email: string) =>
+    request<null>("/auth/first-login/resend/", { method: "POST", body: { email }, auth: false }),
 
   logout: (refresh: string, area?: SessionArea) =>
     request<null>("/auth/logout/", { method: "POST", body: { refresh }, area }),
@@ -2769,4 +2791,123 @@ export interface ApiDashboard {
 
 export const dashboardApi = {
   get: () => request<ApiDashboard>("/customer/dashboard/"),
+}
+
+// ---------------------------------------------------------------------
+// Online payment (payments app): Razorpay checkout for guests and signed-in
+// customers, and the OTP verification a guest completes first. Prices are
+// always computed server-side; the browser only sends product ids and
+// quantities (guest) or nothing but an address (signed-in, server cart).
+// ---------------------------------------------------------------------
+
+export type VerificationChannel = "EMAIL" | "SMS"
+
+export interface PaymentConfig {
+  enabled: boolean
+  key_id: string
+  currency: string
+  sms_otp_enabled: boolean
+}
+
+export interface GuestCheckoutInput {
+  contact: { full_name: string; email: string; phone: string }
+  address: {
+    address_line1: string
+    address_line2?: string
+    landmark?: string
+    locality?: string
+    city: string
+    district: string
+    state: string
+    pincode: string
+    country?: string
+    latitude?: number | null
+    longitude?: number | null
+  }
+  items: { product_id: string; qty: number }[]
+  email_verification_token: string
+  phone_verification_token?: string
+  session_ref: string
+}
+
+export interface RazorpayCheckout {
+  checkout_id: string
+  razorpay_order_id: string
+  key_id: string
+  amount: number
+  currency: string
+  summary: { subtotal: string; first_order_discount_amount: string; shipping: string; total: string }
+  prefill: { name: string; email: string; contact: string }
+}
+
+export interface VerifiedPayment {
+  order_id: number
+  order_number: string
+  tracking_token: string
+  email: string
+  account_created: boolean
+}
+
+export const paymentsApi = {
+  config: () => request<PaymentConfig>("/payments/razorpay/config/", { auth: false }),
+
+  // `sessionRef` binds the code and its token to this browser checkout.
+  sendOtp: (channel: VerificationChannel, destination: string, sessionRef: string) =>
+    request<{ resend_after: number }>("/payments/verification/send/", {
+      method: "POST",
+      body: { channel, destination, session_ref: sessionRef },
+      auth: false,
+    }),
+
+  verifyOtp: (channel: VerificationChannel, destination: string, code: string, sessionRef: string) =>
+    request<{ verification_token: string }>("/payments/verification/verify/", {
+      method: "POST",
+      body: { channel, destination, code, session_ref: sessionRef },
+      auth: false,
+    }),
+
+  // Guest: full details + tokens. Signed-in customer: their saved address.
+  createGuestCheckout: (data: GuestCheckoutInput) =>
+    request<RazorpayCheckout>("/payments/razorpay/checkout/", { method: "POST", body: data, auth: false }),
+  createCustomerCheckout: (addressId: number) =>
+    request<RazorpayCheckout>("/payments/razorpay/checkout/", { method: "POST", body: { address_id: addressId } }),
+
+  verifyPayment: (data: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) =>
+    request<VerifiedPayment>("/payments/razorpay/verify/", { method: "POST", body: data, auth: false }),
+}
+
+// Admin → Account Activation: accounts created automatically from paid
+// orders (accounts.CustomerOnboarding). Never carries password data.
+export interface ApiCustomerOnboarding {
+  id: number
+  customer_id: number
+  customer_name: string
+  customer_email: string
+  customer_phone: string
+  email_verified_by_otp: boolean
+  phone_verified_by_otp: boolean
+  order_id: number | null
+  order_number: string | null
+  order_status: string | null
+  account_created_at: string
+  activation_status: "PENDING" | "EXPIRED" | "COMPLETED"
+  password_set_at: string | null
+  temporary_password_expires_at: string | null
+  email_status: "PENDING" | "SENT" | "FAILED"
+  email_attempts: number
+  email_last_error: string
+  email_sent_at: string | null
+  credentials_issued_at: string | null
+}
+
+export const adminOnboardingApi = {
+  list: (params: { page?: number; search?: string; emailStatus?: string; activation?: string } = {}) => {
+    const qs = new URLSearchParams({ page: String(params.page ?? 1) })
+    if (params.search) qs.set("search", params.search)
+    if (params.emailStatus) qs.set("email_status", params.emailStatus)
+    if (params.activation) qs.set("activation", params.activation)
+    return requestPaginated<ApiCustomerOnboarding>(`/admin/customer-onboarding/?${qs.toString()}`)
+  },
+  resend: (id: number) =>
+    request<ApiCustomerOnboarding>(`/admin/customer-onboarding/${id}/resend/`, { method: "POST" }),
 }

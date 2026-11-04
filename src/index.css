@@ -52,7 +52,11 @@
   --font-sans: "Inter", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
 }
 
-:root {
+:root,
+/* Always-light surfaces (the digital-card phone previews and the public
+   profile page) keep the light tokens even when the site is in dark mode —
+   they're drawn on white, so dark-theme (white) text would vanish. */
+.light-surface {
   /* 14px base radius (buttons); cards round up via --radius-2xl (24px) */
   --radius: 0.875rem;
 
@@ -114,6 +118,10 @@
   --background-secondary: #F1F5F9;
   --glass-bg: rgba(255, 255, 255, 0.95);
   --glass-border: rgba(124, 58, 237, 0.08);
+}
+
+.light-surface {
+  color: var(--foreground);
 }
 
 .dark {

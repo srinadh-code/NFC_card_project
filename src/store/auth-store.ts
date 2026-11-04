@@ -5,6 +5,7 @@ import type { AdminUser, CustomerUser } from "@/types"
 import {
   ApiError,
   type ApiUser,
+  type AuthPayload,
   type SessionArea,
   authApi,
   clearTokens,
@@ -134,12 +135,42 @@ function doLogout(area: SessionArea) {
   }
 }
 
-type LoginResult = { success: true } | { success: false; error: string; unverifiedEmail?: string }
+type LoginResult =
+  | { success: true }
+  | {
+      success: false
+      error: string
+      unverifiedEmail?: string
+      // Backend error code, e.g. "temporary_password_expired".
+      code?: string
+      // Account created from a paid order, still on its emailed temporary
+      // password: no session yet — the login page sends the customer to
+      // the mandatory password setup with this short-lived setup token.
+      passwordChangeRequired?: { setupToken: string; email: string }
+    }
+
+/** Starts the customer session from the JWTs FirstLoginCompleteView issues
+ * once the mandatory first-login password setup succeeds. */
+export function completeCustomerFirstLogin(payload: AuthPayload) {
+  setTokens(payload.access, payload.refresh, "customer")
+  useCustomerSessionStore.getState().setUser(payload.user)
+}
 
 async function performLogin(email: string, password: string, expectedRole: "ADMIN" | "CUSTOMER"): Promise<LoginResult> {
   const area: SessionArea = expectedRole === "ADMIN" ? "admin" : "customer"
   try {
-    const payload = await authApi.login({ email, password })
+    const response = await authApi.login({ email, password })
+    if ("password_change_required" in response) {
+      // Only customer accounts are ever created this way; the admin portal
+      // answers exactly like a wrong password.
+      if (expectedRole !== "CUSTOMER") return { success: false, error: "Invalid email or password." }
+      return {
+        success: false,
+        error: "",
+        passwordChangeRequired: { setupToken: response.setup_token, email: response.email },
+      }
+    }
+    const payload = response
     if (payload.user.role !== expectedRole) {
       if (import.meta.env.DEV) {
         // Temporary, dev-only — pairs with ProtectedRoute.tsx's and
@@ -166,8 +197,10 @@ async function performLogin(email: string, password: string, expectedRole: "ADMI
     return { success: true }
   } catch (err) {
     if (err instanceof ApiError) {
-      const unverifiedEmail = err.status === 403 ? (err.errors?.email as string | undefined) : undefined
-      return { success: false, error: err.message, unverifiedEmail }
+      const code = typeof err.errors?.code === "string" ? err.errors.code : undefined
+      const unverifiedEmail =
+        err.status === 403 && code === "email_not_verified" ? (err.errors?.email as string | undefined) : undefined
+      return { success: false, error: err.message, unverifiedEmail, code }
     }
     return { success: false, error: "Something went wrong. Please try again." }
   }
@@ -196,7 +229,8 @@ async function performGoogleLogin(credential: string, expectedRole: "ADMIN" | "C
     return { success: true }
   } catch (err) {
     if (err instanceof ApiError) {
-      return { success: false, error: err.message }
+      const code = typeof err.errors?.code === "string" ? err.errors.code : undefined
+      return { success: false, error: err.message, code }
     }
     return { success: false, error: "Something went wrong. Please try again." }
   }

@@ -33,6 +33,7 @@ import Terms from "@/pages/public/Terms"
 
 import AdminDashboard from "@/pages/admin/Dashboard"
 import AdminCustomers from "@/pages/admin/Customers"
+import AdminAccountActivation from "@/pages/admin/AccountActivation"
 import AdminCustomerDetails from "@/pages/admin/CustomerDetails"
 import AdminCards from "@/pages/admin/Cards"
 import AdminOrders from "@/pages/admin/Orders"
@@ -50,6 +51,8 @@ import AdminWebsiteContent from "@/pages/admin/content"
 
 import Login from "@/pages/Login"
 import VerifyEmail from "@/pages/VerifyEmail"
+import FirstLogin from "@/pages/FirstLogin"
+import CheckoutVerify from "@/pages/public/CheckoutVerify"
 import AdminLogin from "@/pages/admin/AdminLogin"
 import CustomerRegister from "@/pages/customer/Register"
 import CustomerDashboard from "@/pages/customer/Dashboard"
@@ -110,12 +113,12 @@ function App() {
           <Route path="/how-it-works" element={<HowItWorks />} />
           <Route path="/shop" element={<Shop />} />
           <Route path="/cart" element={<Cart />} />
-          {/* Checkout requires a real customer session — it still renders
-              inside the public storefront chrome, so it's guarded here
-              rather than moved into the customer-portal route group. */}
-          <Route element={<ProtectedRoute role="CUSTOMER" />}>
-            <Route path="/checkout" element={<Checkout />} />
-          </Route>
+          {/* Open to guests: without a customer session Checkout shows the
+              OTP-verified guest checkout (the account is created after a
+              verified payment); signed-in customers get their usual one. */}
+          <Route path="/checkout" element={<Checkout />} />
+          {/* Mandatory guest OTP verification before checkout (no registration). */}
+          <Route path="/checkout/verify" element={<CheckoutVerify />} />
           <Route path="/order-success" element={<OrderSuccess />} />
           <Route path="/track-order" element={<TrackOrder />} />
           <Route path="/faq" element={<Faq />} />
@@ -134,6 +137,8 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<CustomerRegister />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
+          {/* Mandatory first-login password setup (auto-created accounts). */}
+          <Route path="/first-login" element={<FirstLogin />} />
           <Route path="/admin/login" element={<AdminLogin />} />
         </Route>
 
@@ -144,6 +149,7 @@ function App() {
           <Route path="/admin" element={<AdminLayout />}>
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="customers" element={<AdminCustomers />} />
+            <Route path="account-activation" element={<AdminAccountActivation />} />
             <Route path="customers/:id" element={<AdminCustomerDetails />} />
             <Route path="cards" element={<AdminCards />} />
             <Route path="orders" element={<AdminOrders />} />

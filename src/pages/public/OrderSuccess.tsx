@@ -15,11 +15,25 @@ export default function OrderSuccess() {
   // cosmetic personalization for the Track Order page (never a credential —
   // see accounts/emails.py's and PublicOrderTrackingView's docstrings), and
   // travels via router state, not the URL, so it's never in a shareable link.
-  const state = location.state as { orderId?: string; trackingToken?: string; customerName?: string } | null
+  const state = location.state as
+    | {
+        orderId?: string
+        orderNumber?: string | null
+        trackingToken?: string
+        customerName?: string
+        // Guest checkout: an account was created and its login details emailed.
+        accountCreated?: boolean
+        email?: string
+      }
+    | null
   const rawOrderId = state?.orderId ?? null
   const trackingToken = state?.trackingToken ?? null
   const customerName = state?.customerName ?? null
-  const orderNumber = rawOrderId ? formatOrderNumber(rawOrderId) : null
+  // The id-based form ("ORD000016") is what the tokenized Track Order link
+  // looks up; the customer is shown the real public order number
+  // ("NXTRK916378") — the one in My Orders, emails and the admin panel.
+  const trackingId = rawOrderId ? formatOrderNumber(rawOrderId) : null
+  const orderNumber = state?.orderNumber || trackingId
 
   return (
     <div className="mx-auto flex max-w-xl flex-col items-center px-4 py-24 text-center">
@@ -31,6 +45,18 @@ export default function OrderSuccess() {
         A confirmation email with your order details has been sent to your inbox. Your card will
         be delivered within 5-7 business days.
       </p>
+      {state?.accountCreated && (
+        <div className="mt-6 w-full rounded-2xl border border-primary/30 bg-primary/5 p-4 text-left text-sm">
+          <p className="font-semibold text-foreground">Your Customer Dashboard account is ready</p>
+          <p className="mt-1 text-muted-foreground">
+            We&apos;ve emailed your login details{state.email ? <> to <span className="font-medium text-foreground break-all">{state.email}</span></> : null}.
+            Log in with the temporary password within 24 hours — you&apos;ll then create your own password.
+          </p>
+          <Button className="mt-3" size="sm" onClick={() => navigate("/login")}>
+            Go to Login
+          </Button>
+        </div>
+      )}
       <div className="mt-10 flex flex-wrap justify-center gap-4">
         <Button size="lg" onClick={() => navigate("/shop")}>
           Continue Shopping
@@ -40,7 +66,7 @@ export default function OrderSuccess() {
           variant="outline"
           onClick={() =>
             navigate(
-              orderNumber && trackingToken ? `/track-order?order=${orderNumber}&token=${trackingToken}` : "/track-order",
+              trackingId && trackingToken ? `/track-order?order=${trackingId}&token=${trackingToken}` : "/track-order",
               { state: customerName ? { customerName } : undefined }
             )
           }
