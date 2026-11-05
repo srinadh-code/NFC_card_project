@@ -1,9 +1,11 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { ArrowRight, CheckCircle2, Mail, ShieldCheck, Smartphone } from "lucide-react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { BulkRecipientFields, type BulkRecipientErrors } from "@/components/checkout/BulkRecipientFields"
 import { OtpVerifier } from "@/components/checkout/OtpVerifier"
 import { useCart } from "@/hooks/useCart"
 import { paymentsApi, type VerificationChannel } from "@/lib/api"
@@ -23,19 +25,77 @@ export default function CheckoutVerify() {
   const redirectTo = sanitizeRedirect(searchParams.get("redirect"), "/checkout")
   const customer = useCustomerAuthStore((s) => s.customer)
   const { lines } = useCart()
-  const { sessionRef, contact, setContact } = useCheckoutVerificationStore()
+  const {
+    sessionRef,
+    contact,
+    setContact,
+    bulkRecipientCount: savedRecipientCount,
+    recipients,
+    setRecipients,
+    recipientDetailsConfirmed,
+    confirmRecipients,
+  } = useCheckoutVerificationStore()
   const config = useQuery({ queryKey: ["payments-config"], queryFn: paymentsApi.config, staleTime: 60_000 })
 
   const [method, setMethod] = useState<VerificationChannel>("EMAIL")
   const [email, setEmail] = useState("")
   const [mobile, setMobile] = useState("")
+  const [recipientErrors, setRecipientErrors] = useState<BulkRecipientErrors>([])
   // Set when this visit's verification succeeded — shows the verified state
   // with "Continue to Checkout" instead of redirecting straight away.
   const [justVerified, setJustVerified] = useState(false)
 
+  const cartQuantity = lines.reduce((quantity, line) => quantity + line.qty, 0)
+  const bulkRecipientCount =
+    savedRecipientCount ?? (cartQuantity === 3 || cartQuantity === 5 ? cartQuantity : null)
+
+  useEffect(() => {
+    if (bulkRecipientCount === null || recipients.length === bulkRecipientCount) return
+    setRecipients(
+      Array.from({ length: bulkRecipientCount }, (_, index) => recipients[index] ?? { full_name: "", email: "" }),
+    )
+  }, [bulkRecipientCount, recipients, setRecipients])
+
   if (customer || (isFresh(contact) && !justVerified)) return <Navigate to={redirectTo} replace />
 
   const smsEnabled = Boolean(config.data?.sms_otp_enabled)
+
+  function updateRecipient(index: number, field: "full_name" | "email", value: string) {
+    const updated = [...recipients]
+    updated[index] = { ...(updated[index] ?? { full_name: "", email: "" }), [field]: value }
+    setRecipients(updated)
+    setRecipientErrors((previous) => {
+      const next = [...previous]
+      next[index] = { ...(next[index] ?? {}), [field]: undefined }
+      return next
+    })
+  }
+
+  function continueToVerification() {
+    if (bulkRecipientCount === null) return
+
+    const errors: BulkRecipientErrors = Array.from({ length: bulkRecipientCount }, () => ({}))
+    const seen = new Set<string>()
+    const cleaned = recipients.map((recipient, index) => {
+      const full_name = recipient.full_name.trim()
+      const email = recipient.email.trim().toLowerCase()
+      if (!full_name) errors[index].full_name = "Full Name is required."
+      if (!email) errors[index].email = "Email Address is required."
+      else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) errors[index].email = "Enter a valid email address."
+      else if (seen.has(email)) errors[index].email = "Duplicate email addresses are not allowed."
+      else seen.add(email)
+      return { full_name, email }
+    })
+
+    setRecipientErrors(errors)
+    if (errors.some((entry) => entry.full_name || entry.email)) {
+      toast.error("Please complete every recipient field with a unique, valid email address.")
+      return
+    }
+
+    setRecipients(cleaned)
+    confirmRecipients()
+  }
 
   function handleVerified(channel: VerificationChannel, token: string, destination: string) {
     setJustVerified(true)
@@ -57,6 +117,22 @@ export default function CheckoutVerify() {
             Continue to Checkout <ArrowRight />
           </Button>
         </div>
+      </div>
+    )
+  }
+
+  if (bulkRecipientCount !== null && !recipientDetailsConfirmed) {
+    return (
+      <div className="mx-auto max-w-xl space-y-4 px-4 py-12 sm:py-16">
+        <BulkRecipientFields
+          count={bulkRecipientCount}
+          recipients={recipients}
+          errors={recipientErrors}
+          onChange={updateRecipient}
+        />
+        <Button size="lg" className="w-full" onClick={continueToVerification}>
+          Continue to Verify Your Contact <ArrowRight />
+        </Button>
       </div>
     )
   }

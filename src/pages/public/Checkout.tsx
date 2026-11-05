@@ -4,10 +4,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { AlertCircle, CheckCircle2, Info, Loader2, MapPin, Pencil, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AddressFormDialog } from "@/components/customer/AddressFormDialog"
 import { PinnedLocationLink } from "@/components/customer/PinnedLocationLink"
+import { BulkRecipientFields } from "@/components/checkout/BulkRecipientFields"
 import { OffersSection } from "@/components/checkout/OffersSection"
 import { DesignerContactNotice } from "@/components/checkout/DesignerContactNotice"
 import { GuestCheckout } from "@/components/checkout/GuestCheckout"
@@ -503,55 +503,14 @@ export default function Checkout() {
             ) : null}
           </div>
 
-          {bulkRecipientCount === 3 || bulkRecipientCount === 5 ? (
-            <div className="rounded-2xl border bg-card p-6 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold text-foreground">Recipient Details</h2>
-                <span className="text-xs text-muted-foreground">{bulkRecipientCount} cards</span>
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Enter the full name and email for each card in this order.
-              </p>
-              <div className="mt-4 space-y-4">
-                {Array.from({ length: bulkRecipientCount }, (_, index) => (
-                  <div key={index} className="rounded-xl border bg-background/60 p-4">
-                    <p className="mb-3 text-sm font-medium text-foreground">Recipient {index + 1}</p>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <label htmlFor={`bulk-name-${index}`} className="text-sm font-medium text-foreground">
-                          Full Name
-                        </label>
-                        <Input
-                          id={`bulk-name-${index}`}
-                          value={bulkRecipients[index]?.full_name ?? ""}
-                          onChange={(e) => updateBulkRecipient(index, "full_name", e.target.value)}
-                          aria-invalid={Boolean(recipientErrors[index]?.full_name)}
-                        />
-                        {recipientErrors[index]?.full_name && (
-                          <p className="text-sm text-destructive">{recipientErrors[index].full_name}</p>
-                        )}
-                      </div>
-                      <div className="space-y-1.5">
-                        <label htmlFor={`bulk-email-${index}`} className="text-sm font-medium text-foreground">
-                          Email
-                        </label>
-                        <Input
-                          id={`bulk-email-${index}`}
-                          type="email"
-                          value={bulkRecipients[index]?.email ?? ""}
-                          onChange={(e) => updateBulkRecipient(index, "email", e.target.value)}
-                          aria-invalid={Boolean(recipientErrors[index]?.email)}
-                        />
-                        {recipientErrors[index]?.email && (
-                          <p className="text-sm text-destructive">{recipientErrors[index].email}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
+          {(bulkRecipientCount === 3 || bulkRecipientCount === 5) && (
+            <BulkRecipientFields
+              count={bulkRecipientCount}
+              recipients={bulkRecipients}
+              errors={recipientErrors}
+              onChange={updateBulkRecipient}
+            />
+          )}
 
           <OffersSection enabled={lines.length > 0} />
 

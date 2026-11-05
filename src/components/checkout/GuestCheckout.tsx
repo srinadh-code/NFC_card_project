@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DesignerContactNotice } from "@/components/checkout/DesignerContactNotice"
+import { BulkRecipientFields, type BulkRecipientErrors } from "@/components/checkout/BulkRecipientFields"
 import { DummyPaymentDialog } from "@/components/checkout/DummyPaymentDialog"
 import { OtpVerifier } from "@/components/checkout/OtpVerifier"
 import { INDIAN_STATES } from "@/data/indian-states"
@@ -107,15 +108,24 @@ export function GuestCheckout() {
   const { lines, clearCart } = useCart()
   const config = useQuery({ queryKey: ["payments-config"], queryFn: paymentsApi.config, staleTime: 60_000 })
 
-  const { sessionRef, contact, email: verifiedEmail, setEmail: setVerifiedEmail, clear } = useCheckoutVerificationStore()
+  const {
+    sessionRef,
+    contact,
+    email: verifiedEmail,
+    setEmail: setVerifiedEmail,
+    recipients: savedRecipients,
+    setRecipients: setSavedRecipients,
+    recipientDetailsConfirmed,
+    clearVerification,
+  } = useCheckoutVerificationStore()
   const viaMobile = contact?.channel === "SMS"
   const [emailInput, setEmailInput] = useState("")
   const [phone, setPhone] = useState(() => (contact?.channel === "SMS" ? contact.destination : ""))
   const [fullName, setFullName] = useState("")
   const [address, setAddress] = useState<AddressFields>(EMPTY_ADDRESS)
   const [errors, setErrors] = useState<Errors>({})
-  const [bulkRecipients, setBulkRecipients] = useState<{ full_name: string; email: string }[]>([])
-  const [recipientErrors, setRecipientErrors] = useState<Array<{ full_name?: string; email?: string }>>([])
+  const [bulkRecipients, setBulkRecipients] = useState<{ full_name: string; email: string }[]>(savedRecipients)
+  const [recipientErrors, setRecipientErrors] = useState<BulkRecipientErrors>([])
   const [paying, setPaying] = useState(false)
   const [payError, setPayError] = useState<string | null>(null)
   // Temporary test payment (until Razorpay is live): the server-priced
@@ -184,14 +194,18 @@ export function GuestCheckout() {
       Array.from({ length: bulkRecipientCount }, (_, index) => prev[index] ?? { full_name: "", email: "" }),
     )
     setRecipientErrors((prev) => Array.from({ length: bulkRecipientCount }, (_, index) => prev[index] ?? {}))
-  }, [bulkRecipientCount])
+    if (savedRecipients.length !== bulkRecipientCount) {
+      setSavedRecipients(
+        Array.from({ length: bulkRecipientCount }, (_, index) => savedRecipients[index] ?? { full_name: "", email: "" }),
+      )
+    }
+  }, [bulkRecipientCount, savedRecipients, setSavedRecipients])
 
   function updateBulkRecipient(index: number, field: "full_name" | "email", value: string) {
-    setBulkRecipients((prev) => {
-      const next = [...prev]
-      next[index] = { ...(next[index] ?? { full_name: "", email: "" }), [field]: value }
-      return next
-    })
+    const next = [...bulkRecipients]
+    next[index] = { ...(next[index] ?? { full_name: "", email: "" }), [field]: value }
+    setBulkRecipients(next)
+    setSavedRecipients(next)
     setRecipientErrors((prev) => {
       const next = [...prev]
       next[index] = { ...(next[index] ?? {}), [field]: undefined }
@@ -249,7 +263,7 @@ export function GuestCheckout() {
     e.preventDefault()
     setPayError(null)
     if (!isFresh(contact)) {
-      clear()
+      clearVerification()
       navigate("/checkout/verify?redirect=%2Fcheckout", { replace: true })
       return
     }
@@ -325,7 +339,7 @@ export function GuestCheckout() {
         setErrors(fieldErrors)
         if (firstError(err.errors?.code) === "verification_required") {
           // Expired or not bound to this checkout — verify again.
-          clear()
+          clearVerification()
           navigate("/checkout/verify?redirect=%2Fcheckout", { replace: true })
           return
         }
@@ -429,7 +443,7 @@ export function GuestCheckout() {
               verified
               onVerified={() => {}}
               onChangeVerified={() => {
-                clear()
+                clearVerification()
                 navigate("/checkout/verify?redirect=%2Fcheckout")
               }}
             />
@@ -458,43 +472,14 @@ export function GuestCheckout() {
           </div>
         </section>
 
-        {bulkRecipientCount === 3 || bulkRecipientCount === 5 ? (
-          <section className="rounded-2xl border bg-card p-6 shadow-sm" aria-labelledby="recipient-heading">
-            <div className="flex items-center justify-between gap-3">
-              <h2 id="recipient-heading" className="text-lg font-semibold text-foreground">
-                Recipient details
-              </h2>
-              <span className="text-xs text-muted-foreground">{bulkRecipientCount} cards</span>
-            </div>
-            <p className="mt-2 text-sm text-muted-foreground">Enter the full name and email for each card in this order.</p>
-            <div className="mt-4 space-y-4">
-              {Array.from({ length: bulkRecipientCount }, (_, index) => (
-                <div key={index} className="rounded-xl border bg-background/60 p-4">
-                  <p className="mb-3 text-sm font-medium text-foreground">Recipient {index + 1}</p>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Field id={`g-recipient-name-${index}`} label="Full Name" error={recipientErrors[index]?.full_name}>
-                      <Input
-                        id={`g-recipient-name-${index}`}
-                        value={bulkRecipients[index]?.full_name ?? ""}
-                        onChange={(e) => updateBulkRecipient(index, "full_name", e.target.value)}
-                        aria-invalid={Boolean(recipientErrors[index]?.full_name)}
-                      />
-                    </Field>
-                    <Field id={`g-recipient-email-${index}`} label="Email" error={recipientErrors[index]?.email}>
-                      <Input
-                        id={`g-recipient-email-${index}`}
-                        type="email"
-                        value={bulkRecipients[index]?.email ?? ""}
-                        onChange={(e) => updateBulkRecipient(index, "email", e.target.value)}
-                        aria-invalid={Boolean(recipientErrors[index]?.email)}
-                      />
-                    </Field>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
+        {(bulkRecipientCount === 3 || bulkRecipientCount === 5) && !recipientDetailsConfirmed && (
+          <BulkRecipientFields
+            count={bulkRecipientCount}
+            recipients={bulkRecipients}
+            errors={recipientErrors}
+            onChange={updateBulkRecipient}
+          />
+        )}
 
         {/* 2. Delivery details */}
         <section className="rounded-2xl border bg-card p-6 shadow-sm" aria-labelledby="details-heading">

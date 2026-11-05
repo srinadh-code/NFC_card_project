@@ -15,6 +15,7 @@ import { CARD_THEME_IDS, PROFILE_THEMES } from "@/data/constants"
 import { useCart } from "@/hooks/useCart"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
 import { useEnsuredProfile } from "@/hooks/use-ensured-profile"
+import { useCheckoutVerificationStore } from "@/store/checkout-verification-store"
 import { resolveIcon } from "@/lib/icon-map"
 import { clampQty, unitPriceFor } from "@/lib/order-card-pricing"
 import type { OrderCardProduct } from "@/types/content"
@@ -24,7 +25,7 @@ import type { OrderCardProduct } from "@/types/content"
  * product content comes from Website Content → Order Card. */
 export default function Shop() {
   const navigate = useNavigate()
-  const { addLineAsync } = useCart()
+  const { addLineAsync, clearCart } = useCart()
   const { settings } = usePublicSettings()
   const queryClient = useQueryClient()
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
@@ -60,6 +61,8 @@ export default function Shop() {
   // template straight from this showcase, same as the picker in Customer
   // Dashboard → QR Code.
   const { customer, profile } = useEnsuredProfile()
+  const beginBulkCheckout = useCheckoutVerificationStore((state) => state.beginBulkCheckout)
+  const resetBulkCheckout = useCheckoutVerificationStore((state) => state.resetBulkCheckout)
   // Same real-order check the Customer Dashboard → QR Code page uses to
   // gate template selection — shares its query key, so this is a cache hit
   // whenever that page (or My Card) was already visited this session.
@@ -99,8 +102,13 @@ export default function Shop() {
 
   async function addToCart(product: OrderCardProduct, rawQty: number, action: "cart" | "buy") {
     const qty = clampQty(rawQty)
+    const isGuestBulkBuy = action === "buy" && !customer && (qty === 3 || qty === 5)
     setPendingAction(action)
     try {
+      if (isGuestBulkBuy) {
+        beginBulkCheckout(qty)
+        clearCart()
+      }
       // The backend replaces name/type/price with the catalog's own values
       // and prices the line by quantity — `price` here is only the guest
       // cart's display value until then.
@@ -112,7 +120,14 @@ export default function Shop() {
         qty,
         price: unitPriceFor(product, qty),
       })
-      if (action === "buy") navigate("/checkout")
+      if (action === "buy") {
+        if (isGuestBulkBuy) {
+          navigate("/checkout/verify?redirect=%2Fcheckout")
+        } else {
+          resetBulkCheckout()
+          navigate("/checkout")
+        }
+      }
       else toast.success(`${product.name} × ${qty} added to cart.`)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Couldn't add this card to your cart. Please try again.")
