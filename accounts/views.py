@@ -555,13 +555,6 @@ class GoogleLoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        if not settings.GOOGLE_OAUTH_CLIENT_ID:
-            return error(
-                "Google sign-in is not configured on this server yet.",
-                errors={"code": "google_oauth_not_configured"},
-                status=501,
-            )
-
         serializer = GoogleLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 

@@ -254,6 +254,7 @@ class CustomerOrderCreateSerializer(serializers.Serializer):
     shipping = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, default=0)
     payment_method = serializers.ChoiceField(choices=Order.PaymentMethod.choices)
     address_id = serializers.IntegerField()
+    recipients = serializers.JSONField(required=False, allow_null=True)
 
     def validate_address_id(self, value):
         from customer_management.customer_addresses.models import CustomerAddress

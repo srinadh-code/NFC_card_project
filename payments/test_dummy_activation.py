@@ -111,11 +111,11 @@ class DummyPaymentActivationTests(APITestCase):
 
     # --- 1-11: the whole workflow --------------------------------------
     def test_full_workflow_new_customer(self):
-        checkout, paid = self._buy(qty=3)
-        # Server-priced: 3 x 999, minus the 20% first-order discount.
-        self.assertEqual(checkout["amount"], 239760)
+        checkout, paid = self._buy(qty=1)
+        # Server-priced: 999, minus the 20% first-order discount.
+        self.assertEqual(checkout["amount"], 79920)
         self.assertEqual(checkout["provider"], "DUMMY")
-        self.assertEqual(checkout["lines"][0]["qty"], 3)
+        self.assertEqual(checkout["lines"][0]["qty"], 1)
         self.assertIsNone(checkout["razorpay_order_id"])
 
         order = Order.objects.get(pk=paid["order_id"])
@@ -142,7 +142,7 @@ class DummyPaymentActivationTests(APITestCase):
         self.client.force_authenticate(None)
         self.assertEqual(row["order_number"], order.order_number)
         self.assertEqual((row["customer_name"], row["customer_email"], row["customer_phone"]), ("New Buyer", "new.buyer@example.com", "9876543210"))
-        self.assertEqual(row["items"][0]["qty"], 3)
+        self.assertEqual(row["items"][0]["qty"], 1)
         self.assertEqual(row["payment_method_display"], "Dummy / Test Payment")
         self.assertEqual(row["payment_status_display"], "Paid (Test)")
         self.assertEqual(row["status"], "PENDING")
@@ -200,6 +200,80 @@ class DummyPaymentActivationTests(APITestCase):
         self.assertEqual(me.status_code, status.HTTP_200_OK)
         orders = self.client.get(reverse("my-orders"), HTTP_AUTHORIZATION=f"Bearer {login.data['data']['access']}")
         self.assertEqual(orders.data["data"][0]["order_number"], order.order_number)
+
+    def test_bulk_recipients_activate_and_resend_individually_after_one_failure(self):
+        recipients = [
+            {"full_name": "Recipient One", "email": "recipient.one@example.com"},
+            {"full_name": "Recipient Two", "email": "recipient.two@example.com"},
+            {"full_name": "Recipient Three", "email": "recipient.three@example.com"},
+        ]
+        _, paid = self._buy(qty=3, recipients=recipients)
+        order = Order.objects.get(pk=paid["order_id"])
+        self.assertEqual(order.recipients.count(), 3)
+        self.assertEqual(self._activation_emails(), [])
+
+        from accounts import onboarding
+
+        original_send = onboarding._send
+
+        def send_to_each(user, subject, html, text):
+            if user.email == recipients[0]["email"]:
+                raise smtplib.SMTPException("recipient mailbox unavailable")
+            return original_send(user, subject, html, text)
+
+        with mock.patch("accounts.onboarding._send", side_effect=send_to_each):
+            processing = self._set_status(order.pk, "PROCESSING")
+
+        self.assertEqual(processing.status_code, status.HTTP_200_OK, processing.content)
+        self.assertEqual(processing.data["data"]["activation_result"], "sent")
+        self.assertEqual(
+            {(recipient["name"], recipient["email"]) for recipient in processing.data["data"]["recipients"]},
+            {(recipient["full_name"], recipient["email"]) for recipient in recipients},
+        )
+        self.assertEqual(
+            {recipient["email"]: recipient["invitation_status"] for recipient in processing.data["data"]["recipients"]},
+            {
+                recipients[0]["email"]: "FAILED",
+                recipients[1]["email"]: "SENT",
+                recipients[2]["email"]: "SENT",
+            },
+        )
+        self.assertEqual(
+            {email for message in self._activation_emails() for email in message.to},
+            {recipients[1]["email"], recipients[2]["email"]},
+        )
+        failed_recipient = order.recipients.get(email=recipients[0]["email"])
+        onboarding_record = CustomerOnboarding.objects.get(user=failed_recipient.user)
+        self.assertEqual(onboarding_record.email_status, CustomerOnboarding.EmailStatus.FAILED)
+
+        self._as_admin()
+        resend = self.client.post(reverse("admin-onboarding-resend", args=[onboarding_record.pk]))
+        self.client.force_authenticate(None)
+        self.assertEqual(resend.status_code, status.HTTP_200_OK, resend.content)
+        self.assertEqual(self._activation_emails()[-1].to, [recipients[0]["email"]])
+
+        self.assertEqual(self._set_status(order.pk, "PROCESSING").status_code, status.HTTP_200_OK)
+        self.assertEqual(len(self._activation_emails()), 3)
+
+    def test_bulk_checkout_requires_recipient_details(self):
+        response = self._start(qty=3)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("recipients", response.data["errors"])
+
+        from payments.services import CheckoutError, validate_recipients
+
+        for recipients in (None, []):
+            with self.subTest(recipients=recipients), self.assertRaises(CheckoutError):
+                validate_recipients(recipients, 3)
+
+        with self.assertRaises(CheckoutError):
+            validate_recipients(
+                [
+                    {"full_name": "One", "email": "one@example.com"},
+                    {"full_name": "Two", "email": "two@example.com"},
+                ],
+                3,
+            )
 
     # --- checkout validation, duplicates, amount -------------------------
     def test_repeated_confirmation_returns_the_same_order(self):

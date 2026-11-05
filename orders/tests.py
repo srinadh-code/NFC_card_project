@@ -13,7 +13,7 @@ from customer_management.customer_cart.models import Cart, CartItem
 from customer_management.customer_notifications.models import Announcement, Notification
 from customer_management.customer_settings.models import CustomerSettings
 
-from .models import Order
+from .models import Order, OrderRecipient
 
 # NOTE: CustomerOrderCreateSerializer takes no `items`/`shipping_line1`
 # fields — order items are built server-side from the customer's own cart
@@ -97,6 +97,28 @@ class CustomerOrderCreateViewTests(AuthenticatedAPITestCase):
         self.assertEqual(str(data["amount"]), "1998.00")
         self.assertEqual(str(data["total"]), "2047.00")
         self.assertEqual(len(data["items"]), 1)
+
+    def test_bulk_order_creates_recipient_accounts_and_assignments(self):
+        _seed_cart_item(self.user, qty=3)
+        payload = _valid_payload(
+            self.address,
+            recipients=[
+                {"full_name": "Recipient One", "email": "recipient.one@example.com"},
+                {"full_name": "Recipient Two", "email": "recipient.two@example.com"},
+                {"full_name": "Recipient Three", "email": "recipient.three@example.com"},
+            ],
+        )
+
+        response = self.client.post(reverse("my-orders"), payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        order = Order.objects.get(pk=response.data["data"]["id"])
+        self.assertEqual(order.recipients.count(), 3)
+        for recipient in order.recipients.select_related("user", "profile"):
+            self.assertEqual(recipient.user.email, recipient.email)
+            self.assertTrue(recipient.user.must_change_password)
+            self.assertIsNotNone(recipient.profile_id)
+            self.assertEqual(recipient.user.onboarding.source_order, order)
 
     def test_order_belongs_to_the_authenticated_customer(self):
         _seed_cart_item(self.user)

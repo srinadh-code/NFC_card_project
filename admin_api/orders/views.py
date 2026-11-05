@@ -25,7 +25,7 @@ class AdminOrderListCreateView(APIView):
     permission_classes = [IsAdminRole]
 
     def get(self, request):
-        qs = Order.objects.select_related("customer", "checkout_session").prefetch_related("items").all()
+        qs = Order.objects.select_related("customer", "checkout_session").prefetch_related("items", "recipients").all()
 
         search = request.query_params.get("search", "").strip()
         if search:
@@ -92,7 +92,7 @@ class AdminOrderDetailView(APIView):
     def get(self, request, pk):
         order = (
             Order.objects.select_related("customer", "customer__onboarding", "checkout_session")
-            .prefetch_related("items")
+            .prefetch_related("items", "recipients")
             .filter(pk=pk)
             .first()
         )
@@ -144,6 +144,8 @@ class AdminOrderStatusView(APIView):
             "sent": "Order is Processing. The account activation email is being sent to the customer.",
             "already_sent": "Order is Processing. This customer's activation email was already sent earlier.",
             "active": "Order is Processing. The customer already has an active account.",
+            "partial_failure": "Order is Processing. Activation started for some recipients; check each recipient's status and retry any failures.",
+            "failed": "Order is Processing, but activation could not be started for the recipients. Check their status and retry.",
         }.get(activation, "Order status updated.")
         order.refresh_from_db()
         return success({**AdminOrderSerializer(order).data, "activation_result": activation}, message=message)

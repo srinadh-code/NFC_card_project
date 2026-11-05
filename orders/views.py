@@ -6,7 +6,10 @@ from django.db import IntegrityError, transaction
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 
-from accounts.models import User
+from accounts import onboarding
+from accounts.models import CustomerOnboarding, User
+from payments.services import CheckoutError, validate_recipients
+
 from admin_api.orders.services import apply_status_transition
 from common.discounts import calculate_first_order_discount
 from common.pagination import StandardPagination
@@ -16,7 +19,7 @@ from customer_management.customer_addresses import pincode as pincode_service
 from customer_management.customer_addresses.models import CustomerAddress
 from customer_management.customer_cart.services import clear_cart, get_or_create_cart
 
-from .models import Order, OrderItem, Transaction
+from .models import Order, OrderItem, OrderRecipient, Transaction
 from .pricing import ProductUnavailable, price_lines
 from .serializers import (
     CustomerOrderCreateSerializer,
@@ -87,6 +90,14 @@ class CustomerOrderListCreateView(APIView):
         cart_items = list(cart.items.all())
         if not cart_items:
             return error("Your cart is empty.", status=400)
+
+        try:
+            recipient_details = validate_recipients(
+                data.get("recipients"),
+                sum(item.qty for item in cart_items),
+            )
+        except CheckoutError as exc:
+            return error(exc.message, errors=exc.errors, status=exc.status)
 
         # Real, backend-computed pricing per line — never the price a
         # client claims (see orders.pricing.price_lines).
@@ -161,6 +172,36 @@ class CustomerOrderListCreateView(APIView):
                     method=data["payment_method"],
                     status=Order.PaymentStatus.PAID,
                 )
+                for recipient in recipient_details:
+                    recipient_user = onboarding.find_customer_by_email(recipient["email"])
+                    if recipient_user is None:
+                        try:
+                            with transaction.atomic():
+                                recipient_user, _ = onboarding.provision_customer(
+                                    email=recipient["email"],
+                                    full_name=recipient["full_name"],
+                                    phone="",
+                                )
+                        except IntegrityError:
+                            recipient_user = onboarding.find_customer_by_email(recipient["email"])
+                            if recipient_user is None:
+                                raise
+
+                    from profiles.models import Profile
+
+                    profile = Profile.ensure_for_user(recipient_user)
+                    if recipient_user.must_change_password:
+                        onboarding_record, _ = CustomerOnboarding.objects.get_or_create(user=recipient_user)
+                        if onboarding_record.source_order_id is None:
+                            onboarding_record.source_order = order
+                            onboarding_record.save(update_fields=["source_order"])
+                    OrderRecipient.objects.create(
+                        order=order,
+                        name=recipient["full_name"],
+                        email=recipient["email"],
+                        user=recipient_user,
+                        profile=profile,
+                    )
         except IntegrityError:
             # Lost a race against another request carrying the exact same
             # key (two near-simultaneous submissions of the same attempt) —

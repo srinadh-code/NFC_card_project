@@ -213,3 +213,54 @@ class Transaction(models.Model):
 
     def __str__(self):
         return f"Transaction #{self.id} for order #{self.order_id}"
+
+
+class OrderRecipient(models.Model):
+    """A bulk-order recipient tied to a parent order. One buyer order can
+    contain several recipients, each with their own customer account/profile
+    and activation status."""
+
+    class InvitationStatus(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        SENT = "SENT", "Sent"
+        ACCEPTED = "ACCEPTED", "Accepted"
+        EXPIRED = "EXPIRED", "Expired"
+        FAILED = "FAILED", "Failed"
+
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="recipients")
+    name = models.CharField(max_length=150)
+    email = models.EmailField(db_index=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="order_recipients",
+    )
+    profile = models.ForeignKey(
+        "profiles.Profile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="order_recipients",
+    )
+    assigned_card = models.ForeignKey(
+        "nfc_cards.NfcCard",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recipient_assignments",
+    )
+    invitation_status = models.CharField(max_length=12, choices=InvitationStatus.choices, default=InvitationStatus.PENDING)
+    invitation_sent_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order", "pk"]
+        constraints = [
+            models.UniqueConstraint(fields=["order", "email"], name="unique_order_recipient_email"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} <{self.email}> ({self.order_id})"

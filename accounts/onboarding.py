@@ -172,7 +172,16 @@ def deliver_activation_email(onboarding_id, raw_token):
     if onboarding is None:
         return False
     user = onboarding.user
-    html, text = _render_activation(user, raw_token, onboarding.source_order)
+    try:
+        html, text = _render_activation(user, raw_token, onboarding.source_order)
+    except Exception as exc:  # noqa: BLE001 — recorded, never propagated
+        error_text = type(exc).__name__
+        CustomerOnboarding.objects.filter(pk=onboarding.pk).update(
+            email_status=CustomerOnboarding.EmailStatus.FAILED,
+            email_last_error=error_text[:255],
+        )
+        logger.warning("onboarding.email_failed user_id=%s reason=%s", user.pk, error_text)
+        return False
     delays = (0, *EMAIL_RETRY_DELAYS_SECONDS)
     error_text = ""
     for attempt, delay in enumerate(delays, start=1):
@@ -214,7 +223,7 @@ def dispatch_activation_email(onboarding_id, raw_token, *, sync=False):
         else:
             threading.Thread(target=run, daemon=True).start()
 
-    transaction.on_commit(start)
+    transaction.on_commit(start, robust=True)
 
 
 def _issue_and_dispatch(onboarding, *, sync=False):
@@ -227,19 +236,11 @@ def _issue_and_dispatch(onboarding, *, sync=False):
     dispatch_activation_email(onboarding.pk, raw_token, sync=sync)
 
 
-def start_activation_for_order(order, *, sync=False):
-    """Called when an admin moves a paid order to Processing. Returns what
-    happened: "sent" (link issued and email queued), "already_sent" (this
-    account's activation was already started — nothing sent again),
-    "active" (an existing, activated account — nothing to send; its
-    password is never touched) or "no_onboarding"."""
-    user = order.customer
+def _start_activation_for_user(user, *, order, sync=False):
     if not user.must_change_password:
         return "active"
     with transaction.atomic():
-        onboarding = CustomerOnboarding.objects.select_for_update().filter(user=user).first()
-        if onboarding is None:
-            return "no_onboarding"
+        onboarding, _ = CustomerOnboarding.objects.select_for_update().get_or_create(user=user)
         if onboarding.credentials_issued_at is not None:
             return "already_sent"
         if onboarding.source_order_id is None:
@@ -248,6 +249,50 @@ def start_activation_for_order(order, *, sync=False):
         _issue_and_dispatch(onboarding, sync=sync)
     logger.info("onboarding.activation_started user_id=%s order=%s", user.pk, order.pk)
     return "sent"
+
+
+def start_activation_for_order(order, *, sync=False):
+    """Called when an admin moves a paid order to Processing. Returns what
+    happened: "sent" (link issued and email queued), "already_sent" (this
+    account's activation was already started — nothing sent again),
+    "active" (an existing, activated account — nothing to send; its
+    password is never touched) or "no_onboarding"."""
+    recipients = list(order.recipients.select_related("user").all())
+    if recipients:
+        statuses = []
+        for recipient in recipients:
+            if recipient.user_id is None:
+                logger.error(
+                    "onboarding.activation_start_failed recipient_id=%s order_id=%s reason=missing_user",
+                    recipient.pk,
+                    order.pk,
+                )
+                statuses.append("failed")
+                continue
+            try:
+                statuses.append(_start_activation_for_user(recipient.user, order=order, sync=sync))
+            except Exception as exc:  # noqa: BLE001 — one recipient must not block the rest
+                logger.error(
+                    "onboarding.activation_start_failed recipient_id=%s user_id=%s order_id=%s reason=%s",
+                    recipient.pk,
+                    recipient.user_id,
+                    order.pk,
+                    type(exc).__name__,
+                )
+                statuses.append("failed")
+        if not statuses:
+            return "no_onboarding"
+        if "failed" in statuses:
+            return "failed" if all(status == "failed" for status in statuses) else "partial_failure"
+        if "sent" in statuses:
+            return "sent"
+        if "already_sent" in statuses:
+            return "already_sent"
+        if "active" in statuses:
+            return "active"
+        return "no_onboarding"
+
+    return _start_activation_for_user(order.customer, order=order, sync=sync)
 
 
 def reissue_and_send(user, *, sync=False):

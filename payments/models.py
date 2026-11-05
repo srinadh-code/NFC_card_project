@@ -53,6 +53,7 @@ class CheckoutSession(models.Model):
 
     # Server-priced line snapshot (payments.services.serialize_priced_lines).
     lines = models.JSONField(default=list)
+    recipients = models.JSONField(default=list, blank=True)
     promo_code = models.CharField(max_length=50, blank=True, default="")
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
     first_order_discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)

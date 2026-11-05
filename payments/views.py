@@ -100,7 +100,10 @@ class RazorpayCheckoutView(APIView):
         try:
             if customer is not None:
                 session = create_checkout_session(
-                    customer=customer, address_id=request.data.get("address_id"), provider=provider
+                    customer=customer,
+                    address_id=request.data.get("address_id"),
+                    recipients=request.data.get("recipients"),
+                    provider=provider,
                 )
             else:
                 contact = GuestContactSerializer(data=request.data.get("contact") or {})
@@ -115,6 +118,7 @@ class RazorpayCheckoutView(APIView):
                     contact=contact.validated_data,
                     address=address.validated_data,
                     items=request.data.get("items"),
+                    recipients=request.data.get("recipients"),
                     email_token=request.data.get("email_verification_token"),
                     phone_token=request.data.get("phone_verification_token"),
                     session_ref=request.data.get("session_ref", ""),

@@ -1,4 +1,5 @@
 import logging
+import re
 import uuid
 from decimal import Decimal
 from types import SimpleNamespace
@@ -13,7 +14,7 @@ from common.discounts import calculate_first_order_discount, get_catalog_product
 from customer_management.customer_addresses import pincode as pincode_service
 from customer_management.customer_addresses.models import CustomerAddress
 from customer_management.customer_cart.services import clear_cart, get_or_create_cart
-from orders.models import Order, OrderItem, Transaction
+from orders.models import Order, OrderItem, OrderRecipient, Transaction
 from orders.pricing import ProductUnavailable, price_lines
 from orders.services import compose_shipping_snapshot
 
@@ -118,6 +119,80 @@ def _verify_address(address):
         )
 
 
+def normalize_recipient_email(value):
+    return (value or "").strip().lower()
+
+
+def validate_recipients(raw_recipients, total_quantity):
+    """Validates bulk-order recipient data before payment. Returns a clean,
+    normalized list of {full_name, email} or raises CheckoutError.
+    """
+    if total_quantity not in (3, 5):
+        if raw_recipients is not None and not isinstance(raw_recipients, list):
+            raise CheckoutError("Recipient details are invalid.", errors={"recipients": ["Invalid."]}, status=400)
+        if isinstance(raw_recipients, list) and raw_recipients:
+            raise CheckoutError(
+                "Recipients are only supported for Buy 3 and Buy 5 orders.",
+                errors={"recipients": ["This order quantity does not use recipient details."]},
+                status=400,
+            )
+        return []
+
+    if raw_recipients is None or raw_recipients == []:
+        raise CheckoutError(
+            "Recipient details are required for bulk orders.",
+            errors={"recipients": ["Required for this order quantity."]},
+            status=400,
+        )
+    if not isinstance(raw_recipients, list):
+        raise CheckoutError("Recipient details are invalid.", errors={"recipients": ["Invalid."]}, status=400)
+    if len(raw_recipients) != total_quantity:
+        raise CheckoutError(
+            "The number of recipients must match the purchased quantity.",
+            errors={"recipients": ["Recipient count does not match the order quantity."]},
+            status=400,
+        )
+
+    cleaned = []
+    seen = set()
+    for index, raw in enumerate(raw_recipients):
+        if not isinstance(raw, dict):
+            raise CheckoutError(
+                "Recipient details are invalid.",
+                errors={"recipients": [f"Item at index {index} is invalid."]},
+                status=400,
+            )
+        name = str(raw.get("full_name", "")).strip()
+        email = normalize_recipient_email(raw.get("email"))
+        if not name:
+            raise CheckoutError(
+                "Each recipient must have a full name.",
+                errors={"recipients": [f"Recipient {index + 1} is missing a name."]},
+                status=400,
+            )
+        if not email:
+            raise CheckoutError(
+                "Each recipient must have an email address.",
+                errors={"recipients": [f"Recipient {index + 1} is missing an email."]},
+                status=400,
+            )
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+            raise CheckoutError(
+                "Please enter valid recipient email addresses.",
+                errors={"recipients": [f"Recipient {index + 1} has an invalid email."]},
+                status=400,
+            )
+        if email in seen:
+            raise CheckoutError(
+                "Duplicate recipient email addresses are not allowed in the same order.",
+                errors={"recipients": ["Duplicate email found."]},
+                status=400,
+            )
+        seen.add(email)
+        cleaned.append({"full_name": name, "email": email})
+    return cleaned
+
+
 def create_checkout_session(
     *,
     customer=None,
@@ -125,6 +200,7 @@ def create_checkout_session(
     address=None,
     address_id=None,
     items=None,
+    recipients=None,
     email_token=None,
     phone_token=None,
     session_ref="",
@@ -148,6 +224,7 @@ def create_checkout_session(
         raise CheckoutError("Online payment isn't available right now.", errors={"code": "payments_unavailable"}, status=503)
 
     promo_code = ""
+    total_quantity = 0
     if customer is not None:
         if address_id is None:
             raise CheckoutError("Please choose a delivery address.", errors={"address_id": ["Required."]})
@@ -169,6 +246,7 @@ def create_checkout_session(
         lines = list(cart.items.all())
         if not lines:
             raise CheckoutError("Your cart is empty.")
+        total_quantity = sum(int((item.qty or 0)) for item in lines)
         promo_code = cart.promo_code or ""
         selected_offer_id = cart.applied_offer_id
         contact_values = {
@@ -199,6 +277,7 @@ def create_checkout_session(
         address_values.update(latitude=(address or {}).get("latitude"), longitude=(address or {}).get("longitude"))
         _verify_address(SimpleNamespace(**address_values))
         lines = guest_lines(items)
+        total_quantity = sum(int((line.qty or 0)) for line in lines)
         selected_offer_id = None
         contact_values = {
             "email": onboarding.normalize_email(contact["email"]),
@@ -209,6 +288,8 @@ def create_checkout_session(
         # buyer has never ordered, so the first-order discount applies.
         pricing_customer = onboarding.find_customer_by_email(contact_values["email"])
         assume_new = pricing_customer is None
+
+    validated_recipients = validate_recipients(recipients, total_quantity)
 
     try:
         priced_items, subtotal = price_lines(
@@ -225,6 +306,7 @@ def create_checkout_session(
         **verified,
         **address_values,
         lines=serialize_priced_lines(priced_items),
+        recipients=validated_recipients,
         promo_code=promo_code,
         subtotal=subtotal,
         first_order_discount_percentage=first_order["percentage"],
@@ -315,6 +397,24 @@ def _fulfill(session, *, via, payment_ref=None):
             for line in session.lines
         ]
     )
+    if session.recipients:
+        recipient_rows = []
+        for recipient in session.recipients:
+            email = normalize_recipient_email(recipient["email"])
+            full_name = str(recipient.get("full_name", "")).strip()
+            recipient_user = onboarding.find_customer_by_email(email)
+            if recipient_user is None:
+                recipient_user, _ = onboarding.provision_customer(email=email, full_name=full_name, phone="")
+            CustomerOnboarding.objects.filter(user=recipient_user, source_order__isnull=True).update(source_order=order)
+            recipient_rows.append(
+                OrderRecipient(
+                    order=order,
+                    name=full_name,
+                    email=email,
+                    user=recipient_user,
+                )
+            )
+        OrderRecipient.objects.bulk_create(recipient_rows)
     Transaction.objects.create(order=order, amount=session.total, method=method, status=Order.PaymentStatus.PAID)
 
     if account_created:

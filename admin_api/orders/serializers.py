@@ -3,7 +3,7 @@ from decimal import Decimal
 from rest_framework import serializers
 
 from accounts.models import User
-from orders.models import Order, OrderItem
+from orders.models import Order, OrderItem, OrderRecipient
 from orders.serializers import ORDER_ITEM_CARD_TYPE_CHOICES
 
 from .services import STEP_FIELDS
@@ -31,12 +31,94 @@ class OrderItemSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class OrderRecipientSerializer(serializers.ModelSerializer):
+    onboarding_id = serializers.SerializerMethodField()
+    account_status = serializers.SerializerMethodField()
+    account_status_display = serializers.SerializerMethodField()
+    invitation_status = serializers.SerializerMethodField()
+    invitation_sent_at = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrderRecipient
+        fields = [
+            "id",
+            "name",
+            "email",
+            "user_id",
+            "profile_id",
+            "onboarding_id",
+            "invitation_status",
+            "account_status",
+            "account_status_display",
+            "invitation_sent_at",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def _onboarding(self, obj):
+        if obj.user_id is None:
+            return None
+        from accounts.models import CustomerOnboarding
+
+        try:
+            return obj.user.onboarding
+        except CustomerOnboarding.DoesNotExist:
+            return None
+
+    def get_onboarding_id(self, obj):
+        onboarding = self._onboarding(obj)
+        return onboarding.pk if onboarding is not None else None
+
+    def get_account_status(self, obj):
+        if obj.user_id is None:
+            return None
+        from accounts.models import CustomerOnboarding
+
+        onboarding = self._onboarding(obj)
+        if onboarding is None:
+            user = obj.user
+            if user is not None and not user.must_change_password:
+                return CustomerOnboarding.AccountStatus.ACTIVATED
+            return CustomerOnboarding.AccountStatus.PENDING_PROCESSING
+        return onboarding.account_status
+
+    def get_account_status_display(self, obj):
+        value = self.get_account_status(obj)
+        if value is None:
+            return ""
+        from accounts.models import CustomerOnboarding
+
+        return CustomerOnboarding.AccountStatus(value).label
+
+    def get_invitation_status(self, obj):
+        from accounts.models import CustomerOnboarding
+        from orders.models import OrderRecipient
+
+        if obj.user_id is None:
+            return obj.invitation_status
+        if not obj.user.must_change_password:
+            return OrderRecipient.InvitationStatus.ACCEPTED
+        onboarding = self._onboarding(obj)
+        if onboarding is None or onboarding.credentials_issued_at is None:
+            return OrderRecipient.InvitationStatus.PENDING
+        if onboarding.email_status == CustomerOnboarding.EmailStatus.SENT:
+            return OrderRecipient.InvitationStatus.SENT
+        if onboarding.email_status == CustomerOnboarding.EmailStatus.FAILED:
+            return OrderRecipient.InvitationStatus.FAILED
+        return OrderRecipient.InvitationStatus.PENDING
+
+    def get_invitation_sent_at(self, obj):
+        onboarding = self._onboarding(obj)
+        return onboarding.email_sent_at if onboarding is not None else obj.invitation_sent_at
+
+
 class AdminOrderSerializer(serializers.ModelSerializer):
     customer_id = serializers.IntegerField(read_only=True)
     customer_name = serializers.CharField(source="customer.full_name", read_only=True)
     customer_email = serializers.EmailField(source="customer.email", read_only=True)
     customer_phone = serializers.CharField(source="customer.phone", read_only=True)
     items = OrderItemSerializer(many=True, read_only=True)
+    recipients = serializers.SerializerMethodField()
     total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     subtotal = serializers.SerializerMethodField()
     discount_total = serializers.SerializerMethodField()
@@ -59,6 +141,7 @@ class AdminOrderSerializer(serializers.ModelSerializer):
             "customer_email",
             "customer_phone",
             "items",
+            "recipients",
             "amount",
             "subtotal",
             "discount_total",
@@ -80,6 +163,9 @@ class AdminOrderSerializer(serializers.ModelSerializer):
             "placed_at",
         ]
         read_only_fields = fields
+
+    def get_recipients(self, obj):
+        return OrderRecipientSerializer(obj.recipients.all(), many=True).data
 
     def get_subtotal(self, obj):
         return sum(((item.original_price or item.price) * item.qty for item in obj.items.all()), Decimal("0.00"))
