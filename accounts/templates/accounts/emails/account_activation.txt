@@ -14,6 +14,10 @@ Set Your Password: {{ action_url }}
 (This link can be used once and expires in {{ expires_text }}.)
 
 After setting your password, you can log in to your VR's Gateway customer dashboard and manage your digital business profile.
+
+Our designer will contact you within the next 24 hours to discuss your digital business profile design and customisation. Please be available to coordinate with our designer.
+
+After activating your account and logging into your Customer Dashboard, please complete your digital profile by adding your personal details, business information, profile picture and social media links.
 {% if order_number %}
 Order Number: {{ order_number }}
 {% endif %}
