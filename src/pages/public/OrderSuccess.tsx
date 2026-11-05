@@ -1,7 +1,9 @@
+import { useEffect } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { formatOrderNumber } from "@/lib/mock-api"
+import { useCheckoutVerificationStore } from "@/store/checkout-verification-store"
 
 export default function OrderSuccess() {
   const navigate = useNavigate()
@@ -38,30 +40,38 @@ export default function OrderSuccess() {
   const trackingId = rawOrderId ? formatOrderNumber(rawOrderId) : null
   const orderNumber = state?.orderNumber || trackingId
 
+  // A guest checkout's OTP-verified contact is used up once its order exists.
+  // Cleared here (not on the checkout page — see GuestCheckout.finishOrder)
+  // so the next order verifies again. This page only reads router state, so
+  // refreshing it never creates another order or payment.
+  useEffect(() => {
+    if (state?.orderId) useCheckoutVerificationStore.getState().clear()
+  }, [state?.orderId])
+
   return (
     <div className="mx-auto flex max-w-xl flex-col items-center px-4 py-24 text-center">
       <CheckCircle2 className="size-20 text-success" />
-      <h1 className="mt-6 text-3xl font-bold text-foreground">Thank You!</h1>
-      <p className="mt-2 text-muted-foreground">Your order has been placed successfully.</p>
+      <h1 className="mt-6 text-3xl font-bold text-foreground">Order Placed Successfully</h1>
       {orderNumber && <p className="mt-4 font-mono text-lg font-bold text-primary">Order ID: {orderNumber}</p>}
       {state?.testPayment && (
         <p className="mt-2 rounded-full bg-warning/10 px-3 py-1 text-xs font-medium text-foreground">
           Payment: Paid (Test) — no money was charged
         </p>
       )}
-      <p className="mt-6 text-sm text-muted-foreground">
-        A confirmation email with your order details has been sent to your inbox. Your card will
-        be delivered within 5-7 business days.
-      </p>
-      {state?.accountCreated && (
-        <div className="mt-6 w-full rounded-2xl border border-primary/30 bg-primary/5 p-4 text-left text-sm">
-          <p className="font-semibold text-foreground">Your Customer Dashboard account</p>
-          <p className="mt-1 text-muted-foreground">
-            Once your order is being processed, we&apos;ll email a &quot;Set Your Password&quot; link and your username
-            {state.email ? <> to <span className="font-medium text-foreground break-all">{state.email}</span></> : null}.
-            Use it to create your password, then log in to manage your digital business profile.
-          </p>
-        </div>
+      {state?.accountCreated ? (
+        // New customer: the account is activated from the email sent when
+        // the order is processed (accounts/onboarding.py).
+        <p className="mt-6 text-sm leading-relaxed text-muted-foreground">
+          Your order has been placed successfully! Our team will confirm your order within 24 hours. You will receive a
+          confirmation email with instructions to activate your customer account. Please check your registered email
+          {state.email ? <> (<span className="font-medium text-foreground break-all">{state.email}</span>)</> : null} and
+          follow the instructions to set your password and log in to your dashboard.
+        </p>
+      ) : (
+        <p className="mt-6 text-sm text-muted-foreground">
+          Your order has been placed successfully! A confirmation email with your order details has been sent to your
+          inbox. Your card will be delivered within 5-7 business days.
+        </p>
       )}
       <div className="mt-10 flex flex-wrap justify-center gap-4">
         <Button size="lg" onClick={() => navigate("/shop")}>

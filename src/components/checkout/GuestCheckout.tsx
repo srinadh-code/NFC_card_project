@@ -276,7 +276,11 @@ export function GuestCheckout() {
 
   function finishOrder(result: VerifiedPayment) {
     clearCart()
-    clear()
+    // The verified contact is NOT cleared here: React Router runs this
+    // navigation as a transition, and clearing it first re-rendered this
+    // still-mounted page into its "no verified contact" redirect, which sent
+    // the buyer back to /checkout/verify instead of the success page.
+    // OrderSuccess clears it once it has taken over.
     navigate("/order-success", {
       replace: true,
       state: {
