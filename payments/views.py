@@ -235,6 +235,7 @@ class RazorpayVerifyView(APIView):
                 # True while the account is waiting for its first password
                 # setup — the page then points the buyer to their inbox.
                 "account_created": account_created or order.customer.must_change_password,
+                "payment_method": order.payment_method,
             },
             message="Payment verified. Your order is confirmed.",
         )
