@@ -28,6 +28,7 @@ import { formatCurrency } from "@/lib/mock-api"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
 import { cn } from "@/lib/utils"
 import type { CustomerAddress } from "@/types"
+import { storeOrderSuccess } from "@/pages/public/OrderSuccess"
 
 // The customer's delivery address now always comes from their saved
 // address book (customerAddressApi — see components/customer/
@@ -160,14 +161,17 @@ export default function Checkout() {
 
   function finishOrder(result: VerifiedPayment) {
     clearCart()
+    const successState = {
+      orderId: String(result.order_id),
+      orderNumber: result.order_number,
+      trackingToken: result.tracking_token,
+      customerName: customer?.name,
+      testPayment: result.payment_method === "DUMMY",
+    }
+    storeOrderSuccess(successState)
     navigate("/order-success", {
-      state: {
-        orderId: String(result.order_id),
-        orderNumber: result.order_number,
-        trackingToken: result.tracking_token,
-        customerName: customer?.name,
-        testPayment: result.payment_method === "DUMMY",
-      },
+      replace: true,
+      state: successState,
     })
   }
 

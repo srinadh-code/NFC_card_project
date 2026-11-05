@@ -15,13 +15,15 @@
       (function () {
         try {
           var stored = JSON.parse(localStorage.getItem("taplink-theme") || "null");
-          var mode = (stored && stored.state && stored.state.mode) || "dark";
+          var mode = (stored && stored.state && stored.state.mode) || "light";
           var isDark =
             mode === "dark" ||
             (mode === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
           document.documentElement.classList.toggle("dark", isDark);
+          document.documentElement.style.colorScheme = isDark ? "dark" : "light";
         } catch (e) {
-          document.documentElement.classList.add("dark");
+          document.documentElement.classList.remove("dark");
+          document.documentElement.style.colorScheme = "light";
         }
       })();
     </script>

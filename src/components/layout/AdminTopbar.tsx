@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useAdminAuthStore } from "@/store/auth-store"
+import ThemeToggle from "@/components/layout/ThemeToggle"
 
 const NOTIFICATIONS = [
   { id: 1, text: "New order #ORD150 received", time: "5 min ago" },
@@ -44,6 +45,7 @@ export function AdminTopbar({ onMenuClick }: { onMenuClick?: () => void }) {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        <ThemeToggle />
         <Popover>
           <PopoverTrigger asChild>
             <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">

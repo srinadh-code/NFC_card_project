@@ -5,6 +5,31 @@ import { Button } from "@/components/ui/button"
 import { formatOrderNumber } from "@/lib/mock-api"
 import { useCheckoutVerificationStore } from "@/store/checkout-verification-store"
 
+const ORDER_SUCCESS_STORAGE_KEY = "vrs-order-success"
+
+interface OrderSuccessState {
+  orderId?: string
+  orderNumber?: string | null
+  trackingToken?: string
+  customerName?: string
+  accountCreated?: boolean
+  email?: string
+  testPayment?: boolean
+}
+
+function readStoredSuccess(): OrderSuccessState | null {
+  try {
+    const raw = sessionStorage.getItem(ORDER_SUCCESS_STORAGE_KEY)
+    return raw ? (JSON.parse(raw) as OrderSuccessState) : null
+  } catch {
+    return null
+  }
+}
+
+export function storeOrderSuccess(state: OrderSuccessState) {
+  sessionStorage.setItem(ORDER_SUCCESS_STORAGE_KEY, JSON.stringify(state))
+}
+
 export default function OrderSuccess() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -17,20 +42,7 @@ export default function OrderSuccess() {
   // cosmetic personalization for the Track Order page (never a credential —
   // see accounts/emails.py's and PublicOrderTrackingView's docstrings), and
   // travels via router state, not the URL, so it's never in a shareable link.
-  const state = location.state as
-    | {
-        orderId?: string
-        orderNumber?: string | null
-        trackingToken?: string
-        customerName?: string
-        // Guest checkout: an account was created for this email; its
-        // set-password link is emailed once the order is being processed.
-        accountCreated?: boolean
-        email?: string
-        // Paid with the temporary test payment (no money charged).
-        testPayment?: boolean
-      }
-    | null
+  const state = ((location.state as OrderSuccessState | null) ?? readStoredSuccess())
   const rawOrderId = state?.orderId ?? null
   const trackingToken = state?.trackingToken ?? null
   const customerName = state?.customerName ?? null
@@ -58,21 +70,11 @@ export default function OrderSuccess() {
           Payment: Paid (Test) — no money was charged
         </p>
       )}
-      {state?.accountCreated ? (
-        // New customer: the account is activated from the email sent when
-        // the order is processed (accounts/onboarding.py).
-        <p className="mt-6 text-sm leading-relaxed text-muted-foreground">
-          Your order has been placed successfully! Our team will confirm your order within 24 hours. You will receive a
-          confirmation email with instructions to activate your customer account. Please check your registered email
-          {state.email ? <> (<span className="font-medium text-foreground break-all">{state.email}</span>)</> : null} and
-          follow the instructions to set your password and log in to your dashboard.
-        </p>
-      ) : (
-        <p className="mt-6 text-sm text-muted-foreground">
-          Your order has been placed successfully! A confirmation email with your order details has been sent to your
-          inbox. Your card will be delivered within 5-7 business days.
-        </p>
-      )}
+      <p className="mt-6 text-sm leading-relaxed text-muted-foreground">
+        Your order has been placed successfully! Our team will confirm your order within 24 hours. You will receive a confirmation
+        email with instructions to activate your customer account. Please check your registered email and follow the instructions
+        to set your password and log in to your dashboard.
+      </p>
       <div className="mt-10 flex flex-wrap justify-center gap-4">
         <Button size="lg" onClick={() => navigate("/shop")}>
           Continue Shopping

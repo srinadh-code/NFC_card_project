@@ -35,6 +35,7 @@ import { formatCurrency } from "@/lib/mock-api"
 import { PaymentCancelled, payWithRazorpay } from "@/lib/razorpay"
 import { cn } from "@/lib/utils"
 import { isFresh, useCheckoutVerificationStore } from "@/store/checkout-verification-store"
+import { storeOrderSuccess } from "@/pages/public/OrderSuccess"
 
 interface AddressFields {
   address_line1: string
@@ -281,17 +282,19 @@ export function GuestCheckout() {
     // still-mounted page into its "no verified contact" redirect, which sent
     // the buyer back to /checkout/verify instead of the success page.
     // OrderSuccess clears it once it has taken over.
+    const successState = {
+      orderId: String(result.order_id),
+      orderNumber: result.order_number,
+      trackingToken: result.tracking_token,
+      customerName: fullName.trim(),
+      accountCreated: result.account_created,
+      email: result.email,
+      testPayment: result.payment_method === "DUMMY",
+    }
+    storeOrderSuccess(successState)
     navigate("/order-success", {
       replace: true,
-      state: {
-        orderId: String(result.order_id),
-        orderNumber: result.order_number,
-        trackingToken: result.tracking_token,
-        customerName: fullName.trim(),
-        accountCreated: result.account_created,
-        email: result.email,
-        testPayment: result.payment_method === "DUMMY",
-      },
+      state: successState,
     })
   }
 

@@ -22,6 +22,7 @@ import { useCustomerAuthStore } from "@/store/auth-store"
 import { ApiError, notificationsApi } from "@/lib/api"
 import { formatTimeAgo } from "@/lib/mock-api"
 import { cn } from "@/lib/utils"
+import ThemeToggle from "@/components/layout/ThemeToggle"
 
 interface CustomerTopbarProps {
   onMenuClick?: () => void
@@ -115,6 +116,7 @@ export function CustomerTopbar({ onMenuClick }: CustomerTopbarProps) {
       </div>
 
       <div className="flex flex-1 items-center justify-end gap-2">
+        <ThemeToggle />
         <Popover>
           <PopoverTrigger asChild>
             <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
