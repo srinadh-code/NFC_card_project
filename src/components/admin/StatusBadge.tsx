@@ -14,6 +14,8 @@ const STATUS_VARIANTS: Record<string, BadgeVariant> = {
   Unassigned: "outline",
 
   Pending: "warning",
+  Sent: "success",
+  Accepted: "success",
   Confirmed: "soft",
   Processing: "soft",
   Printed: "soft",

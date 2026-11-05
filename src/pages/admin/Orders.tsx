@@ -542,6 +542,51 @@ export default function AdminOrders() {
                   </div>
                 )}
 
+                {viewing.recipients && viewing.recipients.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-sm font-medium">Recipients</p>
+                    <div className="space-y-3 rounded-lg border p-3 text-sm">
+                      {viewing.recipients.map((recipient) => {
+                        const recipientStatus = recipient.accountStatus ?? "PENDING_PROCESSING"
+                        const canResend =
+                          recipient.onboardingId !== null &&
+                          (recipient.invitationStatus === "Sent" || recipient.invitationStatus === "Failed")
+
+                        return (
+                          <div key={recipient.id} className="rounded-md border bg-background/60 p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="font-medium text-foreground">{recipient.name}</p>
+                                <p className="text-muted-foreground">{recipient.email}</p>
+                              </div>
+                              {canResend && recipient.onboardingId !== null && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={resendActivationMutation.isPending}
+                                  onClick={() => resendActivationMutation.mutate(recipient.onboardingId!)}
+                                >
+                                  <Mail className="size-3.5" /> Resend
+                                </Button>
+                              )}
+                            </div>
+                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-muted-foreground">Account</span>
+                                <AccountStatusBadge status={recipientStatus} />
+                              </div>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-muted-foreground">Activation</span>
+                                <StatusBadge status={recipient.invitationStatus ?? "Pending"} />
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <Separator />
 
                 <div>

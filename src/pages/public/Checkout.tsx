@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { AlertCircle, CheckCircle2, Info, Loader2, MapPin, Pencil, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AddressFormDialog } from "@/components/customer/AddressFormDialog"
 import { PinnedLocationLink } from "@/components/customer/PinnedLocationLink"
@@ -90,6 +91,8 @@ export default function Checkout() {
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
   const [selectorOpen, setSelectorOpen] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
+  const [bulkRecipients, setBulkRecipients] = useState<{ full_name: string; email: string }[]>([])
+  const [recipientErrors, setRecipientErrors] = useState<Array<{ full_name?: string; email?: string }>>([])
   // Set -> the form dialog edits this address (e.g. to fix a PIN code that
   // failed verification); null -> it adds a new one.
   const [editingAddress, setEditingAddress] = useState<CustomerAddress | null>(null)
@@ -142,6 +145,65 @@ export default function Checkout() {
   const verification = verificationQuery.data
   const addressVerified = Boolean(selectedAddress) && verification?.verified === true && !verificationQuery.isFetching
 
+  const validLines = sanitizeCartLines(lines)
+  const bulkRecipientCount = validLines.reduce((sum, line) => sum + line.qty, 0)
+
+  useEffect(() => {
+    if (bulkRecipientCount !== 3 && bulkRecipientCount !== 5) {
+      setBulkRecipients([])
+      setRecipientErrors([])
+      return
+    }
+    setBulkRecipients((prev) =>
+      Array.from({ length: bulkRecipientCount }, (_, index) => prev[index] ?? { full_name: "", email: "" }),
+    )
+    setRecipientErrors((prev) => Array.from({ length: bulkRecipientCount }, (_, index) => prev[index] ?? {}))
+  }, [bulkRecipientCount])
+
+  function updateBulkRecipient(index: number, field: "full_name" | "email", value: string) {
+    setBulkRecipients((prev) => {
+      const next = [...prev]
+      next[index] = { ...(next[index] ?? { full_name: "", email: "" }), [field]: value }
+      return next
+    })
+    setRecipientErrors((prev) => {
+      const next = [...prev]
+      next[index] = { ...(next[index] ?? {}), [field]: undefined }
+      return next
+    })
+  }
+
+  function validateBulkRecipients() {
+    if (bulkRecipientCount !== 3 && bulkRecipientCount !== 5) return []
+
+    const cleaned: { full_name: string; email: string }[] = []
+    const errors: Array<{ full_name?: string; email?: string }> = Array.from({ length: bulkRecipientCount }, () => ({}))
+    const seen = new Set<string>()
+
+    for (let index = 0; index < bulkRecipientCount; index += 1) {
+      const current = bulkRecipients[index] ?? { full_name: "", email: "" }
+      const full_name = current.full_name.trim()
+      const email = current.email.trim().toLowerCase()
+
+      if (!full_name) errors[index].full_name = "Full Name is required."
+      if (!email) errors[index].email = "Email is required."
+      else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) errors[index].email = "Enter a valid email address."
+      else if (seen.has(email)) errors[index].email = "Duplicate email addresses are not allowed." 
+      else seen.add(email)
+
+      if (!errors[index].full_name && !errors[index].email) {
+        cleaned.push({ full_name, email })
+      }
+    }
+
+    setRecipientErrors(errors)
+    if (cleaned.length !== bulkRecipientCount) {
+      toast.error("Please complete every recipient field before continuing.")
+      return null
+    }
+    return cleaned
+  }
+
   const sub = subtotal()
   // The live Order backend doesn't model a separate shipping charge yet —
   // the total shown here must match exactly what gets recorded server-side
@@ -189,15 +251,15 @@ export default function Checkout() {
     }
   }
 
-  async function payOnline(addressId: number) {
+  async function payOnline(addressId: number, recipients: { full_name: string; email: string }[] = []) {
     setPaying(true)
     try {
       if (!paymentConfig.data?.enabled && paymentConfig.data?.dummy_enabled) {
         setDummyError(null)
-        setDummyCheckout(await paymentsApi.createCustomerCheckout(addressId, "dummy"))
+        setDummyCheckout(await paymentsApi.createCustomerCheckout(addressId, "dummy", recipients))
         return
       }
-      const checkout = await paymentsApi.createCustomerCheckout(addressId)
+      const checkout = await paymentsApi.createCustomerCheckout(addressId, "razorpay", recipients)
       const paid = await payWithRazorpay(checkout, settings.site_name)
       finishOrder(await paymentsApi.verifyPayment(paid))
     } catch (err) {
@@ -285,14 +347,16 @@ export default function Checkout() {
     // filter (cart-store.ts) — same VALID_CARD_TYPES check, not a second
     // definition of it — so a retired card type can never reach the order
     // API from this call site either, even in the same session.
-    const validLines = sanitizeCartLines(lines)
     if (validLines.length === 0) {
       toast.error("Your cart no longer contains any available products. Please add an item to continue.")
       return
     }
 
+    const bulkValidation = validateBulkRecipients()
+    if (bulkValidation === null) return
+
     if (onlinePayment) {
-      payOnline(Number(selectedAddress.id))
+      payOnline(Number(selectedAddress.id), bulkValidation)
       return
     }
 
@@ -306,6 +370,7 @@ export default function Checkout() {
         qty: l.qty,
         price: l.price,
       })),
+      recipients: bulkValidation.length ? bulkValidation : undefined,
       shipping: 0,
       // No payment gateway is wired up yet (see the note below the billing
       // form) — orders are placed as Cash on Delivery / pay-on-confirmation
@@ -437,6 +502,56 @@ export default function Checkout() {
               </div>
             ) : null}
           </div>
+
+          {bulkRecipientCount === 3 || bulkRecipientCount === 5 ? (
+            <div className="rounded-2xl border bg-card p-6 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold text-foreground">Recipient Details</h2>
+                <span className="text-xs text-muted-foreground">{bulkRecipientCount} cards</span>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Enter the full name and email for each card in this order.
+              </p>
+              <div className="mt-4 space-y-4">
+                {Array.from({ length: bulkRecipientCount }, (_, index) => (
+                  <div key={index} className="rounded-xl border bg-background/60 p-4">
+                    <p className="mb-3 text-sm font-medium text-foreground">Recipient {index + 1}</p>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <label htmlFor={`bulk-name-${index}`} className="text-sm font-medium text-foreground">
+                          Full Name
+                        </label>
+                        <Input
+                          id={`bulk-name-${index}`}
+                          value={bulkRecipients[index]?.full_name ?? ""}
+                          onChange={(e) => updateBulkRecipient(index, "full_name", e.target.value)}
+                          aria-invalid={Boolean(recipientErrors[index]?.full_name)}
+                        />
+                        {recipientErrors[index]?.full_name && (
+                          <p className="text-sm text-destructive">{recipientErrors[index].full_name}</p>
+                        )}
+                      </div>
+                      <div className="space-y-1.5">
+                        <label htmlFor={`bulk-email-${index}`} className="text-sm font-medium text-foreground">
+                          Email
+                        </label>
+                        <Input
+                          id={`bulk-email-${index}`}
+                          type="email"
+                          value={bulkRecipients[index]?.email ?? ""}
+                          onChange={(e) => updateBulkRecipient(index, "email", e.target.value)}
+                          aria-invalid={Boolean(recipientErrors[index]?.email)}
+                        />
+                        {recipientErrors[index]?.email && (
+                          <p className="text-sm text-destructive">{recipientErrors[index].email}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <OffersSection enabled={lines.length > 0} />
 

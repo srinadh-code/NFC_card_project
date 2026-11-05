@@ -115,6 +115,20 @@ export interface CustomerAddress {
   isDefault: boolean
 }
 
+export interface OrderRecipient {
+  id: string | number
+  name: string
+  email: string
+  userId?: number | null
+  profileId?: number | null
+  onboardingId?: number | null
+  invitationStatus?: string
+  invitationSentAt?: string | null
+  createdAt?: string | null
+  accountStatus?: "PENDING_PROCESSING" | "EMAIL_SENT" | "EMAIL_FAILED" | "ACTIVATED"
+  accountStatusLabel?: string
+}
+
 export interface Order {
   id: string // internal numeric id — used for admin/customer API calls (status update, card assignment, detail fetch)
   // The real public order code (e.g. "NXTRK250344") — see Order.generate_order_number
@@ -128,6 +142,7 @@ export interface Order {
   customerEmail: string
   customerPhone: string
   items: OrderItem[]
+  recipients?: OrderRecipient[]
   amount: number
   shipping: number
   total: number

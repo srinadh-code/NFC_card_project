@@ -1673,6 +1673,20 @@ interface ApiAdminOrderItem {
   qty: number
   price: string
 }
+interface ApiOrderRecipient {
+  id: number
+  name: string
+  email: string
+  user_id?: number | null
+  profile_id?: number | null
+  onboarding_id?: number | null
+  invitation_status?: string
+  invitation_sent_at?: string | null
+  created_at?: string | null
+  account_status?: "PENDING_PROCESSING" | "EMAIL_SENT" | "EMAIL_FAILED" | "ACTIVATED"
+  account_status_display?: string
+}
+
 interface ApiAdminOrder {
   id: number
   order_number: string | null
@@ -1681,6 +1695,7 @@ interface ApiAdminOrder {
   customer_email: string
   customer_phone: string
   items: ApiAdminOrderItem[]
+  recipients?: ApiOrderRecipient[]
   amount: string
   shipping: string
   total: string
@@ -1719,6 +1734,14 @@ interface ApiAdminOrder {
   }
 }
 
+const RECIPIENT_INVITATION_STATUS_LABELS: Record<string, string> = {
+  PENDING: "Pending",
+  SENT: "Sent",
+  ACCEPTED: "Accepted",
+  EXPIRED: "Expired",
+  FAILED: "Failed",
+}
+
 // Exported so customer-facing code (pages/customer/Orders.tsx) can reuse
 // this exact same adapter on its own ApiOrder objects — that interface is
 // field-for-field identical to ApiAdminOrder (both come from the same
@@ -1739,6 +1762,22 @@ export function toFrontendOrder(o: ApiAdminOrder): Order {
       color: it.color,
       qty: it.qty,
       price: Number(it.price),
+    })),
+    recipients: (o.recipients ?? []).map((recipient) => ({
+      id: String(recipient.id),
+      name: recipient.name,
+      email: recipient.email,
+      userId: recipient.user_id ?? null,
+      profileId: recipient.profile_id ?? null,
+      onboardingId: recipient.onboarding_id ?? null,
+      invitationStatus:
+        RECIPIENT_INVITATION_STATUS_LABELS[recipient.invitation_status ?? "PENDING"] ??
+        recipient.invitation_status ??
+        "Pending",
+      invitationSentAt: recipient.invitation_sent_at ?? null,
+      createdAt: recipient.created_at ?? null,
+      accountStatus: recipient.account_status ?? undefined,
+      accountStatusLabel: recipient.account_status_display ?? undefined,
     })),
     amount: Number(o.amount),
     shipping: Number(o.shipping),
@@ -2604,6 +2643,7 @@ export interface ApiOrder {
 export interface CreateOrderPayload {
   idempotency_key?: string
   items: { product_id: string; name: string; card_type: string; color: string; qty: number; price: number }[]
+  recipients?: { full_name: string; email: string }[]
   shipping?: number
   payment_method: "UPI" | "CARD" | "NET_BANKING" | "RAZORPAY" | "COD"
   address_id: number
@@ -2878,6 +2918,7 @@ export interface GuestCheckoutInput {
     longitude?: number | null
   }
   items: { product_id: string; qty: number }[]
+  recipients?: { full_name: string; email: string }[]
   email_verification_token: string
   phone_verification_token?: string
   session_ref: string
@@ -2929,10 +2970,14 @@ export const paymentsApi = {
   // Guest: full details + tokens. Signed-in customer: their saved address.
   createGuestCheckout: (data: GuestCheckoutInput) =>
     request<RazorpayCheckout>("/payments/razorpay/checkout/", { method: "POST", body: data, auth: false }),
-  createCustomerCheckout: (addressId: number, provider: PaymentProvider = "razorpay") =>
+  createCustomerCheckout: (
+    addressId: number,
+    provider: PaymentProvider = "razorpay",
+    recipients?: { full_name: string; email: string }[],
+  ) =>
     request<RazorpayCheckout>("/payments/razorpay/checkout/", {
       method: "POST",
-      body: { address_id: addressId, provider },
+      body: { address_id: addressId, provider, ...(recipients && recipients.length > 0 ? { recipients } : {}) },
     }),
 
   // Completes a temporary test payment started with provider "dummy".
