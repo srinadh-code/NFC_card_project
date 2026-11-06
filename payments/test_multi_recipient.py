@@ -97,8 +97,8 @@ class MultiRecipientPaymentTests(APITestCase):
         self.assertEqual([(p["email"], p["total_cards_purchased"]) for p in purchasers], [("rahul@example.com", 1)])
         customers = self.as_admin_get("admin-customers")
         self.assertEqual([c["email"] for c in customers], ["priya@example.com"])
-        detail = self.as_admin_get("admin-purchaser-detail", order.customer_id)
-        self.assertEqual(detail["orders"][0]["recipients"][0]["phone"], "+447700900123")
+        detail = self.as_admin_get("admin-purchaser-detail", order.pk)
+        self.assertEqual(detail["order"]["recipients"][0]["phone"], "+447700900123")
         self.assertEqual(mail.outbox[-1].to, ["rahul@example.com"])
 
     def test_purchaser_is_also_recipient_uses_one_account_and_profile(self):
@@ -129,10 +129,65 @@ class MultiRecipientPaymentTests(APITestCase):
         self.assertEqual(first.customer_id, second.customer_id)
         self.assertEqual(User.objects.filter(email="recipient1@example.com").count(), 1)
         self.assertEqual(Profile.objects.filter(user__email="recipient1@example.com").count(), 1)
-        detail = self.as_admin_get("admin-purchaser-detail", first.customer_id)
-        self.assertEqual((detail["paid_order_count"], detail["total_cards_purchased"]), (2, 5))
-        self.assertEqual(sorted(len(o["recipients"]) for o in detail["orders"]), [2, 3])
-        self.assertEqual(detail["total_amount_paid"], str(first.total + second.total))
+        for order, quantity in ((first, 2), (second, 3)):
+            detail = self.as_admin_get("admin-purchaser-detail", order.pk)
+            self.assertEqual(detail["total_cards_purchased"], quantity)
+            self.assertEqual(len(detail["order"]["recipients"]), quantity)
+            self.assertEqual(detail["total_amount_paid"], str(order.total))
+
+    def test_checkout_name_changes_preserve_paid_order_snapshots_and_existing_account_for_both_providers(self):
+        for provider in ("razorpay", "dummy"):
+            with self.subTest(provider=provider):
+                cache.clear()
+                buyer = make_user(email=f"{provider}.same@example.com", full_name="Original Account", phone="9000000001")
+                profile = Profile.ensure_for_user(buyer)
+                profile.company = "Original Company"
+                profile.save(update_fields=["company"])
+                password, username = buyer.password, profile.username
+                orders = []
+                for index, (name, quantity) in enumerate((("Kavya", 1), ("Manideep", 1), ("Vinay", 2))):
+                    payload = _guest_payload(email=buyer.email, qty=quantity)
+                    payload["contact"].update(full_name=name, phone=f"900000000{index + 2}")
+                    payload["recipients"] = [recipient(slot, f"{provider}.order{index}.recipient{slot}@example.com") for slot in range(quantity)]
+                    if provider == "dummy":
+                        payload["provider"] = "dummy"
+                    checkout = self._checkout(payload)
+                    if provider == "dummy":
+                        paid = self.client.post(reverse("dummy-payment-confirm"), {"checkout_id": checkout["checkout_id"], "amount": checkout["amount"]}, format="json")
+                    else:
+                        paid = self._verify(checkout, payment_id=f"pay_{self._order_seq}")
+                    self.assertEqual(paid.status_code, 200, paid.content)
+                    order = Order.objects.get(pk=paid.data["data"]["order_id"])
+                    self.assertEqual((order.customer_id, order.purchaser_name, order.purchaser_email, order.purchaser_phone),
+                                     (buyer.pk, name, buyer.email, f"900000000{index + 2}"))
+                    orders.append(order)
+                buyer.refresh_from_db()
+                profile.refresh_from_db()
+                self.assertEqual((buyer.full_name, buyer.phone, buyer.password), ("Original Account", "9000000001", password))
+                self.assertEqual((profile.username, profile.company), (username, "Original Company"))
+                self.assertEqual(User.objects.filter(email__iexact=buyer.email).count(), 1)
+                self.assertEqual(buyer.orders.count(), 3)
+                self.assertEqual(Transaction.objects.filter(order__customer=buyer, status="PAID").count(), 3)
+                self.client.force_authenticate(self.admin)
+                response = self.client.get(reverse("admin-purchasers"), {"search": buyer.email})
+                self.client.force_authenticate(None)
+                self.assertEqual(response.data["pagination"]["count"], 3)
+                rows = {row["id"]: row for row in response.data["data"]}
+                for order in orders:
+                    order.refresh_from_db()
+                    self.assertEqual(rows[order.pk]["name"], order.purchaser_name)
+                    self.assertEqual(rows[order.pk]["total_amount_paid"], str(order.total))
+                    self.assertEqual(rows[order.pk]["total_cards_purchased"], order.recipients.count())
+                    detail = self.as_admin_get("admin-purchaser-detail", order.pk)
+                    self.assertEqual(detail["order"]["id"], order.pk)
+                    self.assertEqual({row["email"] for row in detail["order"]["recipients"]}, set(order.recipients.values_list("email", flat=True)))
+                self.assertFalse(any(message.subject == ACTIVATION_SUBJECT for message in mail.outbox))
+                self.client.force_authenticate(self.admin)
+                processing = self.client.post(reverse("admin-order-status", args=[orders[0].pk]), {"status": "PROCESSING"}, format="json")
+                self.client.force_authenticate(None)
+                self.assertEqual(processing.status_code, 200, processing.content)
+                setup = [message.to[0] for message in mail.outbox if message.subject == ACTIVATION_SUBJECT]
+                self.assertEqual(setup, list(orders[0].recipients.values_list("email", flat=True)))
 
     def test_duplicate_verify_and_webhook_keep_accounts_allocations_ledger_and_email_once(self):
         checkout, order = self.buy([recipient(), recipient(2)])
@@ -244,11 +299,11 @@ class MultiRecipientPaymentTests(APITestCase):
         self.assertEqual((order.customer_id, order.purchaser_email, order.purchaser_phone, order.delivery_phone), (buyer.pk, buyer.email, "+447700900111", address.phone))
         buyer.refresh_from_db()
         self.assertEqual((buyer.full_name, buyer.phone), ("", ""))
-        summary = self.as_admin_get("admin-purchaser-detail", buyer.pk)
+        summary = self.as_admin_get("admin-purchaser-detail", order.pk)
         self.assertEqual((summary["name"], summary["phone"]), ("Purchaser Name", "+447700900111"))
         self.client.force_authenticate(self.admin)
         matched = self.client.get(reverse("admin-purchasers"), {"search": "Purchaser Name"})
-        self.assertEqual([row["id"] for row in matched.data["data"]], [buyer.pk])
+        self.assertEqual([row["id"] for row in matched.data["data"]], [order.pk])
         self.client.force_authenticate(None)
         add_card()
         self.client.force_authenticate(buyer)
@@ -282,7 +337,7 @@ class MultiRecipientPaymentTests(APITestCase):
             card.refresh_from_db()
             self.assertEqual((slot.assigned_card_id, card.user_id), (card.pk, slot.user_id))
         self.client.force_authenticate(None)
-        detail = self.as_admin_get("admin-purchaser-detail", order.customer_id)
+        detail = self.as_admin_get("admin-purchaser-detail", order.pk)
         self.assertEqual((detail["total_cards_purchased"], detail["total_cards_assigned"], detail["total_cards_activated"]), (2, 2, 0))
 
     def test_processing_setup_deduplicates_recipient_identity_and_preserves_buyer_only_role(self):

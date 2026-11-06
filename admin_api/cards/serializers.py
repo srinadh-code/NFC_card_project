@@ -6,6 +6,7 @@ import secrets
 from rest_framework import serializers
 
 from accounts.models import User
+from nfc_cards.assignment import assignment_accounts
 from nfc_cards.models import NfcCard
 
 
@@ -94,7 +95,7 @@ class AdminCardWriteSerializer(serializers.Serializer):
         value = value.strip().lower()
         if not value:
             return value
-        customer = User.objects.filter(email__iexact=value, role=User.Role.CUSTOMER).first()
+        customer = assignment_accounts(value).filter(role=User.Role.CUSTOMER).first()
         if customer is None:
             raise serializers.ValidationError("No customer account found with that email.")
         return value
@@ -105,7 +106,7 @@ class AdminCardAssignSerializer(serializers.Serializer):
 
     def validate_email(self, value):
         value = value.strip().lower()
-        customer = User.objects.filter(email__iexact=value, role=User.Role.CUSTOMER).first()
+        customer = assignment_accounts(value).filter(role=User.Role.CUSTOMER).first()
         if customer is None:
             raise serializers.ValidationError("No customer account found with that email.")
         return value
