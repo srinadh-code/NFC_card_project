@@ -34,6 +34,7 @@ def _guest_payload(email="new.buyer@example.com", product_id="PRD-NEXORA-CUSTOM"
     return {
         "contact": {"full_name": "New Buyer", "email": email, "phone": "9876543210"},
         "address": {
+            "phone": "9876543210",
             "address_line1": "Plot 12, Main Road",
             "locality": "Moazzampura",
             "city": "Hyderabad",
@@ -42,6 +43,7 @@ def _guest_payload(email="new.buyer@example.com", product_id="PRD-NEXORA-CUSTOM"
             "pincode": "500001",
         },
         "items": [{"product_id": product_id, "qty": qty}],
+        "recipients": [{"full_name": "New Buyer", "email": email, "phone": "9876543210"} for _ in range(qty)],
     }
 
 
@@ -237,7 +239,7 @@ class RazorpayOnboardingTests(APITestCase):
         CartItem.objects.create(cart=cart, product_id="PRD-NEXORA-CUSTOM", name="GATEWAY Custom", card_type="CUSTOM", qty=2, price="1.00")
         token = str(RefreshToken.for_user(customer).access_token)
         response = self.client.post(
-            reverse("razorpay-checkout"), {"address_id": address.pk}, format="json", HTTP_AUTHORIZATION=f"Bearer {token}"
+            reverse("razorpay-checkout"), {"address_id": address.pk, "recipients": [{"full_name": "Member", "email": customer.email, "phone": "9876543210"} for _ in range(2)]}, format="json", HTTP_AUTHORIZATION=f"Bearer {token}"
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
         checkout = response.data["data"]

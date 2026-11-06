@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.utils import timezone
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
@@ -29,12 +30,13 @@ class ActivateCardView(APIView):
 
     permission_classes = [IsCustomerRole]
 
+    @transaction.atomic
     def post(self, request):
         serializer = ActivateCardSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         uid = serializer.validated_data["uid"].strip()
 
-        card = NfcCard.objects.filter(uid__iexact=uid).first()
+        card = NfcCard.objects.select_for_update().filter(uid__iexact=uid).first()
         if card is None:
             return error("No card found with that ID.", status=404)
 
@@ -51,7 +53,7 @@ class ActivateCardView(APIView):
         card.status = NfcCard.Status.ACTIVE
         if not card.assigned_on:
             card.assigned_on = now
-        card.activated_on = now
+        card.activated_on = card.activated_on or now
         card.save(update_fields=["user", "status", "assigned_on", "activated_on", "updated_at"])
 
         return success(NfcCardSerializer(card).data, message="Card activated.")
@@ -62,8 +64,9 @@ class ActivateAssignedCardView(APIView):
 
     permission_classes = [IsCustomerRole]
 
+    @transaction.atomic
     def post(self, request, pk):
-        card = NfcCard.objects.filter(pk=pk).first()
+        card = NfcCard.objects.select_for_update().filter(pk=pk).first()
         if card is None:
             return error("Card not found.", status=404)
         if card.user_id != request.user.id:
@@ -83,12 +86,13 @@ class DeactivateCardView(APIView):
 
     permission_classes = [IsCustomerRole]
 
+    @transaction.atomic
     def post(self, request):
         serializer = DeactivateCardSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         uid = serializer.validated_data["uid"].strip()
 
-        card = NfcCard.objects.filter(uid__iexact=uid).first()
+        card = NfcCard.objects.select_for_update().filter(uid__iexact=uid).first()
         if card is None:
             return error("No card found with that ID.", status=404)
 
@@ -147,6 +151,7 @@ class TrackEventView(APIView):
 
     permission_classes = [AllowAny]
 
+    @transaction.atomic
     def post(self, request):
         serializer = TrackEventSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

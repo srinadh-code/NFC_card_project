@@ -34,6 +34,7 @@ class CheckoutSession(models.Model):
     email = models.EmailField()
     full_name = models.CharField(max_length=150)
     phone = models.CharField(max_length=20)
+    delivery_phone = models.CharField(max_length=20, blank=True, default="")
     # How the buyer was verified before paying (payments/verification.py).
     # A signed-in customer's email is already verified on their account.
     email_verified = models.BooleanField(default=False)

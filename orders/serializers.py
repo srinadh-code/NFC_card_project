@@ -66,9 +66,9 @@ class OrderSerializer(serializers.ModelSerializer):
     customer's own order carries nothing they shouldn't already see."""
 
     customer_id = serializers.IntegerField(read_only=True)
-    customer_name = serializers.CharField(source="customer.full_name", read_only=True)
-    customer_email = serializers.EmailField(source="customer.email", read_only=True)
-    customer_phone = serializers.CharField(source="customer.phone", read_only=True)
+    customer_name = serializers.SerializerMethodField()
+    customer_email = serializers.SerializerMethodField()
+    customer_phone = serializers.SerializerMethodField()
     items = OrderItemSerializer(many=True, read_only=True)
     total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     subtotal = serializers.SerializerMethodField()
@@ -106,9 +106,19 @@ class OrderSerializer(serializers.ModelSerializer):
             "tracking",
             "tracking_token",
             "assigned_card_id",
+            "delivery_phone",
             "placed_at",
         ]
         read_only_fields = fields
+
+    def get_customer_name(self, obj):
+        return obj.purchaser_name or obj.customer.full_name
+
+    def get_customer_email(self, obj):
+        return obj.purchaser_email or obj.customer.email
+
+    def get_customer_phone(self, obj):
+        return obj.purchaser_phone or obj.customer.phone
 
     def get_subtotal(self, obj):
         # The pre-discount total — original_price falls back to the paid
@@ -130,6 +140,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "state": obj.shipping_state,
             "pincode": obj.shipping_pincode,
             "country": obj.shipping_country,
+            "phone": obj.delivery_phone,
         }
 
     def get_tracking(self, obj):
@@ -254,7 +265,8 @@ class CustomerOrderCreateSerializer(serializers.Serializer):
     shipping = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, default=0)
     payment_method = serializers.ChoiceField(choices=Order.PaymentMethod.choices)
     address_id = serializers.IntegerField()
-    recipients = serializers.JSONField(required=False, allow_null=True)
+    recipients = serializers.JSONField()
+    purchaser_contact = serializers.JSONField(required=False)
 
     def validate_address_id(self, value):
         from customer_management.customer_addresses.models import CustomerAddress

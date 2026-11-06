@@ -33,6 +33,12 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 class OrderRecipientSerializer(serializers.ModelSerializer):
     onboarding_id = serializers.SerializerMethodField()
+    assigned_card_id = serializers.IntegerField(read_only=True)
+    assigned_card_uid = serializers.CharField(source="assigned_card.uid", read_only=True, default=None)
+    assigned_card_serial = serializers.CharField(source="assigned_card.serial_number", read_only=True, default=None)
+    assigned_card_status = serializers.CharField(source="assigned_card.status", read_only=True, default=None)
+    profile_username = serializers.CharField(source="profile.username", read_only=True, default=None)
+    activation_status = serializers.SerializerMethodField()
     account_status = serializers.SerializerMethodField()
     account_status_display = serializers.SerializerMethodField()
     invitation_status = serializers.SerializerMethodField()
@@ -44,6 +50,13 @@ class OrderRecipientSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "email",
+            "phone",
+            "assigned_card_id",
+            "assigned_card_uid",
+            "assigned_card_serial",
+            "assigned_card_status",
+            "activation_status",
+            "profile_username",
             "user_id",
             "profile_id",
             "onboarding_id",
@@ -54,6 +67,11 @@ class OrderRecipientSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
+
+    def get_activation_status(self, obj):
+        if obj.assigned_card_id is None:
+            return "UNASSIGNED"
+        return "ACTIVE" if obj.assigned_card.status == "ACTIVE" else "PENDING"
 
     def _onboarding(self, obj):
         if obj.user_id is None:
@@ -114,9 +132,9 @@ class OrderRecipientSerializer(serializers.ModelSerializer):
 
 class AdminOrderSerializer(serializers.ModelSerializer):
     customer_id = serializers.IntegerField(read_only=True)
-    customer_name = serializers.CharField(source="customer.full_name", read_only=True)
-    customer_email = serializers.EmailField(source="customer.email", read_only=True)
-    customer_phone = serializers.CharField(source="customer.phone", read_only=True)
+    customer_name = serializers.SerializerMethodField()
+    customer_email = serializers.SerializerMethodField()
+    customer_phone = serializers.SerializerMethodField()
     items = OrderItemSerializer(many=True, read_only=True)
     recipients = serializers.SerializerMethodField()
     total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
@@ -164,6 +182,15 @@ class AdminOrderSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    def get_customer_name(self, obj):
+        return getattr(obj, "purchaser_name", "") or obj.customer.full_name
+
+    def get_customer_email(self, obj):
+        return getattr(obj, "purchaser_email", "") or obj.customer.email
+
+    def get_customer_phone(self, obj):
+        return getattr(obj, "purchaser_phone", "") or obj.customer.phone
+
     def get_recipients(self, obj):
         return OrderRecipientSerializer(obj.recipients.all(), many=True).data
 
@@ -198,7 +225,7 @@ class AdminOrderSerializer(serializers.ModelSerializer):
         if session is not None:
             return {
                 "full_name": session.full_name,
-                "phone": session.phone,
+                "phone": getattr(obj, "delivery_phone", "") or session.phone,
                 "email": session.email,
                 "address_line1": session.address_line1,
                 "address_line2": session.address_line2,
@@ -212,7 +239,7 @@ class AdminOrderSerializer(serializers.ModelSerializer):
             }
         return {
             "full_name": obj.customer.full_name,
-            "phone": obj.customer.phone,
+            "phone": getattr(obj, "delivery_phone", "") or obj.customer.phone,
             "email": obj.customer.email,
             "address_line1": obj.shipping_line1,
             "address_line2": "",
@@ -230,7 +257,10 @@ class AdminOrderSerializer(serializers.ModelSerializer):
         from accounts.models import CustomerOnboarding
 
         user = obj.customer
-        item = CustomerOnboarding.objects.filter(user=user).first()
+        try:
+            item = user.onboarding
+        except CustomerOnboarding.DoesNotExist:
+            item = None
         if item is None:
             status = CustomerOnboarding.AccountStatus.ACTIVATED if not user.must_change_password else CustomerOnboarding.AccountStatus.PENDING_PROCESSING
             return {"status": status, "status_display": status.label, "onboarding_id": None, "created_from_order": False}
@@ -312,4 +342,5 @@ class AdminOrderStatusSerializer(serializers.Serializer):
 
 
 class AdminOrderAssignCardSerializer(serializers.Serializer):
-    card_id = serializers.IntegerField()
+    card_id = serializers.IntegerField(min_value=1)
+    recipient_id = serializers.IntegerField(min_value=1, required=False)

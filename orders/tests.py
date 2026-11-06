@@ -2,6 +2,7 @@ from decimal import Decimal
 from unittest import mock
 
 from django.core import mail
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -64,8 +65,12 @@ def _seed_cart_item(user, **overrides):
 def _valid_payload(address, **overrides):
     payload = {
         "shipping": "49.00",
-        "payment_method": "UPI",
+        "payment_method": "COD",
         "address_id": address.pk,
+        "recipients": [
+            {"full_name": f"Recipient {i + 1}", "email": f"recipient.{i + 1}@example.com", "phone": "+447700900123"}
+            for i in range(sum(CartItem.objects.filter(cart__customer=address.customer).values_list("qty", flat=True)))
+        ],
     }
     payload.update(overrides)
     return payload
@@ -85,27 +90,27 @@ class CustomerOrderCreateViewTests(AuthenticatedAPITestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def test_creates_order_with_computed_totals_and_is_paid_immediately(self):
+    def test_creates_cod_order_with_computed_totals_and_pending_payment(self):
         _seed_cart_item(self.user)
         response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         data = response.data["data"]
         self.assertEqual(data["status"], "PENDING")
-        self.assertEqual(data["payment_status"], "PAID")
+        self.assertEqual(data["payment_status"], "PENDING")
         # Real catalog price (999.00 x 2), not the cart item's own price.
         self.assertEqual(str(data["amount"]), "1998.00")
         self.assertEqual(str(data["total"]), "2047.00")
         self.assertEqual(len(data["items"]), 1)
 
-    def test_bulk_order_creates_recipient_accounts_and_assignments(self):
+    def test_unpaid_bulk_cod_order_preserves_allocations_without_provisioning_accounts(self):
         _seed_cart_item(self.user, qty=3)
         payload = _valid_payload(
             self.address,
             recipients=[
-                {"full_name": "Recipient One", "email": "recipient.one@example.com"},
-                {"full_name": "Recipient Two", "email": "recipient.two@example.com"},
-                {"full_name": "Recipient Three", "email": "recipient.three@example.com"},
+                {"full_name": "Recipient One", "email": "recipient.one@example.com", "phone": "+447700900121"},
+                {"full_name": "Recipient Two", "email": "recipient.two@example.com", "phone": "+447700900122"},
+                {"full_name": "Recipient Three", "email": "recipient.three@example.com", "phone": "+447700900123"},
             ],
         )
 
@@ -115,10 +120,30 @@ class CustomerOrderCreateViewTests(AuthenticatedAPITestCase):
         order = Order.objects.get(pk=response.data["data"]["id"])
         self.assertEqual(order.recipients.count(), 3)
         for recipient in order.recipients.select_related("user", "profile"):
-            self.assertEqual(recipient.user.email, recipient.email)
-            self.assertTrue(recipient.user.must_change_password)
-            self.assertIsNotNone(recipient.profile_id)
-            self.assertEqual(recipient.user.onboarding.source_order, order)
+            self.assertIsNone(recipient.user_id)
+            self.assertIsNone(recipient.profile_id)
+            self.assertIsNone(recipient.assigned_card_id)
+            self.assertTrue(recipient.phone)
+        self.assertEqual(order.payment_status, Order.PaymentStatus.PENDING)
+
+    def test_legacy_checkout_cannot_claim_online_payment(self):
+        _seed_cart_item(self.user)
+        for method in ("UPI", "CARD", "NET_BANKING", "RAZORPAY", "DUMMY"):
+            with self.subTest(method=method):
+                response = self.client.post(reverse("my-orders"), _valid_payload(self.address, payment_method=method), format="json")
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+                self.assertFalse(Order.objects.exists())
+
+    def test_purchaser_and_delivery_contact_are_separate_snapshots(self):
+        _seed_cart_item(self.user, qty=1)
+        response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        order = Order.objects.get(pk=response.data["data"]["id"])
+        self.assertEqual(order.purchaser_name, self.user.full_name)
+        self.assertEqual(order.purchaser_email, self.user.email)
+        self.assertEqual(order.purchaser_phone, self.user.phone)
+        self.assertEqual(order.delivery_phone, self.address.phone)
+        self.assertEqual(order.recipients.count(), 1)
 
     def test_order_belongs_to_the_authenticated_customer(self):
         _seed_cart_item(self.user)
@@ -195,6 +220,7 @@ class CustomerOrderCreateViewTests(AuthenticatedAPITestCase):
         order = Order.objects.get(pk=response.data["data"]["id"])
         self.assertEqual(order.transactions.count(), 1)
         self.assertEqual(str(order.transactions.first().amount), "2047.00")
+        self.assertEqual(order.transactions.first().status, Order.PaymentStatus.PENDING)
 
 
 class FirstOrderDiscountTests(AuthenticatedAPITestCase):
@@ -221,7 +247,10 @@ class FirstOrderDiscountTests(AuthenticatedAPITestCase):
 
     def test_second_order_gets_no_first_order_discount(self):
         _seed_cart_item(self.user)
-        self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
+        first = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
+        # Simulate a trusted back-office payment reconciliation; an unpaid
+        # COD submission alone cannot consume the paid first-order discount.
+        Order.objects.filter(pk=first.data["data"]["id"]).update(payment_status=Order.PaymentStatus.PAID)
 
         _seed_cart_item(self.user)
         second = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
@@ -458,6 +487,7 @@ class CustomerOrderIdempotencyTests(AuthenticatedAPITestCase):
         self.assertNotEqual(first.data["data"]["id"], second.data["data"]["id"])
 
 
+@override_settings(BREVO_API_KEY="", EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 class OrderConfirmationEmailTests(AuthenticatedAPITestCase):
     """The order confirmation email is the durable fallback for getting a
     customer their secure Track Order link (the in-app bell notification
@@ -471,7 +501,8 @@ class OrderConfirmationEmailTests(AuthenticatedAPITestCase):
 
     def test_placing_an_order_sends_a_confirmation_email_with_the_tracking_link(self):
         _seed_cart_item(self.user)
-        response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
         order = Order.objects.get(pk=response.data["data"]["id"])
 
         self.assertEqual(len(mail.outbox), 1)
@@ -484,7 +515,8 @@ class OrderConfirmationEmailTests(AuthenticatedAPITestCase):
         """The email must link with the token, not just an order number a
         recipient could forward without the security context intact."""
         _seed_cart_item(self.user)
-        self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
 
         sent = mail.outbox[0]
         self.assertIn("token=", sent.body)

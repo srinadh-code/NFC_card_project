@@ -27,7 +27,7 @@ import threading
 import time
 
 from django.conf import settings
-from django.db import connection, transaction
+from django.db import IntegrityError, connection, transaction
 from django.template.loader import render_to_string
 from django.utils import timezone
 
@@ -49,7 +49,7 @@ def find_customer_by_email(email):
     return User.objects.filter(email__iexact=normalize_email(email)).first()
 
 
-def provision_customer(*, email, full_name, phone):
+def provision_customer(*, email, full_name, phone, create_profile=True, email_verified=False):
     """Returns (user, created). A new account is pending activation (no
     usable password). An existing account is returned unchanged. Must run
     inside the caller's transaction (payments.services.fulfill)."""
@@ -58,30 +58,55 @@ def provision_customer(*, email, full_name, phone):
     if existing is not None:
         return existing, False
 
-    user = User.objects.create_user(
-        email=email,
-        password=None,  # unusable until the customer sets their own
-        full_name=full_name.strip(),
-        phone=phone.strip(),
-        role=User.Role.CUSTOMER,
-        is_active=True,
-        # The checkout proved this inbox with an emailed OTP.
-        email_verified=True,
-        must_change_password=True,
-    )
-    CustomerOnboarding.objects.create(user=user)
-    # Creates the profile and its unique username (the login username).
-    from profiles.models import Profile
-
-    Profile.ensure_for_user(user)
+    try:
+        with transaction.atomic():
+            user = User.objects.create_user(
+                email=email,
+                password=None,
+                full_name=full_name.strip(),
+                phone=phone.strip(),
+                role=User.Role.CUSTOMER,
+                is_active=True,
+                email_verified=email_verified,
+                must_change_password=True,
+            )
+            CustomerOnboarding.objects.create(user=user)
+            if create_profile:
+                from profiles.models import Profile
+                Profile.ensure_for_user(user)
+    except IntegrityError:
+        existing = find_customer_by_email(email)
+        if existing is None:
+            raise
+        return existing, False
     logger.info("onboarding.account_created user_id=%s", user.pk)
     return user, True
 
 
-def username_for(user):
+def ensure_recipient_accounts(order):
+    """Link each paid allocation to one reusable account/profile.
+
+    Checkout snapshots never overwrite an existing person's contact details,
+    password or profile. Each allocation is retained even for repeated emails.
+    """
     from profiles.models import Profile
 
-    return Profile.ensure_for_user(user).username
+    for recipient in sorted(order.recipients.all(), key=lambda r: normalize_email(r.email)):
+        user = recipient.user
+        if user is None:
+            user, _ = provision_customer(email=recipient.email, full_name=recipient.name, phone=recipient.phone or "")
+        profile = Profile.ensure_for_user(user)
+        recipient.user = user
+        recipient.profile = profile
+        recipient.save(update_fields=["user", "profile", "updated_at"])
+        CustomerOnboarding.objects.filter(user=user, source_order__isnull=True).update(source_order=order)
+
+
+def username_for(user):
+    # A purchaser can log in with email without owning a digital profile.
+    # Rendering account-setup emails or checking tokens must not create one.
+    from profiles.models import Profile
+    return Profile.objects.filter(user=user).values_list("username", flat=True).first() or user.email
 
 
 def _activation_url(raw_token):
@@ -101,6 +126,7 @@ def _render_activation(user, raw_token, order):
         "expires_text": f"{hours} hours" if hours != 1 else "1 hour",
         # this email's own fields
         "customer_name": name,
+        "is_recipient": user.order_recipients.exists() or user.nfc_cards.exists(),
         "username": username_for(user),
         "order_number": order.order_number if order is not None else "",
     }
@@ -237,9 +263,12 @@ def _issue_and_dispatch(onboarding, *, sync=False):
 
 
 def _start_activation_for_user(user, *, order, sync=False):
-    if not user.must_change_password:
-        return "active"
     with transaction.atomic():
+        # Re-read activation state under a lock: completing setup while an
+        # admin starts Processing cannot issue a fresh link for an active user.
+        user = User.objects.select_for_update().get(pk=user.pk)
+        if not user.must_change_password:
+            return "active"
         onboarding, _ = CustomerOnboarding.objects.select_for_update().get_or_create(user=user)
         if onboarding.credentials_issued_at is not None:
             return "already_sent"
@@ -257,42 +286,26 @@ def start_activation_for_order(order, *, sync=False):
     account's activation was already started — nothing sent again),
     "active" (an existing, activated account — nothing to send; its
     password is never touched) or "no_onboarding"."""
-    recipients = list(order.recipients.select_related("user").all())
-    if recipients:
-        statuses = []
-        for recipient in recipients:
-            if recipient.user_id is None:
-                logger.error(
-                    "onboarding.activation_start_failed recipient_id=%s order_id=%s reason=missing_user",
-                    recipient.pk,
-                    order.pk,
-                )
-                statuses.append("failed")
-                continue
-            try:
-                statuses.append(_start_activation_for_user(recipient.user, order=order, sync=sync))
-            except Exception as exc:  # noqa: BLE001 — one recipient must not block the rest
-                logger.error(
-                    "onboarding.activation_start_failed recipient_id=%s user_id=%s order_id=%s reason=%s",
-                    recipient.pk,
-                    recipient.user_id,
-                    order.pk,
-                    type(exc).__name__,
-                )
-                statuses.append("failed")
-        if not statuses:
-            return "no_onboarding"
-        if "failed" in statuses:
-            return "failed" if all(status == "failed" for status in statuses) else "partial_failure"
-        if "sent" in statuses:
-            return "sent"
-        if "already_sent" in statuses:
-            return "already_sent"
-        if "active" in statuses:
-            return "active"
+    if order.payment_status != order.PaymentStatus.PAID:
         return "no_onboarding"
-
-    return _start_activation_for_user(order.customer, order=order, sync=sync)
+    ensure_recipient_accounts(order)
+    # The verified purchaser needs account access to order history too. The
+    # email template distinguishes that setup from a recipient profile invite.
+    users = {order.customer_id: order.customer}
+    users.update({r.user_id: r.user for r in order.recipients.select_related("user") if r.user_id})
+    statuses = []
+    for user in sorted(users.values(), key=lambda u: normalize_email(u.email)):
+        try:
+            statuses.append(_start_activation_for_user(user, order=order, sync=sync))
+        except Exception as exc:
+            logger.error("onboarding.activation_start_failed user_id=%s order_id=%s reason=%s", user.pk, order.pk, type(exc).__name__)
+            statuses.append("failed")
+    if "failed" in statuses:
+        return "failed" if all(s == "failed" for s in statuses) else "partial_failure"
+    for status in ("sent", "already_sent", "active"):
+        if status in statuses:
+            return status
+    return "no_onboarding"
 
 
 def reissue_and_send(user, *, sync=False):

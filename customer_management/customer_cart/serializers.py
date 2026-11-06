@@ -222,7 +222,16 @@ class CartSerializer(serializers.ModelSerializer):
 
 
 #: Largest quantity of one product a single cart/order line can hold.
-MAX_LINE_QTY = 100
+MAX_LINE_QTY = 10
+
+
+class CardQuantityField(serializers.IntegerField):
+    """Reject coercion of booleans and fractional JSON quantities."""
+
+    def to_internal_value(self, data):
+        if isinstance(data, (bool, float)) or (isinstance(data, str) and not data.strip().isdigit()):
+            self.fail("invalid")
+        return super().to_internal_value(data)
 
 
 class AddCartItemSerializer(serializers.Serializer):
@@ -231,14 +240,14 @@ class AddCartItemSerializer(serializers.Serializer):
     card_type = serializers.CharField(max_length=10)
     color_name = serializers.CharField(max_length=30)
     color_hex = serializers.CharField(max_length=10, required=False, allow_blank=True, default="")
-    qty = serializers.IntegerField(min_value=1, max_value=MAX_LINE_QTY, default=1)
+    qty = CardQuantityField(min_value=1, max_value=MAX_LINE_QTY, default=1)
     # Accepted for backward compatibility only — services.add_item replaces
     # it with the catalog price; a client-sent price is never used.
     price = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0, required=False)
 
 
 class UpdateCartItemSerializer(serializers.Serializer):
-    qty = serializers.IntegerField(min_value=1, max_value=MAX_LINE_QTY)
+    qty = CardQuantityField(min_value=1, max_value=MAX_LINE_QTY)
 
 
 class ApplyPromoCodeSerializer(serializers.Serializer):

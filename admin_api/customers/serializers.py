@@ -34,6 +34,10 @@ class AdminCustomerListSerializer(serializers.ModelSerializer):
     joined_on = serializers.DateTimeField(source="user.created_at", read_only=True)
     card_count = serializers.SerializerMethodField()
     order_count = serializers.SerializerMethodField()
+    recipient_allocation_count = serializers.SerializerMethodField()
+    activated_card_count = serializers.SerializerMethodField()
+    profile_status = serializers.CharField(source="status", read_only=True)
+    activation_status = serializers.SerializerMethodField()
 
     class Meta:
         model = Profile
@@ -50,6 +54,10 @@ class AdminCustomerListSerializer(serializers.ModelSerializer):
             "joined_on",
             "card_count",
             "order_count",
+            "recipient_allocation_count",
+            "activated_card_count",
+            "profile_status",
+            "activation_status",
         ]
         read_only_fields = fields
 
@@ -67,6 +75,15 @@ class AdminCustomerListSerializer(serializers.ModelSerializer):
     def get_order_count(self, obj):
         return obj.user.orders.count()
 
+    def get_recipient_allocation_count(self, obj):
+        return len(obj.user.order_recipients.all())
+
+    def get_activated_card_count(self, obj):
+        return sum(card.status == "ACTIVE" for card in obj.user.nfc_cards.all())
+
+    def get_activation_status(self, obj):
+        return "PENDING" if obj.user.must_change_password else "ACTIVATED"
+
 
 class AdminCustomerDetailSerializer(AdminCustomerListSerializer):
     """Adds full profile detail, social links, the customer's real NFC
@@ -81,20 +98,26 @@ class AdminCustomerDetailSerializer(AdminCustomerListSerializer):
     total_spent = serializers.SerializerMethodField()
     recent_orders = serializers.SerializerMethodField()
     transaction_summary = serializers.SerializerMethodField()
+    recipient_allocations = serializers.SerializerMethodField()
 
     class Meta(AdminCustomerListSerializer.Meta):
         fields = AdminCustomerListSerializer.Meta.fields + [
             "website",
             "address",
             "bio",
-            "profile_status",
             "social_links",
             "cards",
             "total_spent",
             "recent_orders",
             "transaction_summary",
+            "recipient_allocations",
         ]
         read_only_fields = fields
+
+    def get_recipient_allocations(self, obj):
+        from admin_api.orders.serializers import OrderRecipientSerializer
+
+        return OrderRecipientSerializer(obj.user.order_recipients.all(), many=True).data
 
     def get_social_links(self, obj):
         from profiles.serializers import SocialLinkSerializer

@@ -3,12 +3,12 @@
 # modules' convention would be an empty abstraction.
 from rest_framework.views import APIView
 
-from accounts.models import User
 from admin_api.permissions import IsAdminRole
 from common.response import success
 from nfc_cards.models import NfcCard
 from orders.models import Order
 
+from .customers.services import customer_profiles
 from .services import card_stats, customer_stats, days_ago, order_stats, trend_pct
 
 
@@ -22,15 +22,16 @@ class AdminDashboardView(APIView):
 
         cutoff30, cutoff60 = days_ago(30), days_ago(60)
 
-        customers_last30 = User.objects.filter(role=User.Role.CUSTOMER, created_at__gte=cutoff30).count()
-        customers_prev30 = User.objects.filter(
-            role=User.Role.CUSTOMER, created_at__gte=cutoff60, created_at__lt=cutoff30
+        customer_rows = customer_profiles()
+        customers_last30 = customer_rows.filter(user__created_at__gte=cutoff30).count()
+        customers_prev30 = customer_rows.filter(
+            user__created_at__gte=cutoff60, user__created_at__lt=cutoff30
         ).count()
 
         orders_last30 = Order.objects.filter(placed_at__gte=cutoff30).count()
         orders_prev30 = Order.objects.filter(placed_at__gte=cutoff60, placed_at__lt=cutoff30).count()
 
-        non_cancelled = Order.objects.exclude(status=Order.Status.CANCELLED)
+        non_cancelled = Order.objects.filter(payment_status=Order.PaymentStatus.PAID).exclude(status=Order.Status.CANCELLED)
         revenue_last30 = sum((o.total for o in non_cancelled.filter(placed_at__gte=cutoff30)), start=0)
         revenue_prev30 = sum(
             (o.total for o in non_cancelled.filter(placed_at__gte=cutoff60, placed_at__lt=cutoff30)), start=0
@@ -50,6 +51,10 @@ class AdminDashboardView(APIView):
             "active_customers": customers["active"],
             "total_cards": cards["total"],
             "activated_cards": cards["active"],
+            "assigned_cards": cards["allocated"],
+            "available_inventory": cards["available"],
+            "purchased_cards": orders["cards_purchased"],
+            "paid_purchaser_count": orders["purchasers"],
             "total_orders": orders["total"],
             "pending_orders": orders["pending"],
             "total_revenue": orders["revenue"],

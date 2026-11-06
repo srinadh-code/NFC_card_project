@@ -5,16 +5,18 @@ from accounts.models import User
 from admin_api.permissions import IsAdminRole
 from common.pagination import StandardPagination
 from common.response import error, success
-from profiles.models import Profile
 
 from .serializers import AdminCustomerDetailSerializer, AdminCustomerListSerializer
+from .services import customer_profiles
+
+
 
 
 class AdminCustomerListView(APIView):
     permission_classes = [IsAdminRole] 
 
     def get(self, request):
-        qs = Profile.objects.select_related("user").filter(user__role=User.Role.CUSTOMER)
+        qs = customer_profiles()
 
         search = request.query_params.get("search", "").strip()
         if search:
@@ -42,8 +44,8 @@ class AdminCustomerDetailView(APIView):
 
     def get(self, request, pk):
         profile = (
-            Profile.objects.select_related("user")
-            .prefetch_related("social_links", "user__nfc_cards", "user__orders")
+            customer_profiles()
+            .prefetch_related("social_links")
             .filter(user_id=pk, user__role=User.Role.CUSTOMER)
             .first()
         )

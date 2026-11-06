@@ -1,10 +1,11 @@
 # Order business rules kept out of the views — status transitions and card
 # fulfilment both touch more than one field/model atomically, so they live
 # here as plain functions the views call and wrap in a transaction.
+from django.db import transaction
 from django.utils import timezone
 
 from nfc_cards.models import NfcCard
-from orders.models import Order
+from orders.models import Order, OrderRecipient, Transaction
 
 STEP_FIELDS = ["placed_at", "confirmed_at", "shipped_at", "out_for_delivery_at", "delivered_at"]
 
@@ -43,31 +44,70 @@ def apply_status_transition(order, new_status):
     return order
 
 
-def assign_card_to_order(order, card):
-    """Ties a physical card to an order (and its customer) to fulfil it.
-    Only an unassigned card, or the card already fulfilling this exact
-    order (a no-op re-confirm), is eligible — reassigning frees the
-    previously-linked card back to stock."""
-    if order.status == Order.Status.CANCELLED:
+@transaction.atomic
+def assign_card_to_order(order, card, recipient_id=None):
+    """Assign real inventory to one paid allocation, with locked ownership.
+
+    Historical orders without recipient rows retain their original owner-based
+    fulfilment. New single-card orders may omit recipient_id; bulk orders must
+    identify the slot explicitly. Repeating the same assignment is a no-op.
+    """
+    locked_order = Order.objects.select_for_update().get(pk=order.pk)
+    if locked_order.status == Order.Status.CANCELLED:
         raise ValueError("Cannot assign a card to a cancelled order.")
-
-    already_this_order = order.assigned_card_id == card.id
-    if card.status != NfcCard.Status.UNASSIGNED and not already_this_order:
+    if locked_order.payment_status != Order.PaymentStatus.PAID or not Transaction.objects.filter(order=locked_order, status=Order.PaymentStatus.PAID).exists():
+        raise ValueError("A successful payment is required before assigning cards.")
+    card = NfcCard.objects.select_for_update().get(pk=card.pk)
+    recipients = list(OrderRecipient.objects.select_for_update().filter(order=locked_order))
+    recipient = None
+    if recipients:
+        if recipient_id is None and len(recipients) == 1:
+            recipient = recipients[0]
+        else:
+            recipient = next((r for r in recipients if r.pk == recipient_id), None)
+        if recipient is None:
+            raise ValueError("Choose a recipient belonging to this order.")
+        if recipient.user_id is None:
+            from accounts.onboarding import ensure_recipient_accounts
+            ensure_recipient_accounts(locked_order)
+            recipient.refresh_from_db()
+        owner_id = recipient.user_id
+        previous_id = recipient.assigned_card_id
+    else:
+        if recipient_id is not None:
+            raise ValueError("This order has no matching recipient allocation.")
+        owner_id = locked_order.customer_id
+        previous_id = locked_order.assigned_card_id
+    if previous_id == card.pk:
+        if card.user_id != owner_id:
+            raise ValueError("This card's owner conflicts with its allocation. Reconcile it before assignment.")
+        order.assigned_card_id = locked_order.assigned_card_id
+        return order
+    if previous_id is not None and recipient is not None:
+        raise ValueError("This recipient allocation already has a card.")
+    if card.status != NfcCard.Status.UNASSIGNED or card.user_id is not None:
         raise ValueError("This card is not available for assignment.")
-
-    previous_card = order.assigned_card
-    if previous_card and previous_card.id != card.id:
-        previous_card.user = None
-        previous_card.status = NfcCard.Status.UNASSIGNED
-        previous_card.assigned_on = None
-        previous_card.save(update_fields=["user", "status", "assigned_on", "updated_at"])
-
-    now = timezone.now()
-    card.user = order.customer
+    if OrderRecipient.objects.filter(assigned_card=card).exists() or Order.objects.filter(assigned_card=card).exclude(pk=locked_order.pk).exists():
+        raise ValueError("This card already fulfils another allocation.")
+    if previous_id is not None:
+        previous = NfcCard.objects.select_for_update().get(pk=previous_id)
+        if previous.status != NfcCard.Status.ASSIGNED:
+            raise ValueError("An activated or unavailable card cannot be replaced here.")
+        previous.user = None
+        previous.status = NfcCard.Status.UNASSIGNED
+        previous.assigned_on = None
+        previous.save(update_fields=["user", "status", "assigned_on", "updated_at"])
+    card.user_id = owner_id
     card.status = NfcCard.Status.ASSIGNED
-    card.assigned_on = now
+    card.assigned_on = timezone.now()
     card.save(update_fields=["user", "status", "assigned_on", "updated_at"])
-
-    order.assigned_card = card
-    order.save(update_fields=["assigned_card", "updated_at"])
+    if recipient is not None:
+        recipient.assigned_card = card
+        recipient.save(update_fields=["assigned_card", "updated_at"])
+    # Keep the existing one-card consumer contract, never point a bulk order
+    # at just one of its several recipients' cards.
+    if len(recipients) <= 1:
+        locked_order.assigned_card = card
+        locked_order.save(update_fields=["assigned_card", "updated_at"])
+    order.assigned_card_id = locked_order.assigned_card_id
     return order

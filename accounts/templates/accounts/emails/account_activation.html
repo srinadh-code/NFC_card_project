@@ -1,11 +1,12 @@
 {% extends "accounts/emails/base.html" %}
-{% block body %}<p style="margin:0 0 12px;font-size:15px;line-height:1.6;">Thank you for ordering your VR&#39;s Gateway NFC Card.</p>
+{% block body %}<p style="margin:0 0 12px;font-size:15px;line-height:1.6;">{% if is_recipient %}An NFC card has been ordered for you. Your recipient account is ready for setup.{% else %}Thank you for your order. Your purchaser account is ready so you can view your orders.{% endif %}</p>
 <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">Your order is now being processed.</p>
 <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">Your customer account is ready.</p>
 <p style="margin:0 0 12px;font-size:15px;line-height:1.6;"><strong>Username:</strong> {{ username }}</p>
 <p style="margin:0;font-size:15px;line-height:1.6;">Click below to create your password and activate your account.</p>{% endblock %}
-{% block footer_note %}<p style="margin:0 0 12px;font-size:14px;line-height:1.6;">After setting your password, you can log in to your VR&#39;s Gateway customer dashboard and manage your digital business profile.</p>
-<p style="margin:0 0 12px;font-size:14px;line-height:1.6;">Our designer will contact you within the next 24 hours to discuss your digital business profile design and customisation. Please be available to coordinate with our designer.</p>
+{% block footer_note %}<p style="margin:0 0 12px;font-size:14px;line-height:1.6;">After setting your password, you can log in to your VR&#39;s Gateway customer dashboard.{% if is_recipient %} You can manage your digital business profile there. Physical card assignment is managed separately.{% else %} Use your email address to sign in and view your order history.{% endif %}</p>
+{% if is_recipient %}<p style="margin:0 0 12px;font-size:14px;line-height:1.6;">Our designer will contact you within the next 24 hours to discuss your digital business profile design and customisation. Please be available to coordinate with our designer.</p>
 <p style="margin:0 0 12px;font-size:14px;line-height:1.6;">After activating your account and logging into your Customer Dashboard, please complete your digital profile by adding your personal details, business information, profile picture and social media links.</p>
+{% endif %}
 {% if order_number %}<p style="margin:0 0 12px;font-size:14px;line-height:1.6;"><strong>Order Number:</strong> {{ order_number }}</p>{% endif %}
 <p style="margin:0;font-size:14px;line-height:1.6;">Thank you,<br>VR&#39;s Gateway Team</p>{% endblock %}

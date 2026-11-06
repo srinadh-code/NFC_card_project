@@ -94,7 +94,7 @@ class AdminCardWriteSerializer(serializers.Serializer):
         value = value.strip().lower()
         if not value:
             return value
-        customer = User.objects.filter(email=value, role=User.Role.CUSTOMER).first()
+        customer = User.objects.filter(email__iexact=value, role=User.Role.CUSTOMER).first()
         if customer is None:
             raise serializers.ValidationError("No customer account found with that email.")
         return value
@@ -105,7 +105,7 @@ class AdminCardAssignSerializer(serializers.Serializer):
 
     def validate_email(self, value):
         value = value.strip().lower()
-        customer = User.objects.filter(email=value, role=User.Role.CUSTOMER).first()
+        customer = User.objects.filter(email__iexact=value, role=User.Role.CUSTOMER).first()
         if customer is None:
             raise serializers.ValidationError("No customer account found with that email.")
         return value

@@ -22,6 +22,7 @@ from .cards.views import (
 )
 from .customers.views import AdminCustomerDetailView, AdminCustomerListView
 from .dashboard import AdminDashboardView
+from .purchasers.views import AdminPurchaserDetailView, AdminPurchaserListView
 from .orders.views import (
     AdminOrderAssignCardView,
     AdminOrderDetailView,
@@ -66,6 +67,9 @@ from .transactions.views import (
 
 urlpatterns = [
     path("dashboard/", AdminDashboardView.as_view(), name="admin-dashboard"),
+    # Paid purchasers are separate from the recipient/customer directory.
+    path("purchasers/", AdminPurchaserListView.as_view(), name="admin-purchasers"),
+    path("purchasers/<int:pk>/", AdminPurchaserDetailView.as_view(), name="admin-purchaser-detail"),
     # Customers
     path("customers/", AdminCustomerListView.as_view(), name="admin-customers"),
     path("customers/<int:pk>/", AdminCustomerDetailView.as_view(), name="admin-customer-detail"),

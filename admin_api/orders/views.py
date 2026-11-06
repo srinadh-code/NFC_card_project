@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from rest_framework.views import APIView
 
 from accounts import onboarding
@@ -10,7 +10,7 @@ from admin_api.permissions import IsAdminRole
 from common.pagination import StandardPagination
 from common.response import error, success
 from nfc_cards.models import NfcCard
-from orders.models import Order, OrderItem, Transaction
+from orders.models import Order, OrderItem, OrderRecipient, Transaction
 
 from .serializers import (
     AdminOrderAssignCardSerializer,
@@ -21,11 +21,18 @@ from .serializers import (
 from .services import assign_card_to_order, apply_status_transition
 
 
+def admin_order_queryset():
+    recipient_rows = OrderRecipient.objects.select_related("user__onboarding", "profile", "assigned_card")
+    return Order.objects.select_related("customer__onboarding", "checkout_session").prefetch_related(
+        "items", Prefetch("recipients", queryset=recipient_rows)
+    )
+
+
 class AdminOrderListCreateView(APIView):
     permission_classes = [IsAdminRole]
 
     def get(self, request):
-        qs = Order.objects.select_related("customer", "checkout_session").prefetch_related("items", "recipients").all()
+        qs = admin_order_queryset()
 
         search = request.query_params.get("search", "").strip()
         if search:
@@ -91,8 +98,7 @@ class AdminOrderDetailView(APIView):
 
     def get(self, request, pk):
         order = (
-            Order.objects.select_related("customer", "customer__onboarding", "checkout_session")
-            .prefetch_related("items", "recipients")
+            admin_order_queryset()
             .filter(pk=pk)
             .first()
         )
@@ -104,8 +110,9 @@ class AdminOrderDetailView(APIView):
 class AdminOrderStatusView(APIView):
     permission_classes = [IsAdminRole]
 
+    @transaction.atomic
     def post(self, request, pk):
-        order = Order.objects.filter(pk=pk).first()
+        order = Order.objects.select_for_update().filter(pk=pk).first()
         if order is None:
             return error("Order not found.", status=404)
 
@@ -167,7 +174,7 @@ class AdminOrderAssignCardView(APIView):
             return error("Card not found.", status=404)
 
         try:
-            assign_card_to_order(order, card)
+            assign_card_to_order(order, card, recipient_id=serializer.validated_data.get("recipient_id"))
         except ValueError as exc:
             return error(str(exc), status=400)
 

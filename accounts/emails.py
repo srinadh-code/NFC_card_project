@@ -1,5 +1,6 @@
 import logging
 from urllib.parse import quote
+from html import escape
 
 import requests
 from django.conf import settings
@@ -39,42 +40,34 @@ logger = logging.getLogger("accounts.email")
 
 
 def send_order_confirmation_email(user, order):
-    """Order confirmation — the one place a Track Order link is ever
-    emailed. Sent through Django's mail path (admin-configured SMTP from
-    Settings > Email when set, console backend locally otherwise) rather
-    than Brevo. The link embeds order.tracking_token — the same secure,
-    backend-generated credential PublicOrderTrackingView requires (see
-    orders/models.py) — so the customer never sees or has to handle the
-    token itself, only a clickable link. Never raises: this fires
-    synchronously from orders/signals.py inside the same request/transaction
-    that creates the order, and a mail failure must never block placing it.
-    """
-    order_number = f"ORD{order.pk:06d}"
-    tracking_link = f"{settings.FRONTEND_URL}/track-order?order={order_number}&token={order.tracking_token}"
-    greeting = user.full_name or user.email
+    """Send the purchaser a private tracking link after the order commits.
 
-    connection, from_email = _email_connection_and_sender()
+    Reuse the existing Brevo/SMTP delivery and never include recipient
+    account credentials. The checkout contact snapshot stays authoritative.
+    """
+    from .onboarding import send_email
+
+    order_number = order.order_number or f"ORD{order.pk:06d}"
+    tracking_link = f"{settings.FRONTEND_URL}/track-order?order=ORD{order.pk:06d}&token={order.tracking_token}"
+    greeting = order.purchaser_name or user.full_name or user.email
+    text = (
+        f"Hi {greeting},\n\n"
+        f"Thanks for your order - {order_number} has been placed.\n\n"
+        f"Track your order:\n{tracking_link}\n\n"
+        "This link is private to your order - please don't share it."
+    )
+    html = (
+        f"<p>Hi {escape(greeting)},</p>"
+        f"<p>Thanks for your order - <strong>{escape(order_number)}</strong> has been placed.</p>"
+        f'<p><a href="{escape(tracking_link)}">Track Your Order</a></p>'
+        "<p>This link is private to your order - please don't share it.</p>"
+    )
     try:
-        send_mail(
-            subject=f"Your VR's GATEWAY order {order_number} is confirmed",
-            message=(
-                f"Hi {greeting},\n\n"
-                f"Thanks for your order — {order_number} has been placed.\n\n"
-                f"Track your order:\n{tracking_link}\n\n"
-                "This link is private to your order — please don't share it."
-            ),
-            from_email=from_email,
-            recipient_list=[user.email],
-            fail_silently=False,
-            connection=connection,
-            html_message=(
-                f"<p>Hi {greeting},</p>"
-                f"<p>Thanks for your order — <strong>{order_number}</strong> has been placed.</p>"
-                f'<p><a href="{tracking_link}">Track Your Order</a></p>'
-                "<p>This link is private to your order — please don't share it.</p>"
-            ),
+        return send_email(
+            order.purchaser_email or user.email,
+            f"Your VR's GATEWAY order {order_number} is confirmed",
+            html, text, f"purpose=order_confirmation order_id={order.pk}",
         )
-        return True
     except Exception:
         logger.exception("email.order_confirmation.send_failed order_id=%s", order.pk)
         return False

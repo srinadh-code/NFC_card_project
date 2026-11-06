@@ -63,6 +63,11 @@ class Order(models.Model):
     customer = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders"
     )
+    # Immutable checkout contacts; blank for historical orders.
+    purchaser_name = models.CharField(max_length=150, blank=True, default="")
+    purchaser_email = models.EmailField(blank=True, default="")
+    purchaser_phone = models.CharField(max_length=20, blank=True, default="")
+    delivery_phone = models.CharField(max_length=20, blank=True, default="")
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
 
     # Public-facing order code (see generate_order_number above) — the
@@ -230,6 +235,7 @@ class OrderRecipient(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="recipients")
     name = models.CharField(max_length=150)
     email = models.EmailField(db_index=True)
+    phone = models.CharField(max_length=20, null=True, blank=True, default="")
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -259,7 +265,11 @@ class OrderRecipient(models.Model):
     class Meta:
         ordering = ["order", "pk"]
         constraints = [
-            models.UniqueConstraint(fields=["order", "email"], name="unique_order_recipient_email"),
+            models.UniqueConstraint(
+                fields=["assigned_card"],
+                condition=models.Q(assigned_card__isnull=False),
+                name="unique_recipient_physical_card",
+            ),
         ]
 
     def __str__(self):

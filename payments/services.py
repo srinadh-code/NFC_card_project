@@ -5,11 +5,14 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.db import IntegrityError, transaction
+from django.db.models.functions import Lower
 from django.utils import timezone
 
 from accounts import onboarding
-from accounts.models import CustomerOnboarding
+from accounts.models import CustomerOnboarding, User
 from common.discounts import calculate_first_order_discount, get_catalog_product
 from customer_management.customer_addresses import pincode as pincode_service
 from customer_management.customer_addresses.models import CustomerAddress
@@ -23,7 +26,7 @@ from .models import CheckoutSession, CheckoutVerification
 
 logger = logging.getLogger("payments")
 
-MAX_LINE_QUANTITY = 100
+MAX_LINE_QUANTITY = 10
 ADDRESS_FIELDS = (
     "address_line1",
     "address_line2",
@@ -54,11 +57,11 @@ def guest_lines(items):
         raise CheckoutError("Your cart is empty.")
     lines = []
     for raw in items:
-        product_id = str((raw or {}).get("product_id", "")).strip()
-        try:
-            qty = int((raw or {}).get("qty", 0))
-        except (TypeError, ValueError):
-            qty = 0
+        if not isinstance(raw, dict):
+            raise CheckoutError("Each cart item must be an object.")
+        product_id = str(raw.get("product_id", "")).strip()
+        raw_qty = raw.get("qty", 0)
+        qty = int(raw_qty) if type(raw_qty) is int or (isinstance(raw_qty, str) and re.fullmatch(r"[0-9]+", raw_qty)) else 0
         if qty < 1 or qty > MAX_LINE_QUANTITY:
             raise CheckoutError(f"Quantity must be between 1 and {MAX_LINE_QUANTITY}.")
         product = get_catalog_product(None, product_id) if product_id else None
@@ -124,79 +127,77 @@ def normalize_recipient_email(value):
 
 
 def validate_recipients(raw_recipients, total_quantity):
-    """Validates bulk-order recipient data before payment. Returns a clean,
-    normalized list of {full_name, email} or raises CheckoutError.
+    """One validated allocation per card, including single-card orders.
+
+    Repeated emails intentionally remain separate allocations. Identity reuse
+    happens only when provisioning accounts after verified payment.
     """
-    if total_quantity not in (3, 5):
-        if raw_recipients is not None and not isinstance(raw_recipients, list):
-            raise CheckoutError("Recipient details are invalid.", errors={"recipients": ["Invalid."]}, status=400)
-        if isinstance(raw_recipients, list) and raw_recipients:
-            raise CheckoutError(
-                "Recipients are only supported for Buy 3 and Buy 5 orders.",
-                errors={"recipients": ["This order quantity does not use recipient details."]},
-                status=400,
-            )
-        return []
-
-    if raw_recipients is None or raw_recipients == []:
+    if type(total_quantity) is not int or not 1 <= total_quantity <= MAX_LINE_QUANTITY:
+        raise CheckoutError("Choose between 1 and 10 cards.", errors={"quantity": ["Must be an integer from 1 to 10."]})
+    if not isinstance(raw_recipients, list) or len(raw_recipients) != total_quantity:
         raise CheckoutError(
-            "Recipient details are required for bulk orders.",
-            errors={"recipients": ["Required for this order quantity."]},
-            status=400,
+            "Enter recipient details for every card.",
+            errors={"recipients": [f"Exactly {total_quantity} recipient entries are required."]},
         )
-    if not isinstance(raw_recipients, list):
-        raise CheckoutError("Recipient details are invalid.", errors={"recipients": ["Invalid."]}, status=400)
-    if len(raw_recipients) != total_quantity:
-        raise CheckoutError(
-            "The number of recipients must match the purchased quantity.",
-            errors={"recipients": ["Recipient count does not match the order quantity."]},
-            status=400,
-        )
-
     cleaned = []
-    seen = set()
-    for index, raw in enumerate(raw_recipients):
+    for index, raw in enumerate(raw_recipients, start=1):
         if not isinstance(raw, dict):
-            raise CheckoutError(
-                "Recipient details are invalid.",
-                errors={"recipients": [f"Item at index {index} is invalid."]},
-                status=400,
-            )
-        name = str(raw.get("full_name", "")).strip()
-        email = normalize_recipient_email(raw.get("email"))
-        if not name:
-            raise CheckoutError(
-                "Each recipient must have a full name.",
-                errors={"recipients": [f"Recipient {index + 1} is missing a name."]},
-                status=400,
-            )
-        if not email:
-            raise CheckoutError(
-                "Each recipient must have an email address.",
-                errors={"recipients": [f"Recipient {index + 1} is missing an email."]},
-                status=400,
-            )
-        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
-            raise CheckoutError(
-                "Please enter valid recipient email addresses.",
-                errors={"recipients": [f"Recipient {index + 1} has an invalid email."]},
-                status=400,
-            )
-        if email in seen:
-            raise CheckoutError(
-                "Duplicate recipient email addresses are not allowed in the same order.",
-                errors={"recipients": ["Duplicate email found."]},
-                status=400,
-            )
-        seen.add(email)
-        cleaned.append({"full_name": name, "email": email})
+            raise CheckoutError("Recipient details are invalid.", errors={"recipients": [f"Recipient {index} is invalid."]})
+        name = raw.get("full_name", "")
+        email = raw.get("email", "")
+        phone = raw.get("phone", "")
+        name = name.strip() if isinstance(name, str) else ""
+        email = normalize_recipient_email(email) if isinstance(email, str) else ""
+        phone = phone.strip() if isinstance(phone, str) else ""
+        errors = {}
+        if not name or len(name) > 150 or not any(c.isalpha() for c in name) or any(ord(c) < 32 or ord(c) == 127 for c in name):
+            errors["full_name"] = ["Enter a full name of at most 150 characters."]
+        try:
+            validate_email(email)
+            if len(email) > 254:
+                raise ValidationError("Email too long")
+        except ValidationError:
+            errors["email"] = ["Enter a valid email address."]
+        digits = re.sub(r"\D", "", phone)
+        if not re.fullmatch(r"\+?[0-9 ().-]+", phone) or not 7 <= len(digits) <= 15 or len(phone) > 20:
+            errors["phone"] = ["Enter a phone number with 7 to 15 digits; a country code is allowed."]
+        if errors:
+            raise CheckoutError(f"Please check recipient {index}.", errors={"recipients": {str(index - 1): errors}})
+        cleaned.append({"full_name": name, "email": email, "phone": ("+" if phone.startswith("+") else "") + digits})
+    if User.objects.filter(role=User.Role.ADMIN).annotate(normalized_email=Lower("email")).filter(normalized_email__in=[r["email"] for r in cleaned]).exists():
+        raise CheckoutError("An administrator account cannot be used as a card recipient. Please use a customer email.", errors={"recipients": ["Use customer email addresses for recipients."]})
     return cleaned
+
+
+def validate_purchaser_contact(raw, *, default_name="", default_phone=""):
+    """Validate contact snapshots without accepting a client-controlled identity.
+
+    Older authenticated clients omit the object; preserve their established
+    account/address fallback. New checkout forms send both required fields.
+    """
+    if raw is None:
+        return {"full_name": default_name, "phone": default_phone}
+    if not isinstance(raw, dict):
+        raise CheckoutError("Please check your purchaser details.", errors={"purchaser_contact": ["Enter a name and phone number."]})
+    name, phone = raw.get("full_name"), raw.get("phone")
+    name = name.strip() if isinstance(name, str) else ""
+    phone = phone.strip() if isinstance(phone, str) else ""
+    digits = re.sub(r"\D", "", phone)
+    errors = {}
+    if not name or len(name) > 150 or not any(c.isalpha() for c in name) or any(ord(c) < 32 or ord(c) == 127 for c in name):
+        errors["full_name"] = ["Enter your full name (up to 150 characters)."]
+    if not re.fullmatch(r"\+?[0-9 ().-]+", phone) or not 7 <= len(digits) <= 15 or len(phone) > 20:
+        errors["phone"] = ["Enter your phone number with 7 to 15 digits; a country code is allowed."]
+    if errors:
+        raise CheckoutError("Please check your purchaser details.", errors={"purchaser_contact": errors})
+    return {"full_name": name, "phone": ("+" if phone.startswith("+") else "") + digits}
 
 
 def create_checkout_session(
     *,
     customer=None,
     contact=None,
+    purchaser_contact=None,
     address=None,
     address_id=None,
     items=None,
@@ -251,8 +252,7 @@ def create_checkout_session(
         selected_offer_id = cart.applied_offer_id
         contact_values = {
             "email": customer.email,
-            "full_name": saved.full_name or customer.full_name,
-            "phone": saved.phone or customer.phone,
+            **validate_purchaser_contact(purchaser_contact, default_name=customer.full_name or saved.full_name, default_phone=customer.phone or saved.phone),
         }
         pricing_customer, assume_new = customer, False
         verified = {"email_verified": True, "phone_verified": False}
@@ -287,8 +287,13 @@ def create_checkout_session(
         # Priced for the account this email already has, if any; a brand-new
         # buyer has never ordered, so the first-order discount applies.
         pricing_customer = onboarding.find_customer_by_email(contact_values["email"])
+        if pricing_customer is not None and pricing_customer.role != User.Role.CUSTOMER:
+            raise CheckoutError("Please use a customer email address for this purchase.", errors={"contact": {"email": ["Administrator accounts cannot use customer checkout."]}})
         assume_new = pricing_customer is None
 
+    delivery_phone = saved.phone if customer is not None else (address or {}).get("phone", contact_values["phone"])
+    if not isinstance(delivery_phone, str) or not re.fullmatch(r"\+?[0-9 ().-]{7,20}", delivery_phone.strip()) or not 7 <= len(re.sub(r"\D", "", delivery_phone)) <= 15:
+        raise CheckoutError("A valid delivery phone number is required.", errors={"address": {"phone": ["Enter a phone number with 7 to 15 digits."]}})
     validated_recipients = validate_recipients(recipients, total_quantity)
 
     try:
@@ -307,6 +312,7 @@ def create_checkout_session(
         **address_values,
         lines=serialize_priced_lines(priced_items),
         recipients=validated_recipients,
+        delivery_phone=delivery_phone.strip(),
         promo_code=promo_code,
         subtotal=subtotal,
         first_order_discount_percentage=first_order["percentage"],
@@ -342,7 +348,7 @@ def _provision_user(session):
         return session.customer, False
     try:
         with transaction.atomic():
-            return onboarding.provision_customer(email=session.email, full_name=session.full_name, phone=session.phone)
+            return onboarding.provision_customer(email=session.email, full_name=session.full_name, phone=session.phone, create_profile=False, email_verified=True)
     except IntegrityError:
         return onboarding.find_customer_by_email(session.email), False
 
@@ -367,6 +373,10 @@ def _fulfill(session, *, via, payment_ref=None):
 
     order = Order(
         customer=user,
+        purchaser_name=session.full_name,
+        purchaser_email=session.email,
+        purchaser_phone=session.phone,
+        delivery_phone=session.delivery_phone or session.phone,
         amount=session.amount,
         first_order_discount_percentage=session.first_order_discount_percentage,
         first_order_discount_amount=session.first_order_discount_amount,
@@ -397,24 +407,14 @@ def _fulfill(session, *, via, payment_ref=None):
             for line in session.lines
         ]
     )
-    if session.recipients:
-        recipient_rows = []
-        for recipient in session.recipients:
-            email = normalize_recipient_email(recipient["email"])
-            full_name = str(recipient.get("full_name", "")).strip()
-            recipient_user = onboarding.find_customer_by_email(email)
-            if recipient_user is None:
-                recipient_user, _ = onboarding.provision_customer(email=email, full_name=full_name, phone="")
-            CustomerOnboarding.objects.filter(user=recipient_user, source_order__isnull=True).update(source_order=order)
-            recipient_rows.append(
-                OrderRecipient(
-                    order=order,
-                    name=full_name,
-                    email=email,
-                    user=recipient_user,
-                )
-            )
-        OrderRecipient.objects.bulk_create(recipient_rows)
+    # Older in-flight single-card sessions may have no recipient snapshot.
+    # Keep their original purchaser-as-recipient meaning without rewriting history.
+    recipients = session.recipients or [{"full_name": session.full_name, "email": session.email, "phone": session.phone}]
+    OrderRecipient.objects.bulk_create([
+        OrderRecipient(order=order, name=recipient["full_name"], email=normalize_recipient_email(recipient["email"]), phone=recipient.get("phone", ""))
+        for recipient in recipients
+    ])
+    onboarding.ensure_recipient_accounts(order)
     Transaction.objects.create(order=order, amount=session.total, method=method, status=Order.PaymentStatus.PAID)
 
     if account_created:
@@ -422,7 +422,7 @@ def _fulfill(session, *, via, payment_ref=None):
             customer=user,
             label="Home",
             full_name=session.full_name,
-            phone=session.phone,
+            phone=session.delivery_phone or session.phone,
             is_default=True,
             latitude=session.latitude,
             longitude=session.longitude,

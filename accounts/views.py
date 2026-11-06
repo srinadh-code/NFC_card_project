@@ -574,7 +574,7 @@ class GoogleLoginView(APIView):
         with transaction.atomic():
             user = User.objects.filter(google_id=google_id).first()
             if user is None:
-                user = User.objects.filter(email=email).first()
+                user = User.objects.filter(email__iexact=email).first()
 
             created = user is None
             if created and not getattr(settings, "PUBLIC_REGISTRATION_ENABLED", False):
@@ -613,7 +613,10 @@ class GoogleLoginView(APIView):
             if update_fields:
                 user.save(update_fields=update_fields)
 
-            Profile.ensure_for_user(user)
+            # Signing in to purchase or view order history is not a card
+            # allocation. Preserve profiles for legacy users and recipients.
+            if created or Profile.objects.filter(user=user).exists() or user.order_recipients.exists() or user.nfc_cards.exists() or user.orders.filter(recipients__isnull=True).exists():
+                Profile.ensure_for_user(user)
 
         # An account created from a paid order must finish its emailed
         # temporary-password setup first — Google can't skip that step.

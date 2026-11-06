@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework.views import APIView
@@ -7,6 +8,7 @@ from admin_api.permissions import IsAdminRole
 from common.pagination import StandardPagination
 from common.response import error, success
 from nfc_cards.models import NfcCard
+from orders.models import Order, OrderRecipient
 
 from .serializers import (
     AdminCardAssignSerializer,
@@ -22,7 +24,7 @@ def _resolve_customer(email):
     guaranteed to match an existing CUSTOMER account."""
     if not email:
         return None
-    return User.objects.get(email=email, role=User.Role.CUSTOMER)
+    return User.objects.get(email__iexact=email, role=User.Role.CUSTOMER)
 
 
 class AdminCardListCreateView(APIView):
@@ -50,6 +52,7 @@ class AdminCardListCreateView(APIView):
         page = paginator.paginate_queryset(qs, request)
         return paginator.get_paginated_response(NfcCardAdminSerializer(page, many=True).data)
 
+    @transaction.atomic
     def post(self, request):
         serializer = AdminCardWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -77,14 +80,19 @@ class AdminCardListCreateView(APIView):
 class AdminCardDetailView(APIView):
     permission_classes = [IsAdminRole]
 
+    @transaction.atomic
     def patch(self, request, pk):
-        card = NfcCard.objects.filter(pk=pk).first()
+        card = NfcCard.objects.select_for_update().filter(pk=pk).first()
         if card is None:
             return error("Card not found.", status=404)
 
         serializer = AdminCardWriteSerializer(data=request.data, existing_card=card, partial=True)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        linked = OrderRecipient.objects.filter(assigned_card=card).exists() or Order.objects.filter(assigned_card=card).exists()
+        new_owner = _resolve_customer(data["customer_email"]) if "customer_email" in data else card.user
+        if linked and ((new_owner.pk if new_owner else None) != card.user_id or data.get("status") == NfcCard.Status.UNASSIGNED):
+            return error("This card belongs to an order allocation; its recipient cannot be changed here.", status=400)
 
         update_fields = []
         for field in ("uid", "serial_number", "card_type", "color", "status", "purchase_date", "notes"):
@@ -101,8 +109,9 @@ class AdminCardDetailView(APIView):
 
         return success(NfcCardAdminSerializer(card).data, message="Card updated.")
 
+    @transaction.atomic
     def delete(self, request, pk):
-        card = NfcCard.objects.filter(pk=pk).first()
+        card = NfcCard.objects.select_for_update().filter(pk=pk).first()
         if card is None:
             return error("Card not found.", status=404)
         card.delete()
@@ -114,14 +123,21 @@ class AdminCardAssignView(APIView):
 
     permission_classes = [IsAdminRole]
 
+    @transaction.atomic
     def post(self, request, pk):
-        card = NfcCard.objects.filter(pk=pk).first()
+        card = NfcCard.objects.select_for_update().filter(pk=pk).first()
         if card is None:
             return error("Card not found.", status=404)
 
         serializer = AdminCardAssignSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         customer = _resolve_customer(serializer.validated_data["email"])
+        if card.user_id == customer.pk and card.status != NfcCard.Status.UNASSIGNED:
+            return success(NfcCardAdminSerializer(card).data, message="Card is already assigned to this customer.")
+        if card.user_id is not None or card.status != NfcCard.Status.UNASSIGNED:
+            return error("This card is not available for assignment.", status=400)
+        if OrderRecipient.objects.filter(assigned_card=card).exists() or Order.objects.filter(assigned_card=card).exists():
+            return error("This card already fulfils an order allocation.", status=400)
 
         card.user = customer
         card.status = NfcCard.Status.ASSIGNED
@@ -135,13 +151,16 @@ class AdminCardActivateView(APIView):
 
     permission_classes = [IsAdminRole]
 
+    @transaction.atomic
     def post(self, request, pk):
-        card = NfcCard.objects.filter(pk=pk).first()
+        card = NfcCard.objects.select_for_update().filter(pk=pk).first()
         if card is None:
             return error("Card not found.", status=404)
 
+        if card.user_id is None:
+            return error("Assign this card to a recipient before activation.", status=400)
         card.status = NfcCard.Status.ACTIVE
-        card.activated_on = timezone.now()
+        card.activated_on = card.activated_on or timezone.now()
         card.save(update_fields=["status", "activated_on", "updated_at"])
         return success(NfcCardAdminSerializer(card).data, message="Card activated.")
 
@@ -149,8 +168,9 @@ class AdminCardActivateView(APIView):
 class AdminCardBlockView(APIView):
     permission_classes = [IsAdminRole]
 
+    @transaction.atomic
     def post(self, request, pk):
-        card = NfcCard.objects.filter(pk=pk).first()
+        card = NfcCard.objects.select_for_update().filter(pk=pk).first()
         if card is None:
             return error("Card not found.", status=404)
 
@@ -162,8 +182,9 @@ class AdminCardBlockView(APIView):
 class AdminCardMarkLostView(APIView):
     permission_classes = [IsAdminRole]
 
+    @transaction.atomic
     def post(self, request, pk):
-        card = NfcCard.objects.filter(pk=pk).first()
+        card = NfcCard.objects.select_for_update().filter(pk=pk).first()
         if card is None:
             return error("Card not found.", status=404)
 

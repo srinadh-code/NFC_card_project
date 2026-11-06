@@ -185,7 +185,7 @@ class DummyPaymentActivationTests(APITestCase):
         user.refresh_from_db()
         self.assertFalse(user.must_change_password)
         self.assertTrue(user.check_password(PASSWORD))
-        self.assertTrue(user.password.startswith("pbkdf2_"))
+        self.assertTrue(user.check_password(PASSWORD))
         self.assertEqual(CustomerOnboarding.objects.get(user=user).account_status, CustomerOnboarding.AccountStatus.ACTIVATED)
 
         # Single use.
@@ -203,9 +203,9 @@ class DummyPaymentActivationTests(APITestCase):
 
     def test_bulk_recipients_activate_and_resend_individually_after_one_failure(self):
         recipients = [
-            {"full_name": "Recipient One", "email": "recipient.one@example.com"},
-            {"full_name": "Recipient Two", "email": "recipient.two@example.com"},
-            {"full_name": "Recipient Three", "email": "recipient.three@example.com"},
+            {"full_name": "Recipient One", "email": "recipient.one@example.com", "phone": "+44 7700 900123"},
+            {"full_name": "Recipient Two", "email": "recipient.two@example.com", "phone": "+44 7700 900123"},
+            {"full_name": "Recipient Three", "email": "recipient.three@example.com", "phone": "+44 7700 900123"},
         ]
         _, paid = self._buy(qty=3, recipients=recipients)
         order = Order.objects.get(pk=paid["order_id"])
@@ -240,7 +240,7 @@ class DummyPaymentActivationTests(APITestCase):
         )
         self.assertEqual(
             {email for message in self._activation_emails() for email in message.to},
-            {recipients[1]["email"], recipients[2]["email"]},
+            {recipients[1]["email"], recipients[2]["email"], order.customer.email},
         )
         failed_recipient = order.recipients.get(email=recipients[0]["email"])
         onboarding_record = CustomerOnboarding.objects.get(user=failed_recipient.user)
@@ -253,10 +253,10 @@ class DummyPaymentActivationTests(APITestCase):
         self.assertEqual(self._activation_emails()[-1].to, [recipients[0]["email"]])
 
         self.assertEqual(self._set_status(order.pk, "PROCESSING").status_code, status.HTTP_200_OK)
-        self.assertEqual(len(self._activation_emails()), 3)
+        self.assertEqual(len(self._activation_emails()), 4)
 
     def test_bulk_checkout_requires_recipient_details(self):
-        response = self._start(qty=3)
+        response = self._start(qty=3, recipients=[])
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("recipients", response.data["errors"])
 

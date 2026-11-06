@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 
 from accounts import onboarding
 from accounts.models import CustomerOnboarding, User
-from payments.services import CheckoutError, validate_recipients
+from payments.services import CheckoutError, validate_purchaser_contact, validate_recipients
 
 from admin_api.orders.services import apply_status_transition
 from common.discounts import calculate_first_order_discount
@@ -51,6 +51,10 @@ class CustomerOrderListCreateView(APIView):
         serializer = CustomerOrderCreateSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        # Online payment proof belongs to payments.verify/webhook, never to
+        # a client-controlled payment_method. This legacy route supports COD.
+        if data["payment_method"] != Order.PaymentMethod.COD:
+            return error("Start checkout and verify payment through the payments API.", errors={"code": "verified_payment_required"}, status=400)
 
         # Empty string (the serializer default) means "no key supplied" —
         # normalize to None so it lines up with the model's NULL-means-none
@@ -115,7 +119,13 @@ class CustomerOrderListCreateView(APIView):
             )
 
         shipping = data.get("shipping") or Decimal("0")
+        if not address.phone.strip():
+            return error("A delivery phone number is required.", errors={"address_id": ["Add a delivery phone number."]}, status=400)
         shipping_snapshot = compose_shipping_snapshot(address)
+        try:
+            purchaser_contact = validate_purchaser_contact(data.get("purchaser_contact"), default_name=request.user.full_name, default_phone=request.user.phone)
+        except CheckoutError as exc:
+            return error(exc.message, errors=exc.errors, status=exc.status)
 
         try:
             with transaction.atomic():
@@ -136,13 +146,17 @@ class CustomerOrderListCreateView(APIView):
 
                 order = Order.objects.create(
                     customer=request.user,
+                    purchaser_name=purchaser_contact["full_name"],
+                    purchaser_email=request.user.email,
+                    purchaser_phone=purchaser_contact["phone"],
+                    delivery_phone=address.phone,
                     idempotency_key=idempotency_key,
                     amount=final_amount,
                     first_order_discount_percentage=first_order["percentage"],
                     first_order_discount_amount=first_order["discount_amount"] if first_order["is_first_order"] else None,
                     shipping=shipping,
                     payment_method=data["payment_method"],
-                    payment_status=Order.PaymentStatus.PAID,
+                    payment_status=Order.PaymentStatus.PENDING,
                     **shipping_snapshot,
                 )
                 OrderItem.objects.bulk_create(
@@ -170,44 +184,24 @@ class CustomerOrderListCreateView(APIView):
                     order=order,
                     amount=final_amount + shipping,
                     method=data["payment_method"],
-                    status=Order.PaymentStatus.PAID,
+                    status=Order.PaymentStatus.PENDING,
                 )
-                for recipient in recipient_details:
-                    recipient_user = onboarding.find_customer_by_email(recipient["email"])
-                    if recipient_user is None:
-                        try:
-                            with transaction.atomic():
-                                recipient_user, _ = onboarding.provision_customer(
-                                    email=recipient["email"],
-                                    full_name=recipient["full_name"],
-                                    phone="",
-                                )
-                        except IntegrityError:
-                            recipient_user = onboarding.find_customer_by_email(recipient["email"])
-                            if recipient_user is None:
-                                raise
-
-                    from profiles.models import Profile
-
-                    profile = Profile.ensure_for_user(recipient_user)
-                    if recipient_user.must_change_password:
-                        onboarding_record, _ = CustomerOnboarding.objects.get_or_create(user=recipient_user)
-                        if onboarding_record.source_order_id is None:
-                            onboarding_record.source_order = order
-                            onboarding_record.save(update_fields=["source_order"])
-                    OrderRecipient.objects.create(
-                        order=order,
-                        name=recipient["full_name"],
-                        email=recipient["email"],
-                        user=recipient_user,
-                        profile=profile,
-                    )
+                # Unpaid COD allocations are snapshots only. Accounts and
+                # profiles are linked after payment is recorded by admin.
+                OrderRecipient.objects.bulk_create([
+                    OrderRecipient(order=order, name=r["full_name"], email=r["email"], phone=r["phone"])
+                    for r in recipient_details
+                ])
         except IntegrityError:
             # Lost a race against another request carrying the exact same
             # key (two near-simultaneous submissions of the same attempt) —
             # the database's unique constraint is the actual guard here;
             # this just returns whichever order won instead of erroring.
-            existing = Order.objects.get(customer=request.user, idempotency_key=idempotency_key)
+            if idempotency_key is None:
+                raise
+            existing = Order.objects.filter(customer=request.user, idempotency_key=idempotency_key).first()
+            if existing is None:
+                raise
             return success(OrderSerializer(existing).data, message="Order placed.", status=200)
 
         # Only this customer's cart — clear_cart is scoped by

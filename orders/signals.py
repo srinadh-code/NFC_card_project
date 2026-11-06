@@ -6,6 +6,7 @@
 # routed to nothing: it's a separate, unused table). Without this, "Order
 # Updates" notifications would only ever fire for an Order model no live
 # request ever creates a row in.
+from django.db import transaction
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
@@ -39,7 +40,12 @@ def _notify_on_order_change(sender, instance, created, **kwargs):
         # Order link (order.tracking_token) — see accounts/emails.py. Never
         # raises, so a mail-provider outage can't roll back order creation.
         if not getattr(instance, "_skip_confirmation_email", False):
-            send_order_confirmation_email(instance.customer, instance)
+            # Run after line items, recipients and the paid order commit.
+            order_id = instance.pk
+            def send_confirmation():
+                order = Order.objects.select_related("customer").prefetch_related("items").get(pk=order_id)
+                send_order_confirmation_email(order.customer, order)
+            transaction.on_commit(send_confirmation, robust=True)
         return
 
     previous_status = getattr(instance, "_previous_status", None)

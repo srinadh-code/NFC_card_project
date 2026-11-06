@@ -45,6 +45,7 @@ class GuestContactSerializer(serializers.Serializer):
 
 
 class GuestAddressSerializer(serializers.Serializer):
+    phone = serializers.RegexField(r"^\+?[0-9 ().-]{7,20}$", max_length=20, required=False)
     address_line1 = serializers.CharField(max_length=255)
     address_line2 = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
     landmark = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
@@ -101,6 +102,7 @@ class RazorpayCheckoutView(APIView):
             if customer is not None:
                 session = create_checkout_session(
                     customer=customer,
+                    purchaser_contact=request.data.get("purchaser_contact"),
                     address_id=request.data.get("address_id"),
                     recipients=request.data.get("recipients"),
                     provider=provider,

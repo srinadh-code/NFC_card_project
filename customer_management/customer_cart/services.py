@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+from django.db import transaction
+from django.db.models import Sum
 from rest_framework.exceptions import ValidationError
 
 from common.discounts import calculate_price, find_eligible_offer, get_catalog_product, get_product_price
@@ -24,6 +26,7 @@ def get_owned_item(user, pk):
     return CartItem.objects.filter(pk=pk, cart__customer=user).first()
 
 
+@transaction.atomic
 def add_item(user, data):
     """Adds a line to the user's own cart, merging into an existing
     matching (product_id, color_name) row by increasing its qty — mirrors
@@ -37,6 +40,10 @@ def add_item(user, data):
     from .serializers import MAX_LINE_QTY
 
     cart = get_or_create_cart(user)
+    cart = Cart.objects.select_for_update().get(pk=cart.pk)
+    total = cart.items.aggregate(total=Sum("qty"))["total"] or 0
+    if total + data["qty"] > MAX_LINE_QTY:
+        raise ValidationError({"qty": [f"A checkout can contain at most {MAX_LINE_QTY} cards."]})
     existing = CartItem.objects.filter(cart=cart, product_id=data["product_id"], color_name=data["color_name"]).first()
     qty = data["qty"] + (existing.qty if existing else 0)
     if qty > MAX_LINE_QTY:
@@ -56,6 +63,21 @@ def add_item(user, data):
         qty=qty,
         **snapshot,
     )
+
+
+@transaction.atomic
+def update_item_quantity(item, qty):
+    from .serializers import MAX_LINE_QTY
+
+    cart = Cart.objects.select_for_update().get(pk=item.cart_id)
+    item = CartItem.objects.get(pk=item.pk, cart=cart)
+    total = cart.items.exclude(pk=item.pk).aggregate(total=Sum("qty"))["total"] or 0
+    if total + qty > MAX_LINE_QTY:
+        raise ValidationError({"qty": [f"A checkout can contain at most {MAX_LINE_QTY} cards."]})
+    item.qty = qty
+    item.price = get_product_price(item.card_type, product_id=item.product_id, qty=qty) or item.price
+    item.save(update_fields=["qty", "price", "updated_at"])
+    return item
 
 
 def apply_promo_code(user, code):

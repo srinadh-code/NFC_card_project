@@ -1,6 +1,6 @@
 {% autoescape off %}Hello {{ customer_name }},
 
-Thank you for ordering your VR's Gateway NFC Card.
+{% if is_recipient %}An NFC card has been ordered for you. Your recipient account is ready for setup.{% else %}Thank you for your order. Your purchaser account is ready so you can view your orders.{% endif %}
 
 Your order is now being processed.
 
@@ -13,11 +13,12 @@ Click below to create your password and activate your account.
 Set Your Password: {{ action_url }}
 (This link can be used once and expires in {{ expires_text }}.)
 
-After setting your password, you can log in to your VR's Gateway customer dashboard and manage your digital business profile.
+After setting your password, you can log in to your VR's Gateway customer dashboard.{% if is_recipient %} You can manage your digital business profile there. Physical card assignment is managed separately.{% else %} Use your email address to sign in and view your order history.{% endif %}
 
-Our designer will contact you within the next 24 hours to discuss your digital business profile design and customisation. Please be available to coordinate with our designer.
+{% if is_recipient %}Our designer will contact you within the next 24 hours to discuss your digital business profile design and customisation. Please be available to coordinate with our designer.
 
 After activating your account and logging into your Customer Dashboard, please complete your digital profile by adding your personal details, business information, profile picture and social media links.
+{% endif %}
 {% if order_number %}
 Order Number: {{ order_number }}
 {% endif %}

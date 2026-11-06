@@ -45,7 +45,7 @@ class RegisterSerializer(serializers.Serializer):
 
     def validate_email(self, value):
         value = value.strip().lower()
-        if User.objects.filter(email=value).exists():
+        if User.objects.filter(email__iexact=value).exists():
             raise serializers.ValidationError("An account with this email already exists.")
         return value
 
@@ -84,11 +84,14 @@ def resolve_login_email(identifier):
     wrong username fails exactly like a wrong email)."""
     value = (identifier or "").strip()
     if "@" in value:
-        return value.lower()
+        # Preserve a legacy account's stored spelling for Django's exact
+        # natural-key authentication lookup, while matching case-insensitively.
+        existing = User.objects.filter(email__iexact=value).values_list("email", flat=True).first()
+        return existing or value.lower()
     from profiles.models import Profile
 
     profile = Profile.objects.filter(username__iexact=value).select_related("user").first()
-    return profile.user.email.lower() if profile else value.lower()
+    return profile.user.email if profile else value.lower()
 
 
 class LoginSerializer(serializers.Serializer):
