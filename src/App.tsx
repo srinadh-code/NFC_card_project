@@ -33,6 +33,8 @@ import Terms from "@/pages/public/Terms"
 
 import AdminDashboard from "@/pages/admin/Dashboard"
 import AdminCustomers from "@/pages/admin/Customers"
+import AdminPurchasers from "@/pages/admin/Purchasers"
+import AdminPurchaserDetails from "@/pages/admin/PurchaserDetails"
 import AdminAccountActivation from "@/pages/admin/AccountActivation"
 import AdminCustomerDetails from "@/pages/admin/CustomerDetails"
 import AdminCards from "@/pages/admin/Cards"
@@ -150,6 +152,8 @@ function App() {
           <Route path="/admin" element={<AdminLayout />}>
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="customers" element={<AdminCustomers />} />
+            <Route path="purchasers" element={<AdminPurchasers />} />
+            <Route path="purchasers/:id" element={<AdminPurchaserDetails />} />
             <Route path="account-activation" element={<AdminAccountActivation />} />
             <Route path="customers/:id" element={<AdminCustomerDetails />} />
             <Route path="cards" element={<AdminCards />} />

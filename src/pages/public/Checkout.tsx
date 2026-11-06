@@ -4,9 +4,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { AlertCircle, CheckCircle2, Info, Loader2, MapPin, Pencil, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AddressFormDialog } from "@/components/customer/AddressFormDialog"
 import { PinnedLocationLink } from "@/components/customer/PinnedLocationLink"
+import { validateRecipients, resizeRecipients, validCardQuantity, type CheckoutRecipient, type RecipientErrors } from "@/lib/checkout-recipients"
+import { useCheckoutVerificationStore } from "@/store/checkout-verification-store"
 import { BulkRecipientFields } from "@/components/checkout/BulkRecipientFields"
 import { OffersSection } from "@/components/checkout/OffersSection"
 import { DesignerContactNotice } from "@/components/checkout/DesignerContactNotice"
@@ -85,14 +88,17 @@ export default function Checkout() {
     total: cartTotal,
     promoCode,
     clearCart,
+    isLoading: cartLoading,
   } = useCart()
   const { settings } = usePublicSettings()
 
+  const [purchaserContact, setPurchaserContact] = useState({ full_name: customer?.name ?? "", phone: customer?.phone ?? "" })
+  const [purchaserErrors, setPurchaserErrors] = useState<RecipientErrors>({})
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
   const [selectorOpen, setSelectorOpen] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
-  const [bulkRecipients, setBulkRecipients] = useState<{ full_name: string; email: string }[]>([])
-  const [recipientErrors, setRecipientErrors] = useState<Array<{ full_name?: string; email?: string }>>([])
+  const { recipients: bulkRecipients, setRecipients: setBulkRecipients } = useCheckoutVerificationStore()
+  const [recipientErrors, setRecipientErrors] = useState<RecipientErrors[]>([])
   // Set -> the form dialog edits this address (e.g. to fix a PIN code that
   // failed verification); null -> it adds a new one.
   const [editingAddress, setEditingAddress] = useState<CustomerAddress | null>(null)
@@ -149,59 +155,25 @@ export default function Checkout() {
   const bulkRecipientCount = validLines.reduce((sum, line) => sum + line.qty, 0)
 
   useEffect(() => {
-    if (bulkRecipientCount !== 3 && bulkRecipientCount !== 5) {
-      setBulkRecipients([])
-      setRecipientErrors([])
-      return
-    }
-    setBulkRecipients((prev) =>
-      Array.from({ length: bulkRecipientCount }, (_, index) => prev[index] ?? { full_name: "", email: "" }),
-    )
-    setRecipientErrors((prev) => Array.from({ length: bulkRecipientCount }, (_, index) => prev[index] ?? {}))
-  }, [bulkRecipientCount])
+    if (!customer || cartLoading || !validCardQuantity(bulkRecipientCount)) return
+    if (bulkRecipients.length !== bulkRecipientCount) setBulkRecipients(resizeRecipients(bulkRecipients, bulkRecipientCount))
+  }, [customer, cartLoading, bulkRecipientCount, bulkRecipients, setBulkRecipients])
 
-  function updateBulkRecipient(index: number, field: "full_name" | "email", value: string) {
-    setBulkRecipients((prev) => {
-      const next = [...prev]
-      next[index] = { ...(next[index] ?? { full_name: "", email: "" }), [field]: value }
-      return next
-    })
-    setRecipientErrors((prev) => {
-      const next = [...prev]
-      next[index] = { ...(next[index] ?? {}), [field]: undefined }
-      return next
-    })
+  function updateBulkRecipient(index: number, field: keyof CheckoutRecipient, value: string) {
+    const next = [...bulkRecipients]
+    next[index] = { ...next[index], [field]: value }
+    setBulkRecipients(next)
+    setRecipientErrors((previous) => previous.map((entry, slot) => slot === index ? { ...entry, [field]: undefined } : entry))
   }
 
   function validateBulkRecipients() {
-    if (bulkRecipientCount !== 3 && bulkRecipientCount !== 5) return []
-
-    const cleaned: { full_name: string; email: string }[] = []
-    const errors: Array<{ full_name?: string; email?: string }> = Array.from({ length: bulkRecipientCount }, () => ({}))
-    const seen = new Set<string>()
-
-    for (let index = 0; index < bulkRecipientCount; index += 1) {
-      const current = bulkRecipients[index] ?? { full_name: "", email: "" }
-      const full_name = current.full_name.trim()
-      const email = current.email.trim().toLowerCase()
-
-      if (!full_name) errors[index].full_name = "Full Name is required."
-      if (!email) errors[index].email = "Email is required."
-      else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) errors[index].email = "Enter a valid email address."
-      else if (seen.has(email)) errors[index].email = "Duplicate email addresses are not allowed." 
-      else seen.add(email)
-
-      if (!errors[index].full_name && !errors[index].email) {
-        cleaned.push({ full_name, email })
-      }
-    }
-
-    setRecipientErrors(errors)
-    if (cleaned.length !== bulkRecipientCount) {
-      toast.error("Please complete every recipient field before continuing.")
+    const result = validateRecipients(bulkRecipients, bulkRecipientCount)
+    setRecipientErrors(result.errors)
+    if (!result.valid) {
+      toast.error("Please complete each recipient's name, valid email and phone number. Orders support 1 to 10 cards.")
       return null
     }
-    return cleaned
+    return result.recipients
   }
 
   const sub = subtotal()
@@ -251,15 +223,15 @@ export default function Checkout() {
     }
   }
 
-  async function payOnline(addressId: number, recipients: { full_name: string; email: string }[] = []) {
+  async function payOnline(addressId: number, recipients: CheckoutRecipient[], purchaser: { full_name: string; phone: string }) {
     setPaying(true)
     try {
       if (!paymentConfig.data?.enabled && paymentConfig.data?.dummy_enabled) {
         setDummyError(null)
-        setDummyCheckout(await paymentsApi.createCustomerCheckout(addressId, "dummy", recipients))
+        setDummyCheckout(await paymentsApi.createCustomerCheckout(addressId, "dummy", recipients, purchaser))
         return
       }
-      const checkout = await paymentsApi.createCustomerCheckout(addressId, "razorpay", recipients)
+      const checkout = await paymentsApi.createCustomerCheckout(addressId, "razorpay", recipients, purchaser)
       const paid = await payWithRazorpay(checkout, settings.site_name)
       finishOrder(await paymentsApi.verifyPayment(paid))
     } catch (err) {
@@ -352,16 +324,26 @@ export default function Checkout() {
       return
     }
 
+    if (!customer) return
+    const purchaserResult = validateRecipients([{ ...purchaserContact, email: customer.email }], 1)
+    setPurchaserErrors(purchaserResult.errors[0])
+    if (!purchaserResult.valid) {
+      toast.error("Enter the purchaser's full name and a valid phone number.")
+      return
+    }
+    const purchaser = { full_name: purchaserResult.recipients[0].full_name, phone: purchaserResult.recipients[0].phone }
+
     const bulkValidation = validateBulkRecipients()
     if (bulkValidation === null) return
 
     if (onlinePayment) {
-      payOnline(Number(selectedAddress.id), bulkValidation)
+      payOnline(Number(selectedAddress.id), bulkValidation, purchaser)
       return
     }
 
     placeOrderMutation.mutate({
       idempotency_key: idempotencyKey,
+      purchaser_contact: purchaser,
       items: validLines.map((l) => ({
         product_id: l.productId,
         name: l.name,
@@ -386,6 +368,30 @@ export default function Checkout() {
 
       <form onSubmit={handleSubmit} className="mt-8 grid gap-8 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          <section className="rounded-2xl border bg-card p-6 shadow-sm" aria-labelledby="purchaser-heading">
+            <h2 id="purchaser-heading" className="text-lg font-semibold text-foreground">Purchaser contact</h2>
+            <p className="mt-2 text-sm text-muted-foreground">Order confirmations go to your signed-in email. Delivery and recipient details are entered separately.</p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <label htmlFor="purchaser-name" className="text-sm font-medium">Full Name</label>
+                <Input id="purchaser-name" required autoComplete="billing name" value={purchaserContact.full_name}
+                  onChange={(event) => { setPurchaserContact((previous) => ({ ...previous, full_name: event.target.value })); setPurchaserErrors((previous) => ({ ...previous, full_name: undefined })) }}
+                  aria-invalid={Boolean(purchaserErrors.full_name)} />
+                {purchaserErrors.full_name && <p className="text-sm text-destructive">{purchaserErrors.full_name}</p>}
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="purchaser-email" className="text-sm font-medium">Email Address</label>
+                <Input id="purchaser-email" type="email" readOnly value={customer.email} autoComplete="billing email" />
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="purchaser-phone" className="text-sm font-medium">Phone Number</label>
+                <Input id="purchaser-phone" type="tel" required autoComplete="billing tel" value={purchaserContact.phone}
+                  onChange={(event) => { setPurchaserContact((previous) => ({ ...previous, phone: event.target.value })); setPurchaserErrors((previous) => ({ ...previous, phone: undefined })) }}
+                  aria-invalid={Boolean(purchaserErrors.phone)} />
+                {purchaserErrors.phone && <p className="text-sm text-destructive">{purchaserErrors.phone}</p>}
+              </div>
+            </div>
+          </section>
           <div className="rounded-2xl border bg-card p-6 shadow-sm">
             <div className="flex items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
@@ -451,6 +457,7 @@ export default function Checkout() {
                   {selectedAddress.state} - {selectedAddress.pincode}
                 </p>
                 <p>{selectedAddress.country}</p>
+                <p>Delivery phone: {selectedAddress.phone}</p>
                 <PinnedLocationLink address={selectedAddress} />
                 <div className="pt-2" aria-live="polite">
                   {verificationQuery.isFetching ? (
@@ -503,7 +510,7 @@ export default function Checkout() {
             ) : null}
           </div>
 
-          {(bulkRecipientCount === 3 || bulkRecipientCount === 5) && (
+          {bulkRecipientCount >= 1 && (
             <BulkRecipientFields
               count={bulkRecipientCount}
               recipients={bulkRecipients}
@@ -536,6 +543,7 @@ export default function Checkout() {
 
         <div className="h-fit rounded-2xl border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-foreground">Order Summary</h2>
+          {bulkRecipientCount > 0 && !validCardQuantity(bulkRecipientCount) && <p role="alert" className="mt-3 text-sm text-destructive">Orders support 1 to 10 cards. Update your cart quantity before checkout.</p>}
           <div className="mt-4 space-y-2 border-b pb-4 text-sm">
             {lines.map((l) => (
               <div key={l.lineId} className="flex justify-between text-muted-foreground">
@@ -572,7 +580,7 @@ export default function Checkout() {
             </div>
           </div>
           <DesignerContactNotice className="mt-6" />
-          <Button type="submit" size="lg" className="mt-4 w-full" disabled={!addressVerified || busy}>
+          <Button type="submit" size="lg" className="mt-4 w-full" disabled={!addressVerified || busy || !validCardQuantity(bulkRecipientCount)}>
             {busy ? (onlinePayment ? "Processing…" : "Placing Order…") : onlinePayment ? "Pay Now" : "Place Order"}
           </Button>
         </div>

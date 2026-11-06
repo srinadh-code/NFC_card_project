@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Search, Download, Eye, CheckCircle2, Circle, MapPin, PackageCheck, Nfc, Truck, Mail } from "lucide-react"
@@ -62,6 +63,15 @@ function errorMessage(err: unknown, fallback: string) {
   return err instanceof ApiError ? err.message : fallback
 }
 
+function canAssign(order: Order) {
+  return order.paymentStatus === "Paid" && order.status !== "Cancelled"
+    && (!(order.recipients?.length) || order.recipients.some((recipient) => !recipient.assignedCardId))
+}
+
+function cardStatusLabel(value?: string | null) {
+  return (value || "UNASSIGNED").toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
 function productSummary(order: Order) {
   const [first, ...rest] = order.items
   if (!first) return "—"
@@ -74,17 +84,28 @@ export default function AdminOrders() {
   const { settings } = usePublicSettings()
   const office = deriveOfficeAddress(settings)
 
-  const [search, setSearch] = useState("")
+  const [searchParams] = useSearchParams()
+  const linkedOrder = searchParams.get("order")
+  const linkedOrderId = linkedOrder && /^[1-9][0-9]*$/.test(linkedOrder) ? linkedOrder : null
+  const [search, setSearch] = useState(linkedOrderId ?? "")
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "All">("All")
   const [page, setPage] = useState(1)
   // Store just the id and always look the order up live from `orders` below
   // — a frozen local copy of the order would go stale the moment a mutation
   // (status change, card assignment) updates the store, since React Query
   // only patches its own cache, not any snapshot we'd copied out of it.
-  const [viewingId, setViewingId] = useState<string | null>(null)
+  const [viewingId, setViewingId] = useState<string | null>(linkedOrderId)
   const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null)
   const [cardChoice, setCardChoice] = useState<string>("")
+  const [recipientChoice, setRecipientChoice] = useState("")
   const [exporting, setExporting] = useState(false)
+
+  useEffect(() => {
+    if (!linkedOrderId) return
+    setSearch(linkedOrderId)
+    setPage(1)
+    setViewingId(linkedOrderId)
+  }, [linkedOrderId])
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["admin-orders", page, search, statusFilter],
@@ -97,14 +118,30 @@ export default function AdminOrders() {
 
   // Real, currently-unassigned card inventory for the Assign/Reassign dialog
   // — sourced from the actual NFC cards API, not a local mock.
-  const { data: unassignedCardsPage } = useQuery({
+  const { data: unassignedCardsPage, isLoading: inventoryLoading, isError: inventoryError, refetch: refetchInventory } = useQuery({
     queryKey: ["admin-cards-unassigned"],
     queryFn: () => adminNfcApi.list({ status: "Unassigned", pageSize: 100 }),
   })
   const availableCards = unassignedCardsPage?.data ?? []
 
-  const viewing = orders.find((o) => o.id === viewingId) ?? null
-  const assigningOrder = orders.find((o) => o.id === assigningOrderId) ?? null
+  const detailOrderId = viewingId ?? assigningOrderId
+  const orderDetail = useQuery({
+    queryKey: ["admin-order", detailOrderId],
+    queryFn: () => adminOrderApi.get(detailOrderId!),
+    enabled: Boolean(detailOrderId && !orders.some((order) => order.id === detailOrderId)),
+    retry: false,
+  })
+  const viewing = orders.find((o) => o.id === viewingId) ?? (orderDetail.data?.id === viewingId ? orderDetail.data : null)
+  const assigningOrder = orders.find((o) => o.id === assigningOrderId) ?? (orderDetail.data?.id === assigningOrderId ? orderDetail.data : null)
+  const unassignedRecipients = assigningOrder?.recipients?.filter((recipient) => !recipient.assignedCardId) ?? []
+  const assigningRecipient = unassignedRecipients.find((recipient) => String(recipient.id) === recipientChoice)
+
+  function openAssignment(order: Order, recipientId?: string | number) {
+    setAssigningOrderId(order.id)
+    setCardChoice("")
+    const firstPending = order.recipients?.find((recipient) => !recipient.assignedCardId)
+    setRecipientChoice(String(recipientId ?? firstPending?.id ?? ""))
+  }
   const trackingStatus = viewing ? deriveCurrentStatus(viewing) : null
   const deliveryWindow = viewing ? estimateDeliveryWindow(viewing) : null
   const estimatedDeliveryText = deliveryWindow
@@ -114,7 +151,10 @@ export default function AdminOrders() {
   const viewingDistanceKm = viewing ? getDemoDistanceKm(viewing) : 0
   const viewingOrderNumber = viewing ? (viewing.orderNumber ?? viewing.id) : ""
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin-orders"] })
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["admin-orders"] })
+    queryClient.invalidateQueries({ queryKey: ["admin-order"] })
+  }
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: OrderStatus }) => adminOrderApi.updateStatus(id, status),
@@ -145,16 +185,21 @@ export default function AdminOrders() {
   })
 
   const assignCardMutation = useMutation({
-    mutationFn: ({ orderId, cardId }: { orderId: string; cardId: string }) => adminOrderApi.assignCard(orderId, cardId),
+    mutationFn: ({ orderId, cardId, recipientId }: { orderId: string; cardId: string; recipientId?: string }) => adminOrderApi.assignCard(orderId, cardId, recipientId),
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ["admin-orders"] })
+      queryClient.invalidateQueries({ queryKey: ["admin-order"] })
       queryClient.invalidateQueries({ queryKey: ["admin-cards"] })
       queryClient.invalidateQueries({ queryKey: ["admin-cards-unassigned"] })
+      queryClient.invalidateQueries({ queryKey: ["admin-purchasers"] })
+      queryClient.invalidateQueries({ queryKey: ["admin-purchaser"] })
+      queryClient.invalidateQueries({ queryKey: ["admin-customers"] })
       toast.success(`Card ${vars.cardId} assigned to order ${vars.orderId}.`)
       setAssigningOrderId(null)
       setCardChoice("")
+      setRecipientChoice("")
     },
-    onError: () => toast.error("Couldn't assign the card. Please try again."),
+    onError: (err) => toast.error(errorMessage(err, "Couldn't assign the card. Please try again.")),
   })
 
   async function handleExport() {
@@ -215,7 +260,7 @@ export default function AdminOrders() {
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search by order ID or customer..."
+                placeholder="Search by order ID or purchaser..."
                 className="pl-9"
                 value={search}
                 onChange={(e) => {
@@ -265,11 +310,11 @@ export default function AdminOrders() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Order ID</TableHead>
-                    <TableHead>Customer</TableHead>
+                    <TableHead>Purchaser</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Product</TableHead>
-                    <TableHead>Qty</TableHead>
+                    <TableHead>Cards</TableHead>
                     <TableHead>Total</TableHead>
                     <TableHead>Payment</TableHead>
                     <TableHead>Shipping</TableHead>
@@ -290,7 +335,7 @@ export default function AdminOrders() {
                       <TableCell className="text-muted-foreground">{o.customerPhone || "—"}</TableCell>
                       <TableCell className="text-muted-foreground">{o.customerEmail}</TableCell>
                       <TableCell>{productSummary(o)}</TableCell>
-                      <TableCell>{o.items.reduce((sum, item) => sum + item.qty, 0)}</TableCell>
+                      <TableCell><button type="button" className="font-medium text-primary underline-offset-4 hover:underline" onClick={() => setViewingId(o.id)} aria-label={`View recipients for ${o.items.reduce((sum, item) => sum + item.qty, 0)} cards in order ${o.orderNumber ?? o.id}`}>{o.items.reduce((sum, item) => sum + item.qty, 0)}</button></TableCell>
                       <TableCell>{formatCurrency(o.total)}</TableCell>
                       <TableCell>
                         <p className="whitespace-nowrap text-xs text-muted-foreground">{o.paymentMethod}</p>
@@ -316,15 +361,10 @@ export default function AdminOrders() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => {
-                              setAssigningOrderId(o.id)
-                              // Reset to blank rather than prefilling the current card: the
-                              // dialog only lists real unassigned inventory, which by
-                              // definition won't include a card already on this order.
-                              setCardChoice("")
-                            }}
+                            onClick={() => openAssignment(o)}
+                            disabled={!canAssign(o)}
                           >
-                            <Nfc /> {o.assignedCardId ? "Reassign" : "Assign Card"}
+                            <Nfc /> {!o.recipients?.length && o.assignedCardId ? "Reassign" : "Assign Card"}
                           </Button>
                           {o.status !== "Delivered" && o.status !== "Completed" && o.status !== "Cancelled" && (
                             <Button
@@ -371,8 +411,10 @@ export default function AdminOrders() {
         </CardContent>
       </Card>
 
-      <Sheet open={!!viewing} onOpenChange={(open) => !open && setViewingId(null)}>
+      <Sheet open={!!viewingId} onOpenChange={(open) => !open && setViewingId(null)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+          {!viewing && orderDetail.isLoading && <div className="space-y-4 px-4 py-8"><SheetHeader><SheetTitle>Order Details</SheetTitle><SheetDescription>Loading order and recipient details.</SheetDescription></SheetHeader><Skeleton className="h-64 w-full" /></div>}
+          {!viewing && orderDetail.isError && <div className="space-y-3 px-4 py-12"><SheetHeader><SheetTitle>Unable to load order</SheetTitle><SheetDescription>Retry to retrieve this order.</SheetDescription></SheetHeader><p role="alert" className="text-sm text-muted-foreground">{errorMessage(orderDetail.error, "This order could not be loaded.")}</p><Button variant="outline" onClick={() => orderDetail.refetch()}>Retry</Button></div>}
           {viewing && (
             <>
               <SheetHeader>
@@ -416,22 +458,21 @@ export default function AdminOrders() {
                   </Select>
                 </div>
 
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-medium">Assigned NFC Card</span>
-                  {viewing.assignedCardId ? (
-                    <span className="font-mono text-sm">{viewing.assignedCardId}</span>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setAssigningOrderId(viewing.id)
-                        setCardChoice("")
-                      }}
-                    >
+                <div className="space-y-3 rounded-lg border p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium">Physical Card Assignment</span>
+                    <Button variant="outline" size="sm" disabled={!canAssign(viewing)} onClick={() => openAssignment(viewing)}>
                       <Nfc /> Assign Card
                     </Button>
+                  </div>
+                  {viewing.recipients?.length ? (
+                    <p className="text-xs text-muted-foreground">
+                      Purchased: {viewing.items.reduce((sum, item) => sum + item.qty, 0)} | Assigned: {viewing.recipients.filter((recipient) => recipient.assignedCardId).length} | Activated: {viewing.recipients.filter((recipient) => recipient.assignedCardStatus === "ACTIVE").length}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{viewing.assignedCardId ? `Assigned card ID: ${viewing.assignedCardId}` : "Awaiting physical card assignment"}</p>
                   )}
+                  {viewing.paymentStatus !== "Paid" && <p className="text-xs text-muted-foreground">Payment must be confirmed before physical cards can be assigned.</p>}
                 </div>
 
                 <div>
@@ -500,7 +541,7 @@ export default function AdminOrders() {
 
                 {viewing.account && (
                   <div>
-                    <p className="mb-2 text-sm font-medium">Customer Account</p>
+                    <p className="mb-2 text-sm font-medium">Purchaser Account</p>
                     <div className="space-y-2 rounded-lg border p-3 text-sm">
                       <div className="flex items-center justify-between gap-3">
                         <AccountStatusBadge status={viewing.account.status} />
@@ -518,7 +559,7 @@ export default function AdminOrders() {
                       </div>
                       {viewing.account.status === "PENDING_PROCESSING" && (
                         <p className="text-xs text-muted-foreground">
-                          Moving this paid order to Processing emails the customer a secure link to set their password.
+                          Moving this paid order to Processing emails the purchaser a secure link to set their password and access order history. Recipient account setup is listed separately.
                         </p>
                       )}
                       {viewing.account.status === "EMAIL_FAILED" && (
@@ -544,20 +585,22 @@ export default function AdminOrders() {
 
                 {viewing.recipients && viewing.recipients.length > 0 && (
                   <div>
-                    <p className="mb-2 text-sm font-medium">Recipients</p>
+                    <p className="mb-2 text-sm font-medium">Recipients ({viewing.recipients.length})</p>
                     <div className="space-y-3 rounded-lg border p-3 text-sm">
-                      {viewing.recipients.map((recipient) => {
+                      {viewing.recipients.map((recipient, index) => {
                         const recipientStatus = recipient.accountStatus ?? "PENDING_PROCESSING"
                         const canResend =
-                          recipient.onboardingId !== null &&
+                          recipient.onboardingId != null &&
                           (recipient.invitationStatus === "Sent" || recipient.invitationStatus === "Failed")
 
                         return (
                           <div key={recipient.id} className="rounded-md border bg-background/60 p-3">
                             <div className="flex items-start justify-between gap-3">
                               <div>
+                                <p className="text-xs text-muted-foreground">Card {index + 1}</p>
                                 <p className="font-medium text-foreground">{recipient.name}</p>
-                                <p className="text-muted-foreground">{recipient.email}</p>
+                                <p className="break-all text-muted-foreground">{recipient.email}</p>
+                                <p className="text-muted-foreground">{recipient.phone || "Phone not recorded"}</p>
                               </div>
                               {canResend && recipient.onboardingId !== null && (
                                 <Button
@@ -576,9 +619,28 @@ export default function AdminOrders() {
                                 <AccountStatusBadge status={recipientStatus} />
                               </div>
                               <div className="flex items-center justify-between gap-2">
-                                <span className="text-muted-foreground">Activation</span>
+                                <span className="text-muted-foreground">Account invitation</span>
                                 <StatusBadge status={recipient.invitationStatus ?? "Pending"} />
                               </div>
+                            </div>
+                            <div className="mt-3 space-y-2 border-t pt-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-muted-foreground">Physical card</span>
+                                <StatusBadge status={cardStatusLabel(recipient.assignedCardStatus)} />
+                              </div>
+                              {recipient.assignedCardId ? (
+                                <div className="space-y-1 text-xs text-muted-foreground">
+                                  <p>Serial: <span className="break-all font-mono">{recipient.assignedCardSerial || "Not recorded"}</span></p>
+                                  <p>UID: <span className="break-all font-mono">{recipient.assignedCardUid || "Not recorded"}</span></p>
+                                  <p>Card activation: {cardStatusLabel(recipient.activationStatus || "PENDING")}</p>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs text-muted-foreground">Awaiting physical card assignment</p>
+                                  <Button variant="outline" size="sm" disabled={!canAssign(viewing)} onClick={() => openAssignment(viewing, recipient.id)}><Nfc /> Assign</Button>
+                                </div>
+                              )}
+                              {recipient.profileUsername ? <a className="text-xs font-medium text-primary hover:underline" href={`/u/${encodeURIComponent(recipient.profileUsername)}`} target="_blank" rel="noreferrer">View digital profile</a> : <p className="text-xs text-muted-foreground">Profile pending</p>}
                             </div>
                           </div>
                         )
@@ -742,12 +804,25 @@ export default function AdminOrders() {
           <DialogHeader>
             <DialogTitle>Assign NFC Card</DialogTitle>
             <DialogDescription>
-              Link a physical card to order {assigningOrder?.orderNumber ?? assigningOrder?.id} for{" "}
-              {assigningOrder?.customerName}. Once
-              assigned, it appears on the customer's My Card page ready to activate.
+              Assign an available physical card to a recipient of order {assigningOrder?.orderNumber ?? assigningOrder?.id}. The card appears in that recipient's account ready to activate.
             </DialogDescription>
           </DialogHeader>
-          <Select value={cardChoice} onValueChange={setCardChoice}>
+          {Boolean(assigningOrder?.recipients?.length) && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Recipient allocation</p>
+              <Select value={recipientChoice} onValueChange={setRecipientChoice}>
+                <SelectTrigger className="w-full"><SelectValue placeholder="Select an unassigned recipient" /></SelectTrigger>
+                <SelectContent>
+                  {unassignedRecipients.map((recipient) => <SelectItem key={recipient.id} value={String(recipient.id)}>{recipient.name} - {recipient.email}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {assigningRecipient && <p className="break-all text-xs text-muted-foreground">{assigningRecipient.email} | {assigningRecipient.phone || "Phone not recorded"}</p>}
+              {unassignedRecipients.length === 0 && <p className="text-sm text-muted-foreground">Every recipient already has a physical card.</p>}
+            </div>
+          )}
+          {inventoryLoading && <Skeleton className="h-10 w-full" />}
+          {inventoryError && <div className="space-y-2"><p role="alert" className="text-sm text-destructive">Unable to load available cards.</p><Button variant="outline" size="sm" onClick={() => refetchInventory()}>Retry inventory</Button></div>}
+          <Select value={cardChoice} onValueChange={setCardChoice} disabled={inventoryLoading || inventoryError || assignCardMutation.isPending}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select an unassigned card" />
             </SelectTrigger>
@@ -767,9 +842,9 @@ export default function AdminOrders() {
               Cancel
             </Button>
             <Button
-              disabled={!cardChoice || assignCardMutation.isPending}
+              disabled={!cardChoice || assignCardMutation.isPending || !assigningOrder || !canAssign(assigningOrder) || Boolean(assigningOrder.recipients?.length && !assigningRecipient)}
               onClick={() =>
-                assigningOrder && assignCardMutation.mutate({ orderId: assigningOrder.id, cardId: cardChoice })
+                assigningOrder && assignCardMutation.mutate({ orderId: assigningOrder.id, cardId: cardChoice, recipientId: assigningRecipient ? String(assigningRecipient.id) : undefined })
               }
             >
               Assign Card

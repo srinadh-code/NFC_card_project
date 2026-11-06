@@ -1400,6 +1400,10 @@ interface ApiAdminCustomerListItem {
   avatar: string
   joined_on: string
   card_count: number
+  recipient_allocation_count?: number
+  activated_card_count?: number
+  activation_status?: "PENDING" | "ACTIVATED"
+  profile_status?: "ACTIVE" | "SUSPENDED"
 }
 
 interface ApiNfcCardMini {
@@ -1435,6 +1439,10 @@ export interface AdminCustomerListItem {
   avatar: string
   joinedOn: string
   cardCount: number
+  recipientAllocationCount: number
+  activatedCardCount: number
+  activationStatus: "Pending" | "Activated"
+  profileStatus: "Active" | "Suspended"
 }
 
 export interface AdminCustomerDetail extends AdminCustomerListItem {
@@ -1459,6 +1467,10 @@ function toFrontendCustomerListItem(c: ApiAdminCustomerListItem): AdminCustomerL
     avatar: c.avatar,
     joinedOn: c.joined_on,
     cardCount: c.card_count,
+    recipientAllocationCount: c.recipient_allocation_count ?? 0,
+    activatedCardCount: c.activated_card_count ?? 0,
+    activationStatus: c.activation_status === "PENDING" ? "Pending" : "Activated",
+    profileStatus: c.profile_status === "SUSPENDED" ? "Suspended" : "Active",
   }
 }
 
@@ -1677,6 +1689,13 @@ interface ApiOrderRecipient {
   id: number
   name: string
   email: string
+  phone?: string | null
+  assigned_card_id?: number | null
+  assigned_card_uid?: string | null
+  assigned_card_serial?: string | null
+  assigned_card_status?: string | null
+  activation_status?: string
+  profile_username?: string | null
   user_id?: number | null
   profile_id?: number | null
   onboarding_id?: number | null
@@ -1687,7 +1706,7 @@ interface ApiOrderRecipient {
   account_status_display?: string
 }
 
-interface ApiAdminOrder {
+export interface ApiAdminOrder {
   id: number
   order_number: string | null
   customer_id: number
@@ -1767,6 +1786,13 @@ export function toFrontendOrder(o: ApiAdminOrder): Order {
       id: String(recipient.id),
       name: recipient.name,
       email: recipient.email,
+      phone: recipient.phone ?? "",
+      assignedCardId: recipient.assigned_card_id == null ? null : String(recipient.assigned_card_id),
+      assignedCardUid: recipient.assigned_card_uid ?? null,
+      assignedCardSerial: recipient.assigned_card_serial ?? null,
+      assignedCardStatus: recipient.assigned_card_status ?? null,
+      activationStatus: recipient.activation_status ?? "UNASSIGNED",
+      profileUsername: recipient.profile_username ?? null,
       userId: recipient.user_id ?? null,
       profileId: recipient.profile_id ?? null,
       onboardingId: recipient.onboarding_id ?? null,
@@ -1851,11 +1877,11 @@ export const adminOrderApi = {
     return { order: toFrontendOrder(envelope.data as ApiAdminOrder), message: envelope.message ?? "" }
   },
 
-  assignCard: async (id: string, cardId: string): Promise<Order> =>
+  assignCard: async (id: string, cardId: string, recipientId?: string | number): Promise<Order> =>
     toFrontendOrder(
       await request<ApiAdminOrder>(`/admin/orders/${id}/assign-card/`, {
         method: "POST",
-        body: { card_id: Number(cardId) },
+        body: { card_id: Number(cardId), ...(recipientId == null ? {} : { recipient_id: Number(recipientId) }) },
       }),
     ),
 }
@@ -2641,9 +2667,10 @@ export interface ApiOrder {
 // (see customerAddressApi below) — the backend copies its fields into the
 // new order's shipping_* snapshot columns exactly once at creation time.
 export interface CreateOrderPayload {
+  purchaser_contact?: { full_name: string; phone: string }
   idempotency_key?: string
   items: { product_id: string; name: string; card_type: string; color: string; qty: number; price: number }[]
-  recipients?: { full_name: string; email: string }[]
+  recipients?: { full_name: string; email: string; phone: string }[]
   shipping?: number
   payment_method: "UPI" | "CARD" | "NET_BANKING" | "RAZORPAY" | "COD"
   address_id: number
@@ -2905,6 +2932,7 @@ export type PaymentProvider = "razorpay" | "dummy"
 export interface GuestCheckoutInput {
   contact: { full_name: string; email: string; phone: string }
   address: {
+    phone: string
     address_line1: string
     address_line2?: string
     landmark?: string
@@ -2918,7 +2946,7 @@ export interface GuestCheckoutInput {
     longitude?: number | null
   }
   items: { product_id: string; qty: number }[]
-  recipients?: { full_name: string; email: string }[]
+  recipients?: { full_name: string; email: string; phone: string }[]
   email_verification_token: string
   phone_verification_token?: string
   session_ref: string
@@ -2973,11 +3001,12 @@ export const paymentsApi = {
   createCustomerCheckout: (
     addressId: number,
     provider: PaymentProvider = "razorpay",
-    recipients?: { full_name: string; email: string }[],
+    recipients?: { full_name: string; email: string; phone: string }[],
+    purchaserContact?: { full_name: string; phone: string },
   ) =>
     request<RazorpayCheckout>("/payments/razorpay/checkout/", {
       method: "POST",
-      body: { address_id: addressId, provider, ...(recipients && recipients.length > 0 ? { recipients } : {}) },
+      body: { address_id: addressId, provider, ...(purchaserContact ? { purchaser_contact: purchaserContact } : {}), ...(recipients && recipients.length > 0 ? { recipients } : {}) },
     }),
 
   // Completes a temporary test payment started with provider "dummy".

@@ -62,7 +62,6 @@ export default function Shop() {
   // Dashboard → QR Code.
   const { customer, profile } = useEnsuredProfile()
   const beginBulkCheckout = useCheckoutVerificationStore((state) => state.beginBulkCheckout)
-  const resetBulkCheckout = useCheckoutVerificationStore((state) => state.resetBulkCheckout)
   // Same real-order check the Customer Dashboard → QR Code page uses to
   // gate template selection — shares its query key, so this is a cache hit
   // whenever that page (or My Card) was already visited this session.
@@ -102,7 +101,7 @@ export default function Shop() {
 
   async function addToCart(product: OrderCardProduct, rawQty: number, action: "cart" | "buy") {
     const qty = clampQty(rawQty)
-    const isGuestBulkBuy = action === "buy" && !customer && (qty === 3 || qty === 5)
+    const isGuestBulkBuy = action === "buy" && !customer
     setPendingAction(action)
     try {
       if (isGuestBulkBuy) {
@@ -124,13 +123,12 @@ export default function Shop() {
         if (isGuestBulkBuy) {
           navigate("/checkout/verify?redirect=%2Fcheckout")
         } else {
-          resetBulkCheckout()
           navigate("/checkout")
         }
       }
       else toast.success(`${product.name} × ${qty} added to cart.`)
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Couldn't add this card to your cart. Please try again.")
+      toast.error(err instanceof Error ? err.message : "Couldn't add this card to your cart. Please try again.")
     } finally {
       setPendingAction(null)
     }

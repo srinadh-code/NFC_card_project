@@ -1,6 +1,8 @@
 import { create } from "zustand"
 import { createJSONStorage, persist } from "zustand/middleware"
 import type { VerificationChannel } from "@/lib/api"
+import { resizeRecipients, type CheckoutRecipient } from "@/lib/checkout-recipients"
+export type { CheckoutRecipient } from "@/lib/checkout-recipients"
 
 // Matches payments/verification.py TOKEN_LIFETIME — after that the backend
 // refuses the token anyway, so the guest is sent back to verify again.
@@ -14,11 +16,6 @@ export interface VerifiedContact {
   verifiedAt: number
 }
 
-export interface CheckoutRecipient {
-  full_name: string
-  email: string
-}
-
 interface CheckoutVerificationState {
   /** Random id of this browser checkout; OTPs and tokens are bound to it on the backend. */
   sessionRef: string
@@ -30,7 +27,7 @@ interface CheckoutVerificationState {
   recipientDetailsConfirmed: boolean
   setContact: (contact: VerifiedContact) => void
   setEmail: (email: VerifiedContact | null) => void
-  beginBulkCheckout: (count: 3 | 5) => void
+  beginBulkCheckout: (count: number) => void
   resetBulkCheckout: () => void
   setRecipients: (recipients: CheckoutRecipient[]) => void
   confirmRecipients: () => void
@@ -58,14 +55,11 @@ export const useCheckoutVerificationStore = create<CheckoutVerificationState>()(
       setContact: (contact) => set({ contact, email: contact.channel === "EMAIL" ? contact : null }),
       setEmail: (email) => set({ email }),
       beginBulkCheckout: (count) =>
-        set({
-          sessionRef: newRef(),
-          contact: null,
-          email: null,
+        set((state) => ({
           bulkRecipientCount: count,
-          recipients: Array.from({ length: count }, () => ({ full_name: "", email: "" })),
+          recipients: resizeRecipients(state.recipients, count),
           recipientDetailsConfirmed: false,
-        }),
+        })),
       resetBulkCheckout: () =>
         set({ bulkRecipientCount: null, recipients: [], recipientDetailsConfirmed: false }),
       setRecipients: (recipients) => set({ recipients, recipientDetailsConfirmed: false }),

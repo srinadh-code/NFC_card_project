@@ -9,6 +9,7 @@ import { BulkRecipientFields, type BulkRecipientErrors } from "@/components/chec
 import { OtpVerifier } from "@/components/checkout/OtpVerifier"
 import { useCart } from "@/hooks/useCart"
 import { paymentsApi, type VerificationChannel } from "@/lib/api"
+import { resizeRecipients, validateRecipients, validCardQuantity, type CheckoutRecipient } from "@/lib/checkout-recipients"
 import { cn, sanitizeRedirect } from "@/lib/utils"
 import { useCustomerAuthStore } from "@/store/auth-store"
 import { isFresh, useCheckoutVerificationStore } from "@/store/checkout-verification-store"
@@ -47,22 +48,26 @@ export default function CheckoutVerify() {
 
   const cartQuantity = lines.reduce((quantity, line) => quantity + line.qty, 0)
   const bulkRecipientCount =
-    savedRecipientCount ?? (cartQuantity === 3 || cartQuantity === 5 ? cartQuantity : null)
+    cartQuantity > 0 ? cartQuantity : savedRecipientCount
 
   useEffect(() => {
-    if (bulkRecipientCount === null || recipients.length === bulkRecipientCount) return
+    if (bulkRecipientCount === null || !validCardQuantity(bulkRecipientCount) || recipients.length === bulkRecipientCount) return
     setRecipients(
-      Array.from({ length: bulkRecipientCount }, (_, index) => recipients[index] ?? { full_name: "", email: "" }),
+      resizeRecipients(recipients, bulkRecipientCount),
     )
   }, [bulkRecipientCount, recipients, setRecipients])
 
-  if (customer || (isFresh(contact) && !justVerified)) return <Navigate to={redirectTo} replace />
+  if (bulkRecipientCount !== null && !validCardQuantity(bulkRecipientCount)) {
+    return <div className="mx-auto max-w-xl space-y-4 px-4 py-12"><p role="alert" className="text-destructive">Orders support 1 to 10 cards. Update your cart quantity to continue.</p><Button onClick={() => navigate("/cart")}>Return to Cart</Button></div>
+  }
+
+  if (customer || (isFresh(contact) && !justVerified && recipientDetailsConfirmed)) return <Navigate to={redirectTo} replace />
 
   const smsEnabled = Boolean(config.data?.sms_otp_enabled)
 
-  function updateRecipient(index: number, field: "full_name" | "email", value: string) {
+  function updateRecipient(index: number, field: keyof CheckoutRecipient, value: string) {
     const updated = [...recipients]
-    updated[index] = { ...(updated[index] ?? { full_name: "", email: "" }), [field]: value }
+    updated[index] = { ...(updated[index] ?? { full_name: "", email: "", phone: "" }), [field]: value }
     setRecipients(updated)
     setRecipientErrors((previous) => {
       const next = [...previous]
@@ -74,26 +79,13 @@ export default function CheckoutVerify() {
   function continueToVerification() {
     if (bulkRecipientCount === null) return
 
-    const errors: BulkRecipientErrors = Array.from({ length: bulkRecipientCount }, () => ({}))
-    const seen = new Set<string>()
-    const cleaned = recipients.map((recipient, index) => {
-      const full_name = recipient.full_name.trim()
-      const email = recipient.email.trim().toLowerCase()
-      if (!full_name) errors[index].full_name = "Full Name is required."
-      if (!email) errors[index].email = "Email Address is required."
-      else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) errors[index].email = "Enter a valid email address."
-      else if (seen.has(email)) errors[index].email = "Duplicate email addresses are not allowed."
-      else seen.add(email)
-      return { full_name, email }
-    })
-
-    setRecipientErrors(errors)
-    if (errors.some((entry) => entry.full_name || entry.email)) {
-      toast.error("Please complete every recipient field with a unique, valid email address.")
+    const result = validateRecipients(recipients, bulkRecipientCount)
+    setRecipientErrors(result.errors)
+    if (!result.valid) {
+      toast.error("Please complete each recipient's name, valid email and phone number.")
       return
     }
-
-    setRecipients(cleaned)
+    setRecipients(result.recipients)
     confirmRecipients()
   }
 
@@ -214,8 +206,8 @@ export default function CheckoutVerify() {
         )}
 
         <p className="mt-6 text-xs text-muted-foreground">
-          No password needed now — after your payment we create your Customer Dashboard account and email you the login
-          details.
+          No password needed now. Your verified email receives the order confirmation. Card recipients receive
+          their own secure account setup instructions as the order is processed. Physical card assignment is handled separately.
         </p>
         <div className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t pt-4 text-sm">
           <Link to={`/login?redirect=${encodeURIComponent(redirectTo)}`} className="font-medium text-primary hover:underline">

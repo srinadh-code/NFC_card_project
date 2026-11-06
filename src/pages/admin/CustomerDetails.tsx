@@ -116,6 +116,7 @@ export default function AdminCustomerDetails() {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-semibold">{customer.name}</h1>
               <StatusBadge status={customer.status} />
+              <StatusBadge status={customer.activationStatus} />
             </div>
             <p className="text-sm text-muted-foreground">
               {customer.designation || "—"}
@@ -128,6 +129,8 @@ export default function AdminCustomerDetails() {
           <div className="text-sm text-muted-foreground sm:text-right">
             <p className="text-xs uppercase tracking-wide">Joined On</p>
             <p className="font-medium text-foreground">{formatDate(customer.joinedOn)}</p>
+            <p className="mt-1">{customer.recipientAllocationCount} recipient allocations</p>
+            <p>{customer.activatedCardCount} active cards</p>
           </div>
         </CardContent>
       </Card>

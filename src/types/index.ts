@@ -119,6 +119,13 @@ export interface OrderRecipient {
   id: string | number
   name: string
   email: string
+  phone?: string
+  assignedCardId?: string | null
+  assignedCardUid?: string | null
+  assignedCardSerial?: string | null
+  assignedCardStatus?: string | null
+  activationStatus?: string
+  profileUsername?: string | null
   userId?: number | null
   profileId?: number | null
   onboardingId?: number | null
@@ -363,6 +370,7 @@ export interface CustomerUser {
   id: string
   name: string
   email: string
+  phone: string
   avatar: string
 }
 

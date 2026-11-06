@@ -35,6 +35,7 @@ import {
 import { formatCurrency } from "@/lib/mock-api"
 import { PaymentCancelled, payWithRazorpay } from "@/lib/razorpay"
 import { cn } from "@/lib/utils"
+import { resizeRecipients, validateRecipients, validCardQuantity, type CheckoutRecipient } from "@/lib/checkout-recipients"
 import { isFresh, useCheckoutVerificationStore } from "@/store/checkout-verification-store"
 import { storeOrderSuccess } from "@/pages/public/OrderSuccess"
 
@@ -60,7 +61,7 @@ const EMPTY_ADDRESS: AddressFields = {
   pincode: "",
 }
 
-type Errors = Partial<Record<keyof AddressFields | "full_name" | "phone" | "email", string>>
+type Errors = Partial<Record<keyof AddressFields | "full_name" | "phone" | "email" | "delivery_phone", string>>
 
 function firstError(value: unknown): string | undefined {
   if (Array.isArray(value)) return typeof value[0] === "string" ? value[0] : undefined
@@ -115,16 +116,16 @@ export function GuestCheckout() {
     setEmail: setVerifiedEmail,
     recipients: savedRecipients,
     setRecipients: setSavedRecipients,
-    recipientDetailsConfirmed,
     clearVerification,
   } = useCheckoutVerificationStore()
   const viaMobile = contact?.channel === "SMS"
   const [emailInput, setEmailInput] = useState("")
   const [phone, setPhone] = useState(() => (contact?.channel === "SMS" ? contact.destination : ""))
   const [fullName, setFullName] = useState("")
+  const [deliveryPhone, setDeliveryPhone] = useState("")
   const [address, setAddress] = useState<AddressFields>(EMPTY_ADDRESS)
   const [errors, setErrors] = useState<Errors>({})
-  const [bulkRecipients, setBulkRecipients] = useState<{ full_name: string; email: string }[]>(savedRecipients)
+  const [bulkRecipients, setBulkRecipients] = useState<CheckoutRecipient[]>(savedRecipients)
   const [recipientErrors, setRecipientErrors] = useState<BulkRecipientErrors>([])
   const [paying, setPaying] = useState(false)
   const [payError, setPayError] = useState<string | null>(null)
@@ -185,63 +186,28 @@ export function GuestCheckout() {
   const bulkRecipientCount = lines.reduce((sum, line) => sum + line.qty, 0)
 
   useEffect(() => {
-    if (bulkRecipientCount !== 3 && bulkRecipientCount !== 5) {
-      setBulkRecipients([])
-      setRecipientErrors([])
-      return
-    }
-    setBulkRecipients((prev) =>
-      Array.from({ length: bulkRecipientCount }, (_, index) => prev[index] ?? { full_name: "", email: "" }),
-    )
-    setRecipientErrors((prev) => Array.from({ length: bulkRecipientCount }, (_, index) => prev[index] ?? {}))
-    if (savedRecipients.length !== bulkRecipientCount) {
-      setSavedRecipients(
-        Array.from({ length: bulkRecipientCount }, (_, index) => savedRecipients[index] ?? { full_name: "", email: "" }),
-      )
-    }
+    if (!validCardQuantity(bulkRecipientCount)) return
+    setBulkRecipients((previous) => resizeRecipients(previous, bulkRecipientCount))
+    setRecipientErrors((previous) => Array.from({ length: bulkRecipientCount }, (_, index) => previous[index] ?? {}))
+    if (savedRecipients.length !== bulkRecipientCount) setSavedRecipients(resizeRecipients(savedRecipients, bulkRecipientCount))
   }, [bulkRecipientCount, savedRecipients, setSavedRecipients])
 
-  function updateBulkRecipient(index: number, field: "full_name" | "email", value: string) {
+  function updateBulkRecipient(index: number, field: keyof CheckoutRecipient, value: string) {
     const next = [...bulkRecipients]
-    next[index] = { ...(next[index] ?? { full_name: "", email: "" }), [field]: value }
+    next[index] = { ...next[index], [field]: value }
     setBulkRecipients(next)
     setSavedRecipients(next)
-    setRecipientErrors((prev) => {
-      const next = [...prev]
-      next[index] = { ...(next[index] ?? {}), [field]: undefined }
-      return next
-    })
+    setRecipientErrors((previous) => previous.map((entry, slot) => slot === index ? { ...entry, [field]: undefined } : entry))
   }
 
   function validateBulkRecipients() {
-    if (bulkRecipientCount !== 3 && bulkRecipientCount !== 5) return []
-
-    const cleaned: { full_name: string; email: string }[] = []
-    const errors: Array<{ full_name?: string; email?: string }> = Array.from({ length: bulkRecipientCount }, () => ({}))
-    const seen = new Set<string>()
-
-    for (let index = 0; index < bulkRecipientCount; index += 1) {
-      const current = bulkRecipients[index] ?? { full_name: "", email: "" }
-      const full_name = current.full_name.trim()
-      const email = current.email.trim().toLowerCase()
-
-      if (!full_name) errors[index].full_name = "Full Name is required."
-      if (!email) errors[index].email = "Email is required."
-      else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) errors[index].email = "Enter a valid email address."
-      else if (seen.has(email)) errors[index].email = "Duplicate email addresses are not allowed."
-      else seen.add(email)
-
-      if (!errors[index].full_name && !errors[index].email) {
-        cleaned.push({ full_name, email })
-      }
-    }
-
-    setRecipientErrors(errors)
-    if (cleaned.length !== bulkRecipientCount) {
-      toast.error("Please complete every recipient field before continuing.")
+    const result = validateRecipients(bulkRecipients, bulkRecipientCount)
+    setRecipientErrors(result.errors)
+    if (!result.valid) {
+      toast.error("Please complete each recipient's name, valid email and phone number. Orders support 1 to 10 cards.")
       return null
     }
-    return cleaned
+    return result.recipients
   }
 
   function validate(): Errors {
@@ -251,6 +217,7 @@ export function GuestCheckout() {
     }
     set("full_name", validateName(fullName))
     set("phone", validatePhone(phone))
+    set("delivery_phone", validatePhone(deliveryPhone))
     set("address_line1", validateAddressLine1(address.address_line1))
     set("city", validateCity(address.city))
     set("district", validateDistrict(address.district))
@@ -268,7 +235,7 @@ export function GuestCheckout() {
       return
     }
     if (!emailReady || !verifiedEmail) {
-      setPayError("Please verify your email address — your order confirmation and login details are sent there.")
+      setPayError("Please verify your email address — your order confirmation is sent there.")
       return
     }
     if (lines.length === 0) {
@@ -291,7 +258,7 @@ export function GuestCheckout() {
         email: verifiedEmail.destination,
         phone: phone.replace(/\D/g, "").slice(-10),
       },
-      address: { ...address, country: "India" },
+      address: { ...address, phone: deliveryPhone.trim(), country: "India" },
       items: lines.map((l) => ({ product_id: l.productId, qty: l.qty })),
       ...(validatedRecipients.length > 0 ? { recipients: validatedRecipients } : {}),
       email_verification_token: verifiedEmail.token,
@@ -464,7 +431,7 @@ export function GuestCheckout() {
                 />
                 {!emailReady && (
                   <p className="text-xs text-muted-foreground">
-                    Required: your order confirmation and Customer Dashboard login details are sent to this email.
+                    Required: your purchaser order confirmation is sent to this email.
                   </p>
                 )}
               </div>
@@ -472,7 +439,7 @@ export function GuestCheckout() {
           </div>
         </section>
 
-        {(bulkRecipientCount === 3 || bulkRecipientCount === 5) && !recipientDetailsConfirmed && (
+        {bulkRecipientCount >= 1 && (
           <BulkRecipientFields
             count={bulkRecipientCount}
             recipients={bulkRecipients}
@@ -484,13 +451,13 @@ export function GuestCheckout() {
         {/* 2. Delivery details */}
         <section className="rounded-2xl border bg-card p-6 shadow-sm" aria-labelledby="details-heading">
           <h2 id="details-heading" className="text-lg font-semibold text-foreground">
-            Delivery details
+            Purchaser and delivery details
           </h2>
           <fieldset disabled={paying} className="mt-5 grid gap-4 sm:grid-cols-2">
-            <Field id="g-name" label="Full Name" error={errors.full_name}>
+            <Field id="g-name" label="Purchaser Full Name" error={errors.full_name}>
               <Input id="g-name" autoComplete="name" value={fullName} onChange={(e) => { setFullName(e.target.value); setErrors((x) => ({ ...x, full_name: undefined })) }} aria-invalid={!!errors.full_name} />
             </Field>
-            <Field id="g-phone" label="Mobile Number" error={errors.phone}>
+            <Field id="g-phone" label="Purchaser Mobile Number" error={errors.phone}>
               <Input
                 id="g-phone"
                 type="tel"
@@ -502,6 +469,11 @@ export function GuestCheckout() {
                 onChange={(e) => { setPhone(e.target.value); setErrors((x) => ({ ...x, phone: undefined })) }}
                 aria-invalid={!!errors.phone}
               />
+            </Field>
+            <Field id="g-delivery-phone" label="Delivery Phone Number" error={errors.delivery_phone}>
+              <Input id="g-delivery-phone" type="tel" required autoComplete="shipping tel" value={deliveryPhone}
+                onChange={(event) => { setDeliveryPhone(event.target.value); setErrors((previous) => ({ ...previous, delivery_phone: undefined })) }}
+                aria-invalid={Boolean(errors.delivery_phone)} />
             </Field>
             <Field id="g-line1" label="Address Line 1" error={errors.address_line1} className="sm:col-span-2">
               <Input id="g-line1" autoComplete="address-line1" placeholder="Flat / House No., Building, Street" value={address.address_line1} onChange={(e) => setField("address_line1", e.target.value)} aria-invalid={!!errors.address_line1} />
@@ -566,6 +538,7 @@ export function GuestCheckout() {
       {/* Summary + pay */}
       <div className="h-fit rounded-2xl border bg-card p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-foreground">Order Summary</h2>
+          {bulkRecipientCount > 0 && !validCardQuantity(bulkRecipientCount) && <p role="alert" className="mt-3 text-sm text-destructive">Orders support 1 to 10 cards. Update your cart quantity before checkout.</p>}
         {lines.length === 0 ? (
           <p className="mt-4 text-sm text-muted-foreground">
             Your cart is empty. <Link to="/shop" className="font-medium text-primary hover:underline">Choose a card</Link>
@@ -613,7 +586,7 @@ export function GuestCheckout() {
           type="submit"
           size="lg"
           className="mt-4 w-full"
-          disabled={!paymentsEnabled || !emailReady || paying || lines.length === 0}
+          disabled={!paymentsEnabled || !emailReady || paying || !validCardQuantity(bulkRecipientCount)}
         >
           {paying ? (
             <>
@@ -631,7 +604,7 @@ export function GuestCheckout() {
       <DummyPaymentDialog
         checkout={dummyOpen && dummy ? dummy.checkout : null}
         email={verifiedEmail?.destination ?? ""}
-        delivery={{ fullName: fullName.trim(), phone: phone.replace(/\D/g, "").slice(-10), lines: deliveryLines }}
+        delivery={{ fullName: fullName.trim(), phone: deliveryPhone.trim(), lines: deliveryLines }}
         currency={settings.currency}
         confirming={confirming}
         error={dummyError}

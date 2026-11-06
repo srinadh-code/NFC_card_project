@@ -1,7 +1,7 @@
 import type { OrderCardProduct, OrderCardProductOffer } from "@/types/content"
 
 /** Largest quantity of one card a cart line accepts (backend: MAX_LINE_QTY). */
-export const MAX_CARD_QTY = 100
+export { MAX_CARD_QTY, clampQty } from "./checkout-recipients"
 
 /** Visible tiers, smallest quantity first. */
 export function activeOffers(product: Pick<OrderCardProduct, "offers">): OrderCardProductOffer[] {
@@ -24,11 +24,6 @@ export function unitPriceFor(product: Pick<OrderCardProduct, "offers" | "price">
 /** Saving per card against the single-card price (never negative). */
 export function savingPerCard(product: Pick<OrderCardProduct, "offers" | "price">, qty: number): number {
   return Math.max(0, unitPriceFor(product, 1) - unitPriceFor(product, qty))
-}
-
-export function clampQty(qty: number) {
-  if (!Number.isFinite(qty)) return 1
-  return Math.min(MAX_CARD_QTY, Math.max(1, Math.round(qty)))
 }
 
 /** Resized, auto-format Cloudinary delivery URL; any other URL is returned

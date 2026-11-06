@@ -52,7 +52,7 @@ export function ProductDetails({
   extra,
 }: ProductDetailsProps) {
   const [qty, setQty] = useState(1)
-  const offers = activeOffers(product)
+  const offers = activeOffers(product).filter((offer) => offer.min_quantity <= MAX_CARD_QTY)
   const selectedOffer = offerForQuantity(product, qty)
   const unitPrice = unitPriceFor(product, qty)
   const total = unitPrice * qty
@@ -173,6 +173,7 @@ export function ProductDetails({
                 inputMode="numeric"
                 min={1}
                 max={MAX_CARD_QTY}
+                step={1}
                 value={qty}
                 onChange={(e) => setQty(clampQty(Number(e.target.value)))}
                 className="w-16 text-center text-base font-semibold"

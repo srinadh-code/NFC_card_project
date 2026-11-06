@@ -1,3 +1,4 @@
+import { useCheckoutVerificationStore } from "@/store/checkout-verification-store"
 import { useMemo } from "react"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
@@ -111,7 +112,7 @@ export function hasValidSession(user: ApiUser | null, role: "ADMIN" | "CUSTOMER"
 }
 
 function toCustomerUser(u: ApiUser): CustomerUser {
-  return { id: String(u.id), name: u.full_name, email: u.email, avatar: u.avatar }
+  return { id: String(u.id), name: u.full_name, email: u.email, phone: u.phone ?? "", avatar: u.avatar }
 }
 
 function toAdminUser(u: ApiUser): AdminUser {
@@ -132,6 +133,7 @@ function doLogout(area: SessionArea) {
     // logging in) never sees this customer's items. That customer's own
     // cart is exactly as they left it next time they log in.
     useCartStore.getState().clearCart()
+    useCheckoutVerificationStore.getState().clear()
   }
 }
 

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCart } from "@/hooks/useCart"
+import { validCardQuantity } from "@/lib/checkout-recipients"
 import { formatCurrency } from "@/lib/mock-api"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
 
@@ -29,6 +30,7 @@ export default function Cart() {
   const [promoInput, setPromoInput] = useState("")
   const { settings } = usePublicSettings()
 
+  const cardCount = lines.reduce((count, line) => count + line.qty, 0)
   const sub = subtotal()
   const shipping = sub === 0 ? 0 : sub > 999 ? 0 : 49
   const grandTotal = Math.max(0, total + shipping)
@@ -126,6 +128,8 @@ export default function Cart() {
                           variant="outline"
                           size="icon"
                           className="size-7"
+                          disabled={line.qty <= 1}
+                          aria-label={`Decrease quantity for ${line.name}`}
                           onClick={() => updateQty(line.lineId, line.qty - 1)}
                         >
                           <Minus className="size-3" />
@@ -135,6 +139,8 @@ export default function Cart() {
                           variant="outline"
                           size="icon"
                           className="size-7"
+                          disabled={cardCount >= 10}
+                          aria-label={`Increase quantity for ${line.name}`}
                           onClick={() => updateQty(line.lineId, line.qty + 1)}
                         >
                           <Plus className="size-3" />
@@ -187,6 +193,8 @@ export default function Cart() {
 
         <div className="rounded-2xl border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-foreground">Order Summary</h2>
+          <p className="mt-2 text-sm text-muted-foreground">{cardCount} of 10 cards. Recipient details are required for every card.</p>
+          {!validCardQuantity(cardCount) && <p role="alert" className="mt-2 text-sm text-destructive">Choose 1 to 10 cards to continue to checkout.</p>}
           <div className="mt-4 space-y-3 text-sm">
             <div className="flex justify-between text-muted-foreground">
               <span>Subtotal</span>
@@ -207,7 +215,7 @@ export default function Cart() {
               <span>{formatCurrency(grandTotal, settings.currency)}</span>
             </div>
           </div>
-          <Button className="mt-6 w-full" size="lg" onClick={() => navigate("/checkout")}>
+          <Button className="mt-6 w-full" size="lg" disabled={!validCardQuantity(cardCount)} onClick={() => navigate("/checkout")}>
             Proceed to Checkout
           </Button>
         </div>

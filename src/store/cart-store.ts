@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
+import { MAX_CARD_QTY, clampQty, validCardQuantity } from "@/lib/checkout-recipients"
 import type { CardType, CartLine } from "@/types"
 
 // The single source of truth for "which card types can still be sold" is
@@ -14,7 +15,7 @@ import type { CardType, CartLine } from "@/types"
 const VALID_CARD_TYPES: readonly CardType[] = ["Wooden", "Custom", "Review"]
 
 export function sanitizeCartLines(lines: CartLine[]): CartLine[] {
-  return lines.filter((l) => (VALID_CARD_TYPES as readonly string[]).includes(l.cardType))
+  return lines.filter((line) => (VALID_CARD_TYPES as readonly string[]).includes(line.cardType))
 }
 
 // GUEST cart only — an unauthenticated visitor browsing /shop before
@@ -47,6 +48,9 @@ export const useCartStore = create<CartState>()(
       lines: [],
       addLine: (line) =>
         set((s) => {
+          if (!validCardQuantity(line.qty) || s.lines.reduce((count, item) => count + item.qty, 0) + line.qty > MAX_CARD_QTY) {
+            throw new Error("An order can contain 1 to 10 cards. Please update your cart quantity.")
+          }
           const existing = s.lines.find(
             (l) => l.productId === line.productId && l.color.name === line.color.name,
           )
@@ -63,7 +67,7 @@ export const useCartStore = create<CartState>()(
         }),
       updateQty: (lineId, qty) =>
         set((s) => ({
-          lines: s.lines.map((l) => (l.lineId === lineId ? { ...l, qty: Math.max(1, qty) } : l)),
+          lines: s.lines.map((l) => (l.lineId === lineId ? { ...l, qty: Math.min(clampQty(qty), Math.max(1, MAX_CARD_QTY - s.lines.reduce((total, item) => total + (item.lineId === lineId ? 0 : item.qty), 0))) } : l)),
         })),
       removeLine: (lineId) => set((s) => ({ lines: s.lines.filter((l) => l.lineId !== lineId) })),
       clearCart: () => set({ lines: [] }),

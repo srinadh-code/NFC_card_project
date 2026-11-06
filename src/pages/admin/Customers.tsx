@@ -79,6 +79,10 @@ export default function AdminCustomers() {
           Status: c.status,
           JoinedOn: formatDate(c.joinedOn),
           NfcCards: c.cardCount,
+          RecipientAllocations: c.recipientAllocationCount,
+          ActivatedCards: c.activatedCardCount,
+          ProfileStatus: c.profileStatus,
+          AccountActivation: c.activationStatus,
         })),
       )
       toast.success("Customers exported to CSV.")
@@ -94,7 +98,7 @@ export default function AdminCustomers() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Customers</h1>
-          <p className="text-sm text-muted-foreground">{totalItems} customers registered</p>
+          <p className="text-sm text-muted-foreground">{totalItems} card recipients and existing customers</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleExport} disabled={exporting}>
@@ -158,7 +162,10 @@ export default function AdminCustomers() {
                     <TableHead>Email</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>NFC Cards</TableHead>
+                    <TableHead>Allocations</TableHead>
+                    <TableHead>Assigned Cards</TableHead>
+                    <TableHead>Profile</TableHead>
+                    <TableHead>Account Activation</TableHead>
                     <TableHead>Joined On</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -184,7 +191,10 @@ export default function AdminCustomers() {
                       <TableCell>
                         <StatusBadge status={c.status} />
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{c.cardCount}</TableCell>
+                      <TableCell>{c.recipientAllocationCount}</TableCell>
+                      <TableCell>{c.cardCount}<p className="text-xs text-muted-foreground">{c.activatedCardCount} active</p></TableCell>
+                      <TableCell><StatusBadge status={c.profileStatus} /></TableCell>
+                      <TableCell><StatusBadge status={c.activationStatus} /></TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(c.joinedOn)}</TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
@@ -204,7 +214,7 @@ export default function AdminCustomers() {
                   ))}
                   {customers.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                      <TableCell colSpan={11} className="py-10 text-center text-muted-foreground">
                         No customers found.
                       </TableCell>
                     </TableRow>

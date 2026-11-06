@@ -1,3 +1,5 @@
+import { toast } from "sonner"
+import { MAX_CARD_QTY, clampQty, validCardQuantity } from "@/lib/checkout-recipients"
 import { useEffect, useRef } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCustomerAuthStore } from "@/store/auth-store"
@@ -83,11 +85,15 @@ export function useCart() {
     ;(async () => {
       for (const line of lines) {
         await cartApi.addItem(toApiCartItem(line))
+        // Remove only committed lines, so a later rejected line cannot
+        // replay already merged quantities at the next login.
+        useCartStore.getState().removeLine(line.lineId)
       }
-      guestClearCart()
+    })().catch((error) => {
+      toast.error(error instanceof Error ? error.message : "Some cart items could not be added. Please check your cart.")
+    }).finally(() => {
       queryClient.invalidateQueries({ queryKey: ["cart", customer.id] })
-      // eslint-disable-next-line no-empty
-    })().catch(() => {})
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer?.id])
 
@@ -98,6 +104,7 @@ export function useCart() {
   const updateMutation = useMutation({
     mutationFn: ({ lineId, qty }: { lineId: string; qty: number }) => cartApi.updateQty(Number(lineId), qty),
     onSuccess: (cart) => queryClient.setQueryData(["cart", customer?.id], cart),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Couldn't update this quantity."),
   })
   const removeMutation = useMutation({
     mutationFn: (lineId: string) => cartApi.remove(Number(lineId)),
@@ -200,18 +207,26 @@ export function useCart() {
     removeOffer: () => customer && removeOfferMutation.mutate(),
     isApplyingOffer: applyOfferMutation.isPending,
     addLine: (line: Omit<CartLine, "lineId">) => {
+      if (!validCardQuantity(line.qty) || lines.reduce((count, item) => count + item.qty, 0) + line.qty > MAX_CARD_QTY) {
+        toast.error("Your cart can contain a maximum of 10 cards.")
+        return
+      }
       if (customer) addMutation.mutate(line)
       else guestAddLine(line)
     },
     // Same as addLine, but resolves only once the line is really in the
     // cart (rejects with the backend's ApiError otherwise).
     addLineAsync: async (line: Omit<CartLine, "lineId">) => {
+      if (!validCardQuantity(line.qty) || (customer ? backendLines : useCartStore.getState().lines).reduce((count, item) => count + item.qty, 0) + line.qty > MAX_CARD_QTY) {
+        throw new Error("Your cart can contain a maximum of 10 cards. Update your cart before adding more.")
+      }
       if (customer) await addMutation.mutateAsync(line)
       else guestAddLine(line)
     },
     isAdding: addMutation.isPending,
     updateQty: (lineId: string, qty: number) => {
-      const nextQty = Math.max(1, qty)
+      const otherQty = lines.reduce((count, line) => count + (line.lineId === lineId ? 0 : line.qty), 0)
+      const nextQty = Math.min(clampQty(qty), Math.max(1, MAX_CARD_QTY - otherQty))
       if (customer) updateMutation.mutate({ lineId, qty: nextQty })
       else guestUpdateQty(lineId, nextQty)
     },
