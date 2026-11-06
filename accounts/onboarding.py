@@ -102,6 +102,17 @@ def ensure_recipient_accounts(order):
         CustomerOnboarding.objects.filter(user=user, source_order__isnull=True).update(source_order=order)
 
 
+def eligible_activation_recipients():
+    """Paid order allocations, the authority for recipient account emails.
+
+    Owning or paying for an order alone never makes an account eligible.
+    Keep purchaser onboarding audit records without treating them as invites.
+    """
+    from orders.models import Order, OrderRecipient
+
+    return OrderRecipient.objects.filter(order__payment_status=Order.PaymentStatus.PAID, user__isnull=False)
+
+
 def username_for(user):
     # A purchaser can log in with email without owning a digital profile.
     # Rendering account-setup emails or checking tokens must not create one.
@@ -198,6 +209,8 @@ def deliver_activation_email(onboarding_id, raw_token):
     if onboarding is None:
         return False
     user = onboarding.user
+    if not user.must_change_password or not eligible_activation_recipients().filter(user=user).exists():
+        return False
     try:
         html, text = _render_activation(user, raw_token, onboarding.source_order)
     except Exception as exc:  # noqa: BLE001 — recorded, never propagated
@@ -289,10 +302,9 @@ def start_activation_for_order(order, *, sync=False):
     if order.payment_status != order.PaymentStatus.PAID:
         return "no_onboarding"
     ensure_recipient_accounts(order)
-    # The verified purchaser needs account access to order history too. The
-    # email template distinguishes that setup from a recipient profile invite.
-    users = {order.customer_id: order.customer}
-    users.update({r.user_id: r.user for r in order.recipients.select_related("user") if r.user_id})
+    # Deduplicate accounts across allocations; include the purchaser only
+    # through an explicit recipient allocation on this paid order.
+    users = {r.user_id: r.user for r in eligible_activation_recipients().filter(order=order).select_related("user")}
     statuses = []
     for user in sorted(users.values(), key=lambda u: normalize_email(u.email)):
         try:
@@ -311,10 +323,14 @@ def start_activation_for_order(order, *, sync=False):
 def reissue_and_send(user, *, sync=False):
     """Admin "Resend activation email": a fresh link (the old one stops
     working) for an account still pending activation. Returns False — and
-    changes nothing — for an account that already set its password."""
-    if not user.must_change_password:
-        return False
+    changes nothing — for activated accounts, purchaser-only accounts or
+    recipients whose activation has not started yet."""
     with transaction.atomic():
-        onboarding, _ = CustomerOnboarding.objects.select_for_update().get_or_create(user=user)
+        user = User.objects.select_for_update().get(pk=user.pk)
+        if not user.must_change_password or not eligible_activation_recipients().filter(user=user).exists():
+            return False
+        onboarding = CustomerOnboarding.objects.select_for_update().filter(user=user).first()
+        if onboarding is None or onboarding.credentials_issued_at is None:
+            return False
         _issue_and_dispatch(onboarding, sync=sync)
     return True

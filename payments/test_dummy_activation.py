@@ -7,9 +7,11 @@ dashboard access before activation."""
 import re
 import smtplib
 from datetime import timedelta
+from io import StringIO
 from unittest import mock
 
 from django.core import mail
+from django.core.management import call_command
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -17,9 +19,11 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from accounts import onboarding
 from accounts.models import CustomerOnboarding, EmailOTP, User
 from common.test_utils import make_user, patch_pincode_directory
 from orders.models import Order, Transaction
+from profiles.models import Profile
 from website_content.models import OrderCardProduct
 
 from .models import CheckoutSession, CheckoutVerification
@@ -62,7 +66,8 @@ class DummyPaymentActivationTests(APITestCase):
 
     # --- helpers ------------------------------------------------------
     def _email_token(self, email):
-        self.client.post(reverse("checkout-otp-send"), {"channel": "EMAIL", "destination": email}, format="json")
+        response = self.client.post(reverse("checkout-otp-send"), {"channel": "EMAIL", "destination": email}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
         code = re.search(r"verification code is:\s+(\d{6})", mail.outbox[-1].body).group(1)
         verified = self.client.post(
             reverse("checkout-otp-verify"), {"channel": "EMAIL", "destination": email, "code": code}, format="json"
@@ -108,6 +113,207 @@ class DummyPaymentActivationTests(APITestCase):
 
     def _login(self, identifier, password=PASSWORD):
         return self.client.post(reverse("auth-login"), {"email": identifier, "password": password}, format="json")
+
+    def _buy_for_recipients(self, emails):
+        recipients = [
+            {"full_name": "Kavya" if email == "kavya@example.com" else "Recipient", "email": email, "phone": "+44 7700 900123"}
+            for email in emails
+        ]
+        checkout, paid = self._buy(email="kavya@example.com", qty=len(recipients), recipients=recipients)
+        return checkout, Order.objects.get(pk=paid["order_id"])
+
+    def _assert_recipient_activation(self, emails):
+        checkout, order = self._buy_for_recipients(emails)
+        self.assertEqual(self._activation_emails(), [])
+        self.assertFalse(EmailOTP.objects.filter(purpose=EmailOTP.Purpose.ACTIVATE).exists())
+        response = self._set_status(order.pk, "PROCESSING")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        messages = self._activation_emails()
+        self.assertCountEqual([message.to[0] for message in messages], set(emails))
+        self.assertEqual(order.recipients.count(), len(emails))
+        self.assertEqual(EmailOTP.objects.filter(purpose=EmailOTP.Purpose.ACTIVATE).count(), len(set(emails)))
+        for email in set(emails):
+            self.assertEqual(User.objects.filter(email=email).count(), 1)
+            self.assertEqual(Profile.objects.filter(user__email=email).count(), 1)
+        return checkout, order
+
+    def test_purchaser_buying_one_card_for_another_person_only_activates_recipient(self):
+        _, order = self._assert_recipient_activation(["chinnu@example.com"])
+        self.assertEqual(order.customer.email, "kavya@example.com")
+        self.assertEqual(order.recipients.get().user.email, "chinnu@example.com")
+        self.assertFalse(Profile.objects.filter(user=order.customer).exists())
+        confirmations = [message for message in mail.outbox if "is confirmed" in message.subject]
+        self.assertEqual([message.to for message in confirmations], [["kavya@example.com"]])
+        self._as_admin()
+        purchasers = self.client.get(reverse("admin-purchasers")).data["data"]
+        customers = self.client.get(reverse("admin-customers")).data["data"]
+        self.assertEqual([(row["email"], row["total_cards_purchased"]) for row in purchasers], [("kavya@example.com", 1)])
+        self.assertEqual([row["email"] for row in customers], ["chinnu@example.com"])
+
+    def test_purchaser_buying_one_card_for_herself_activates_once(self):
+        _, order = self._assert_recipient_activation(["kavya@example.com"])
+        self.assertEqual(order.recipients.get().user_id, order.customer_id)
+
+    def test_two_cards_for_other_people_only_activate_the_two_recipients(self):
+        self._assert_recipient_activation(["chinnu@example.com", "rahul@example.com"])
+
+    def test_three_cards_including_purchaser_activate_each_recipient_once(self):
+        self._assert_recipient_activation(["kavya@example.com", "chinnu@example.com", "rahul@example.com"])
+
+    def test_ten_cards_for_other_people_only_activate_the_ten_recipients(self):
+        self._assert_recipient_activation([f"recipient{index}@example.com" for index in range(10)])
+
+    def test_automatically_created_purchaser_has_no_activation_email_or_token(self):
+        _, order = self._buy_for_recipients(["chinnu@example.com"])
+        purchaser = order.customer
+        self.assertTrue(purchaser.must_change_password)
+        self.assertFalse(purchaser.has_usable_password())
+        self.assertEqual(self._activation_emails(), [])
+        self._set_status(order.pk, "PROCESSING")
+        record = CustomerOnboarding.objects.get(user=purchaser)
+        self.assertIsNone(record.credentials_issued_at)
+        self.assertIsNone(record.email_sent_at)
+        self.assertEqual(record.email_attempts, 0)
+        self.assertFalse(EmailOTP.objects.filter(user=purchaser, purpose=EmailOTP.Purpose.ACTIVATE).exists())
+
+    def test_repeated_dummy_payment_and_processing_do_not_duplicate_recipient_activation(self):
+        checkout, order = self._assert_recipient_activation(["chinnu@example.com", "rahul@example.com"])
+        user_count, profile_count = User.objects.count(), Profile.objects.count()
+        for _ in range(2):
+            self.assertEqual(self._confirm(checkout).status_code, status.HTTP_200_OK)
+            self.assertEqual(self._set_status(order.pk, "PROCESSING").status_code, status.HTTP_200_OK)
+            self.assertEqual(onboarding.start_activation_for_order(order, sync=True), "already_sent")
+        self.assertEqual(len(self._activation_emails()), 2)
+        self.assertEqual(EmailOTP.objects.filter(purpose=EmailOTP.Purpose.ACTIVATE).count(), 2)
+        self.assertEqual((User.objects.count(), Profile.objects.count()), (user_count, profile_count))
+        self.assertEqual(order.recipients.count(), 2)
+
+    def test_admin_can_resend_to_actual_recipient(self):
+        _, order = self._assert_recipient_activation(["chinnu@example.com"])
+        user = order.recipients.get().user
+        record = CustomerOnboarding.objects.get(user=user)
+        old_token = _activation_token(self._activation_emails()[0])
+        self._as_admin()
+        response = self.client.post(reverse("admin-onboarding-resend", args=[record.pk]))
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        self.assertEqual([message.to for message in self._activation_emails()], [[user.email], [user.email]])
+        self.assertEqual(EmailOTP.check_activation_link(old_token)[0], EmailOTP.LINK_USED)
+
+    def _legacy_purchaser_activation(self, order):
+        record = CustomerOnboarding.objects.get(user=order.customer)
+        raw_token = EmailOTP.issue_activation_link(order.customer, 48)
+        record.credentials_issued_at = timezone.now()
+        record.email_sent_at = timezone.now()
+        record.email_status = CustomerOnboarding.EmailStatus.SENT
+        record.email_attempts = 1
+        record.save()
+        return record, raw_token
+
+    def test_admin_cannot_resend_legacy_purchaser_only_activation(self):
+        _, order = self._buy_for_recipients(["chinnu@example.com"])
+        record, _ = self._legacy_purchaser_activation(order)
+        old_issued_at = record.credentials_issued_at
+        self._as_admin()
+        response = self.client.post(reverse("admin-onboarding-resend", args=[record.pk]))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+        self.assertEqual(response.data["errors"]["code"], "not_recipient")
+        record.refresh_from_db()
+        self.assertEqual(record.credentials_issued_at, old_issued_at)
+        self.assertEqual(record.email_attempts, 1)
+        self.assertEqual(self._activation_emails(), [])
+        self.assertEqual(EmailOTP.objects.filter(user=order.customer).count(), 1)
+
+    def test_direct_resend_and_queued_delivery_skip_purchaser_only_accounts(self):
+        _, order = self._buy_for_recipients(["chinnu@example.com"])
+        record, raw_token = self._legacy_purchaser_activation(order)
+        old_issued_at = record.credentials_issued_at
+        self.assertFalse(onboarding.reissue_and_send(order.customer, sync=True))
+        self.assertFalse(onboarding.deliver_activation_email(record.pk, raw_token))
+        record.refresh_from_db()
+        self.assertEqual(record.credentials_issued_at, old_issued_at)
+        self.assertEqual(record.email_attempts, 1)
+        self.assertEqual(self._activation_emails(), [])
+
+    def test_retry_command_skips_legacy_purchaser_and_retries_recipient(self):
+        _, order = self._assert_recipient_activation(["chinnu@example.com"])
+        purchaser_record, _ = self._legacy_purchaser_activation(order)
+        recipient_record = CustomerOnboarding.objects.get(user=order.recipients.get().user)
+        CustomerOnboarding.objects.filter(pk__in=[purchaser_record.pk, recipient_record.pk]).update(
+            email_status=CustomerOnboarding.EmailStatus.FAILED
+        )
+        mail.outbox.clear()
+        output = StringIO()
+        call_command("retry_onboarding_emails", stdout=output)
+        self.assertEqual([message.to for message in self._activation_emails()], [["chinnu@example.com"]])
+        self.assertIn("1 customer(s)", output.getvalue())
+        purchaser_record.refresh_from_db()
+        self.assertEqual(purchaser_record.email_attempts, 1)
+        self.assertEqual(purchaser_record.email_status, CustomerOnboarding.EmailStatus.FAILED)
+
+    def test_purchaser_later_explicitly_included_as_recipient_reuses_account(self):
+        _, first = self._buy_for_recipients(["chinnu@example.com"])
+        _, second = self._assert_recipient_activation(["kavya@example.com"])
+        self.assertEqual(first.customer_id, second.customer_id)
+        self.assertEqual(second.recipients.get().user_id, first.customer_id)
+
+    def test_existing_activated_recipient_keeps_password_and_gets_no_setup_email(self):
+        user = make_user(email="chinnu@example.com", password="Existing@1")
+        profile = Profile.ensure_for_user(user)
+        password = user.password
+        _, order = self._buy_for_recipients([user.email])
+        response = self._set_status(order.pk, "PROCESSING")
+        self.assertEqual(response.data["data"]["activation_result"], "active")
+        user.refresh_from_db()
+        self.assertEqual(user.password, password)
+        self.assertEqual(user.profile.pk, profile.pk)
+        self.assertFalse(user.must_change_password)
+        self.assertEqual(self._activation_emails(), [])
+        self.assertFalse(EmailOTP.objects.filter(purpose=EmailOTP.Purpose.ACTIVATE).exists())
+        self.assertEqual(User.objects.filter(email=user.email).count(), 1)
+
+    def test_activation_list_excludes_purchaser_and_preserves_recipient_history_and_filters(self):
+        _, order = self._buy_for_recipients(["chinnu@example.com"])
+        purchaser_record, _ = self._legacy_purchaser_activation(order)
+        self._set_status(order.pk, "PROCESSING")
+        recipient_record = CustomerOnboarding.objects.get(user=order.recipients.get().user)
+        recipient_record.user.must_change_password = False
+        recipient_record.user.save(update_fields=["must_change_password"])
+        self._as_admin()
+        for params in ({}, {"activation": "ACTIVATED"}, {"email_status": "SENT"}, {"search": "chinnu"}):
+            response = self.client.get(reverse("admin-onboarding"), params)
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response.data["pagination"]["count"], 1)
+            self.assertEqual([row["id"] for row in response.data["data"]], [recipient_record.pk])
+        response = self.client.get(reverse("admin-onboarding"), {"search": "kavya"})
+        self.assertEqual(response.data["data"], [])
+        purchaser_record.refresh_from_db()
+        self.assertEqual(purchaser_record.email_attempts, 1)
+        self.assertEqual(purchaser_record.email_status, CustomerOnboarding.EmailStatus.SENT)
+
+    def test_recipient_on_unpaid_order_is_ineligible_for_list_resend_and_delivery(self):
+        _, order = self._assert_recipient_activation(["kavya@example.com"])
+        record = CustomerOnboarding.objects.get(user=order.customer)
+        raw_token = _activation_token(self._activation_emails()[0])
+        Order.objects.filter(pk=order.pk).update(payment_status=Order.PaymentStatus.FAILED)
+        mail.outbox.clear()
+        self._as_admin()
+        self.assertEqual(self.client.get(reverse("admin-onboarding")).data["data"], [])
+        response = self.client.post(reverse("admin-onboarding-resend", args=[record.pk]))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(onboarding.reissue_and_send(order.customer, sync=True))
+        self.assertFalse(onboarding.deliver_activation_email(record.pk, raw_token))
+        self.assertEqual(self._activation_emails(), [])
+
+    def test_repeated_recipient_email_keeps_allocations_but_only_sends_one_activation(self):
+        self._assert_recipient_activation(["chinnu@example.com", "chinnu@example.com"])
+
+    def test_brevo_activation_is_sent_only_to_actual_recipient(self):
+        _, order = self._buy_for_recipients(["chinnu@example.com"])
+        with self.settings(BREVO_API_KEY="test-brevo-key"), mock.patch("accounts.emails.send_brevo_email", return_value=True) as send:
+            response = self._set_status(order.pk, "PROCESSING")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        send.assert_called_once()
+        self.assertEqual(send.call_args.args[0], "chinnu@example.com")
 
     # --- 1-11: the whole workflow --------------------------------------
     def test_full_workflow_new_customer(self):
@@ -240,7 +446,7 @@ class DummyPaymentActivationTests(APITestCase):
         )
         self.assertEqual(
             {email for message in self._activation_emails() for email in message.to},
-            {recipients[1]["email"], recipients[2]["email"], order.customer.email},
+            {recipients[1]["email"], recipients[2]["email"]},
         )
         failed_recipient = order.recipients.get(email=recipients[0]["email"])
         onboarding_record = CustomerOnboarding.objects.get(user=failed_recipient.user)
@@ -253,7 +459,7 @@ class DummyPaymentActivationTests(APITestCase):
         self.assertEqual(self._activation_emails()[-1].to, [recipients[0]["email"]])
 
         self.assertEqual(self._set_status(order.pk, "PROCESSING").status_code, status.HTTP_200_OK)
-        self.assertEqual(len(self._activation_emails()), 4)
+        self.assertEqual(len(self._activation_emails()), 3)
 
     def test_bulk_checkout_requires_recipient_details(self):
         response = self._start(qty=3, recipients=[])
@@ -430,6 +636,8 @@ class DummyPaymentActivationTests(APITestCase):
         response = self.client.post(reverse("admin-onboarding-resend", args=[CustomerOnboarding.objects.get().pk]))
         self.assertEqual(response.data["errors"]["code"], "not_processing")
         self.assertEqual(self._activation_emails(), [])
+        self.assertFalse(onboarding.reissue_and_send(CustomerOnboarding.objects.get().user, sync=True))
+        self.assertFalse(EmailOTP.objects.filter(purpose=EmailOTP.Purpose.ACTIVATE).exists())
 
 
 class RegistrationClosedTests(APITestCase):

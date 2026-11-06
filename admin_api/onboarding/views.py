@@ -36,13 +36,15 @@ def _row(item):
 
 
 class AdminOnboardingListView(APIView):
-    """Accounts created automatically from paid orders, with activation and
+    """Recipient accounts linked to paid orders, with activation and
     activation-email delivery status. Never includes any password or link."""
 
     permission_classes = [IsAdminRole]
 
     def get(self, request):
-        qs = CustomerOnboarding.objects.select_related("user", "source_order", "source_order__checkout_session").all()
+        qs = CustomerOnboarding.objects.select_related("user", "source_order", "source_order__checkout_session").filter(
+            user_id__in=onboarding.eligible_activation_recipients().values("user_id")
+        )
         search = request.query_params.get("search", "").strip()
         if search:
             qs = qs.filter(
@@ -76,6 +78,12 @@ class AdminOnboardingResendView(APIView):
         item = CustomerOnboarding.objects.select_related("user").filter(pk=pk).first()
         if item is None:
             return error("Not found.", status=404)
+        if not onboarding.eligible_activation_recipients().filter(user=item.user).exists():
+            return error(
+                "Activation emails are only available for recipients linked to a paid order.",
+                errors={"code": "not_recipient"},
+                status=400,
+            )
         if not item.user.must_change_password:
             return error("This customer has already activated their account.", status=400)
         if item.credentials_issued_at is None:
@@ -84,6 +92,7 @@ class AdminOnboardingResendView(APIView):
                 errors={"code": "not_processing"},
                 status=400,
             )
-        onboarding.reissue_and_send(item.user)
+        if not onboarding.reissue_and_send(item.user):
+            return error("This account is no longer eligible for an activation email.", status=400)
         item.refresh_from_db()
         return success(_row(item), message="A new activation link is being emailed to the customer.")

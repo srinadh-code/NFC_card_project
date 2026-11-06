@@ -8,7 +8,8 @@ from django.test import override_settings
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
-from accounts.models import CustomerOnboarding, User
+from accounts.models import CustomerOnboarding, EmailOTP, User
+from accounts.onboarding import ACTIVATION_SUBJECT
 from common.test_utils import make_user
 from nfc_cards.models import NfcCard
 from orders.models import Order, OrderRecipient, Transaction
@@ -73,6 +74,23 @@ class MultiRecipientPaymentTests(APITestCase):
                 self.assertEqual(order.transactions.filter(status="PAID").count(), 1)
         self.assertEqual(NfcCard.objects.count(), 0)
 
+    def test_activation_uses_recipient_accounts_for_every_supported_quantity(self):
+        for quantity in range(1, 11):
+            with self.subTest(quantity=quantity):
+                cache.clear()  # Each quantity is independent of earlier cases' OTP throttles.
+                emails = [f"q{quantity}.recipient{index}@example.com" for index in range(quantity)]
+                _, order = self.buy([recipient(index, email) for index, email in enumerate(emails)], email=f"buyer{quantity}@example.com")
+                self.client.force_authenticate(self.admin)
+                response = self.client.post(reverse("admin-order-status", args=[order.pk]), {"status": "PROCESSING"}, format="json")
+                self.client.force_authenticate(None)
+                self.assertEqual(response.status_code, 200, response.content)
+                messages = [message for message in mail.outbox if message.subject == ACTIVATION_SUBJECT]
+                self.assertCountEqual([message.to[0] for message in messages], emails)
+                self.assertEqual(order.recipients.count(), quantity)
+                purchaser_record = CustomerOnboarding.objects.get(user=order.customer)
+                self.assertIsNone(purchaser_record.credentials_issued_at)
+                self.assertEqual(purchaser_record.email_attempts, 0)
+
     def test_single_card_for_other_person_separates_admin_directories(self):
         _, order = self.buy([recipient(email="priya@example.com")])
         purchasers = self.as_admin_get("admin-purchasers")
@@ -118,6 +136,13 @@ class MultiRecipientPaymentTests(APITestCase):
 
     def test_duplicate_verify_and_webhook_keep_accounts_allocations_ledger_and_email_once(self):
         checkout, order = self.buy([recipient(), recipient(2)])
+        self.assertFalse(EmailOTP.objects.filter(purpose=EmailOTP.Purpose.ACTIVATE).exists())
+        self.client.force_authenticate(self.admin)
+        response = self.client.post(reverse("admin-order-status", args=[order.pk]), {"status": "PROCESSING"}, format="json")
+        self.client.force_authenticate(None)
+        self.assertEqual(response.status_code, 200, response.content)
+        messages = [message for message in mail.outbox if message.subject == ACTIVATION_SUBJECT]
+        self.assertCountEqual([message.to[0] for message in messages], ["recipient1@example.com", "recipient2@example.com"])
         account_count, profile_count, email_count = User.objects.count(), Profile.objects.count(), len(mail.outbox)
         for _ in range(2):
             self.assertEqual(self._verify(checkout, payment_id="pay_1").status_code, 200)
@@ -125,6 +150,7 @@ class MultiRecipientPaymentTests(APITestCase):
         self.assertEqual((Order.objects.count(), OrderRecipient.objects.count(), Transaction.objects.count()), (1, 2, 1))
         self.assertEqual((User.objects.count(), Profile.objects.count(), len(mail.outbox)), (account_count, profile_count, email_count))
         self.assertEqual(order.customer.orders.count(), 1)
+        self.assertEqual(EmailOTP.objects.filter(purpose=EmailOTP.Purpose.ACTIVATE).count(), 2)
 
     def test_failure_and_cancelled_checkout_provision_no_recipients_or_purchasers(self):
         payload = _guest_payload(qty=2)
@@ -265,17 +291,17 @@ class MultiRecipientPaymentTests(APITestCase):
         url = reverse("admin-order-status", args=[order.pk])
         self.assertEqual(self.client.post(url, {"status": "PROCESSING"}, format="json").status_code, 200)
         setup = [message for message in mail.outbox if "Account Is Ready" in message.subject]
-        self.assertEqual(sorted(message.to[0] for message in setup), ["rahul@example.com", "recipient1@example.com"])
+        self.assertEqual([message.to[0] for message in setup], ["recipient1@example.com"])
         self.assertEqual(self.client.post(url, {"status": "PROCESSING"}, format="json").status_code, 200)
-        self.assertEqual(len([m for m in mail.outbox if "Account Is Ready" in m.subject]), 2)
+        self.assertEqual(len([m for m in mail.outbox if "Account Is Ready" in m.subject]), 1)
         self.client.force_authenticate(None)
-        buyer_email = next(m for m in setup if m.to == ["rahul@example.com"])
-        token = re.search(r"/set-password\?token=([\w.\-]+)", buyer_email.body).group(1)
+        token = re.search(r"/set-password\?token=([\w.\-]+)", setup[0].body).group(1)
         password = "SafePass@123"
         activated = self.client.post(reverse("auth-activation-complete"), {"token": token, "new_password": password, "confirm_password": password}, format="json")
         self.assertEqual(activated.status_code, 200, activated.content)
         self.assertFalse(Profile.objects.filter(user=order.customer).exists())
-        login = self.client.post(reverse("auth-login"), {"email": order.customer.email, "password": password}, format="json")
+        self.assertFalse(EmailOTP.objects.filter(user=order.customer, purpose=EmailOTP.Purpose.ACTIVATE).exists())
+        login = self.client.post(reverse("auth-login"), {"email": "recipient1@example.com", "password": password}, format="json")
         self.assertEqual(login.status_code, 200, login.content)
 
 
