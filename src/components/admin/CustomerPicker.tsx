@@ -4,11 +4,11 @@ import { Check, ChevronsUpDown, Loader2 } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { adminCustomerApi } from "@/lib/api"
+import { adminNfcApi } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
-/** Search-as-you-type customer lookup, backed by the real admin customer
- * directory. Resolves to the customer's email — the shared identifier the
+/** Search-as-you-type lookup of customers without an assigned NFC card.
+ * Resolves to the customer's normalized email — the shared identifier the
  * NFC card assign/create/update endpoints already accept. */
 export function CustomerPicker({
   value,
@@ -33,8 +33,8 @@ export function CustomerPicker({
   }, [query])
 
   const { data, isFetching } = useQuery({
-    queryKey: ["customer-picker", debounced],
-    queryFn: () => adminCustomerApi.list({ search: debounced || undefined, page: 1 }),
+    queryKey: ["customer-picker", "card-assignment", debounced],
+    queryFn: () => adminNfcApi.assignmentCustomers({ search: debounced || undefined, page: 1 }),
     enabled: open,
   })
 
@@ -73,7 +73,7 @@ export function CustomerPicker({
           ) : (
             results.map((c) => (
               <button
-                key={c.id}
+                key={c.email}
                 type="button"
                 className="flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                 onClick={() => {
@@ -85,7 +85,7 @@ export function CustomerPicker({
                   <span className="font-medium">{c.name}</span>
                   <span className="text-xs text-muted-foreground">{c.email}</span>
                 </span>
-                {value === c.email && <Check className="size-4 shrink-0" />}
+                {value.trim().toLowerCase() === c.email && <Check className="size-4 shrink-0" />}
               </button>
             ))
           )}

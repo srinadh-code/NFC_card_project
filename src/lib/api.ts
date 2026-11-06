@@ -1333,6 +1333,21 @@ export interface AdminCardPage {
 }
 
 export const adminNfcApi = {
+  assignmentCustomers: async (params: { page?: number; search?: string } = {}) => {
+    const qs = new URLSearchParams()
+    if (params.page) qs.set("page", String(params.page))
+    if (params.search) qs.set("search", params.search)
+    const envelope = await rawRequest<{ id: number; name: string; email: string }[]>(
+      `/admin/cards/assignment-customers/?${qs}`, { area: "admin" },
+    )
+    return {
+      data: (envelope.data ?? []).map((customer) => ({
+        id: String(customer.id), name: customer.name, email: customer.email.trim().toLowerCase(),
+      })),
+      count: envelope.pagination?.count ?? 0,
+    }
+  },
+
   list: async (params: {
     page?: number
     pageSize?: number

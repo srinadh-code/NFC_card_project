@@ -86,7 +86,10 @@ export default function AdminCards() {
   })
 
   const cards = data?.data ?? []
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin-cards"] })
+  const invalidate = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["admin-cards"] }),
+    queryClient.invalidateQueries({ queryKey: ["customer-picker"] }),
+  ])
 
   const addMutation = useMutation({
     mutationFn: (values: CardFormValues) =>
@@ -251,6 +254,7 @@ export default function AdminCards() {
                     <TableHead>Card UID</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Customer</TableHead>
+                    <TableHead>Customer Email</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Activated On</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -265,6 +269,7 @@ export default function AdminCards() {
                         <PlanTypeBadge cardType={c.cardType} />
                       </TableCell>
                       <TableCell>{c.customerName ?? "Unassigned"}</TableCell>
+                      <TableCell className="text-muted-foreground">{c.customerEmail || "—"}</TableCell>
                       <TableCell>
                         <StatusBadge status={c.status} />
                       </TableCell>
@@ -321,7 +326,7 @@ export default function AdminCards() {
                   ))}
                   {cards.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                      <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
                         No cards found.
                       </TableCell>
                     </TableRow>
