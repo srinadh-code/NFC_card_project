@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -11,6 +11,7 @@ import { PinnedLocationLink } from "@/components/customer/PinnedLocationLink"
 import { validateRecipients, resizeRecipients, validCardQuantity, type CheckoutRecipient, type RecipientErrors } from "@/lib/checkout-recipients"
 import { useCheckoutVerificationStore } from "@/store/checkout-verification-store"
 import { BulkRecipientFields } from "@/components/checkout/BulkRecipientFields"
+import { useRecipientEmailAvailability } from "@/hooks/useRecipientEmailAvailability"
 import { OffersSection } from "@/components/checkout/OffersSection"
 import { DesignerContactNotice } from "@/components/checkout/DesignerContactNotice"
 import { GuestCheckout } from "@/components/checkout/GuestCheckout"
@@ -27,7 +28,7 @@ import {
   type RazorpayCheckout,
   type VerifiedPayment,
 } from "@/lib/api"
-import { PaymentCancelled, payWithRazorpay } from "@/lib/razorpay"
+import { PaymentCancelled, PaymentFailed, payWithRazorpay } from "@/lib/razorpay"
 import { formatCurrency } from "@/lib/mock-api"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
 import { cn } from "@/lib/utils"
@@ -97,7 +98,12 @@ export default function Checkout() {
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
   const [selectorOpen, setSelectorOpen] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
+  const [checkoutStep, setCheckoutStep] = useState<"summary" | "address" | "confirmation">("summary")
+  const detailsRef = useRef<HTMLDivElement | null>(null)
+  const recipientDetailsRef = useRef<HTMLDivElement | null>(null)
+  const orderSummaryRef = useRef<HTMLDivElement | null>(null)
   const { recipients: bulkRecipients, setRecipients: setBulkRecipients } = useCheckoutVerificationStore()
+  const recipientEmailAvailability = useRecipientEmailAvailability(bulkRecipients, customer?.email ?? "")
   const [recipientErrors, setRecipientErrors] = useState<RecipientErrors[]>([])
   // Set -> the form dialog edits this address (e.g. to fix a PIN code that
   // failed verification); null -> it adds a new one.
@@ -159,11 +165,22 @@ export default function Checkout() {
     if (bulkRecipients.length !== bulkRecipientCount) setBulkRecipients(resizeRecipients(bulkRecipients, bulkRecipientCount))
   }, [customer, cartLoading, bulkRecipientCount, bulkRecipients, setBulkRecipients])
 
+  function markDetailsChanged() {
+    setCheckoutStep((step) => step === "confirmation" ? "address" : step)
+  }
+
   function updateBulkRecipient(index: number, field: keyof CheckoutRecipient, value: string) {
     const next = [...bulkRecipients]
     next[index] = { ...next[index], [field]: value }
     setBulkRecipients(next)
     setRecipientErrors((previous) => previous.map((entry, slot) => slot === index ? { ...entry, [field]: undefined } : entry))
+    markDetailsChanged()
+  }
+
+  function returnToRecipientDetails() {
+    setCheckoutStep("summary")
+    recipientEmailAvailability.retry()
+    recipientDetailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }
 
   function validateBulkRecipients() {
@@ -171,6 +188,10 @@ export default function Checkout() {
     setRecipientErrors(result.errors)
     if (!result.valid) {
       toast.error("Please complete each recipient's name, valid email and phone number. Orders support 1 to 10 cards.")
+      return null
+    }
+    if (!recipientEmailAvailability.allAvailable) {
+      toast.error("Please wait until every recipient email is confirmed as available.")
       return null
     }
     return result.recipients
@@ -217,6 +238,11 @@ export default function Checkout() {
       // Idempotent on the backend: a repeated click returns the same order.
       finishOrder(await paymentsApi.confirmDummyPayment(dummyCheckout.checkout_id, dummyCheckout.amount))
     } catch (err) {
+      if (err instanceof ApiError && err.errors.recipients) {
+        setDummyCheckout(null)
+        returnToRecipientDetails()
+        toast.error(err.message)
+      }
       setDummyError(err instanceof Error ? err.message : "Couldn't confirm the payment. Please try again.")
     } finally {
       setConfirming(false)
@@ -225,6 +251,7 @@ export default function Checkout() {
 
   async function payOnline(addressId: number, recipients: CheckoutRecipient[], purchaser: { full_name: string; phone: string }) {
     setPaying(true)
+    let checkoutId: string | null = null
     try {
       if (!paymentConfig.data?.enabled && paymentConfig.data?.dummy_enabled) {
         setDummyError(null)
@@ -232,11 +259,23 @@ export default function Checkout() {
         return
       }
       const checkout = await paymentsApi.createCustomerCheckout(addressId, "razorpay", recipients, purchaser)
+      checkoutId = checkout.checkout_id
       const paid = await payWithRazorpay(checkout, settings.site_name)
       finishOrder(await paymentsApi.verifyPayment(paid))
     } catch (err) {
-      if (err instanceof PaymentCancelled) toast.info("Payment cancelled. You can try again whenever you're ready.")
-      else toast.error(err instanceof Error ? err.message : "Something went wrong with the payment.")
+      if (err instanceof PaymentCancelled || err instanceof PaymentFailed) {
+        try {
+          if (checkoutId) await paymentsApi.cancelCheckout(checkoutId)
+          if (err instanceof PaymentCancelled) toast.info("Payment cancelled. You can try again whenever you're ready.")
+          else toast.error(err.message)
+        } catch {
+          toast.error("The payment window closed, but we couldn't release this checkout. Please try again.")
+        }
+      }
+      else {
+        toast.error(err instanceof Error ? err.message : "Something went wrong with the payment.")
+        if (err instanceof ApiError && err.errors.recipients) returnToRecipientDetails()
+      }
       if (err instanceof ApiError && err.errors.address_id) {
         queryClient.invalidateQueries({ queryKey: ["address-verification"] })
       }
@@ -261,6 +300,7 @@ export default function Checkout() {
     onError: (err) => {
       const message = err instanceof ApiError ? err.message : "Something went wrong placing your order."
       toast.error(message)
+      if (err instanceof ApiError && err.errors.recipients) returnToRecipientDetails()
       // The backend rejected the address at order time — refresh the
       // on-page status so it shows the real reason instead of "verified".
       if (err instanceof ApiError && err.errors.address_id) {
@@ -292,52 +332,75 @@ export default function Checkout() {
     queryClient.invalidateQueries({ queryKey: ["address-verification"] })
     setSelectedAddressId(address.id)
     setSelectorOpen(false)
+    markDetailsChanged()
   }
 
   function openAddressForm(address: CustomerAddress | null) {
     setEditingAddress(address)
     setFormOpen(true)
+    markDetailsChanged()
+  }
+
+  function validateCheckoutDetails(recipients: CheckoutRecipient[]) {
+    if (lines.length === 0) {
+      toast.error("Your cart is empty.")
+      return null
+    }
+    if (!selectedAddress) {
+      toast.error("Please select or add a delivery address.")
+      return null
+    }
+    if (!addressVerified) {
+      toast.error("Please correct your delivery address before placing the order.")
+      return null
+    }
+
+    if (validLines.length === 0) {
+      toast.error("Your cart no longer contains any available products. Please add an item to continue.")
+      return null
+    }
+
+    if (!customer) return null
+    const purchaserResult = validateRecipients([{ ...purchaserContact, email: customer.email }], 1)
+    setPurchaserErrors(purchaserResult.errors[0])
+    if (!purchaserResult.valid) {
+      toast.error("Enter the purchaser's full name and a valid phone number.")
+      return null
+    }
+    const purchaser = { full_name: purchaserResult.recipients[0].full_name, phone: purchaserResult.recipients[0].phone }
+
+    return { purchaser, recipients, address: selectedAddress }
   }
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (busy) return
-    if (lines.length === 0) {
-      toast.error("Your cart is empty.")
+    const recipients = validateBulkRecipients()
+    if (recipients === null) {
+      recipientDetailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
       return
     }
-    if (!selectedAddress) {
-      toast.error("Please select or add a delivery address.")
-      return
-    }
-    if (!addressVerified) {
-      toast.error("Please correct your delivery address before placing the order.")
-      return
-    }
-
-    // Belt-and-braces alongside the cart store's own rehydration-time
-    // filter (cart-store.ts) — same VALID_CARD_TYPES check, not a second
-    // definition of it — so a retired card type can never reach the order
-    // API from this call site either, even in the same session.
-    if (validLines.length === 0) {
-      toast.error("Your cart no longer contains any available products. Please add an item to continue.")
+    if (onlinePayment && checkoutStep === "summary") {
+      setCheckoutStep("address")
+      detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
       return
     }
 
-    if (!customer) return
-    const purchaserResult = validateRecipients([{ ...purchaserContact, email: customer.email }], 1)
-    setPurchaserErrors(purchaserResult.errors[0])
-    if (!purchaserResult.valid) {
-      toast.error("Enter the purchaser's full name and a valid phone number.")
+    const validation = validateCheckoutDetails(recipients)
+    if (!validation) {
+      if (onlinePayment && checkoutStep !== "summary") detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
       return
     }
-    const purchaser = { full_name: purchaserResult.recipients[0].full_name, phone: purchaserResult.recipients[0].phone }
 
-    const bulkValidation = validateBulkRecipients()
-    if (bulkValidation === null) return
+    const { purchaser, recipients: bulkValidation, address } = validation
+    if (onlinePayment && checkoutStep === "address") {
+      setCheckoutStep("confirmation")
+      orderSummaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      return
+    }
 
     if (onlinePayment) {
-      payOnline(Number(selectedAddress.id), bulkValidation, purchaser)
+      payOnline(Number(address.id), bulkValidation, purchaser)
       return
     }
 
@@ -358,7 +421,7 @@ export default function Checkout() {
       // form) — orders are placed as Cash on Delivery / pay-on-confirmation
       // until one exists, so there's nothing for the customer to pick here.
       payment_method: "COD",
-      address_id: Number(selectedAddress.id),
+      address_id: Number(address.id),
     })
   }
 
@@ -366,8 +429,8 @@ export default function Checkout() {
     <div className="mx-auto max-w-6xl px-4 py-12">
       <h1 className="text-3xl font-bold tracking-tight text-foreground">Checkout</h1>
 
-      <form onSubmit={handleSubmit} className="mt-8 grid gap-8 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+      <form onSubmit={handleSubmit} noValidate className="mt-8 grid gap-8 lg:grid-cols-3">
+        <div ref={detailsRef} className="space-y-6 lg:col-span-2">
           <section className="rounded-2xl border bg-card p-6 shadow-sm" aria-labelledby="purchaser-heading">
             <h2 id="purchaser-heading" className="text-lg font-semibold text-foreground">Purchaser contact</h2>
             <p className="mt-2 text-sm text-muted-foreground">Order confirmations go to your signed-in email. Delivery and recipient details are entered separately.</p>
@@ -375,7 +438,7 @@ export default function Checkout() {
               <div className="space-y-1.5">
                 <label htmlFor="purchaser-name" className="text-sm font-medium">Full Name</label>
                 <Input id="purchaser-name" required autoComplete="billing name" value={purchaserContact.full_name}
-                  onChange={(event) => { setPurchaserContact((previous) => ({ ...previous, full_name: event.target.value })); setPurchaserErrors((previous) => ({ ...previous, full_name: undefined })) }}
+                  onChange={(event) => { setPurchaserContact((previous) => ({ ...previous, full_name: event.target.value })); setPurchaserErrors((previous) => ({ ...previous, full_name: undefined })); markDetailsChanged() }}
                   aria-invalid={Boolean(purchaserErrors.full_name)} />
                 {purchaserErrors.full_name && <p className="text-sm text-destructive">{purchaserErrors.full_name}</p>}
               </div>
@@ -386,7 +449,7 @@ export default function Checkout() {
               <div className="space-y-1.5">
                 <label htmlFor="purchaser-phone" className="text-sm font-medium">Phone Number</label>
                 <Input id="purchaser-phone" type="tel" required autoComplete="billing tel" value={purchaserContact.phone}
-                  onChange={(event) => { setPurchaserContact((previous) => ({ ...previous, phone: event.target.value })); setPurchaserErrors((previous) => ({ ...previous, phone: undefined })) }}
+                  onChange={(event) => { setPurchaserContact((previous) => ({ ...previous, phone: event.target.value })); setPurchaserErrors((previous) => ({ ...previous, phone: undefined })); markDetailsChanged() }}
                   aria-invalid={Boolean(purchaserErrors.phone)} />
                 {purchaserErrors.phone && <p className="text-sm text-destructive">{purchaserErrors.phone}</p>}
               </div>
@@ -398,7 +461,7 @@ export default function Checkout() {
                 <MapPin className="size-4 text-primary" /> Delivery Address
               </h2>
               {addresses.length > 0 && (
-                <Button type="button" variant="outline" size="sm" onClick={() => setSelectorOpen((v) => !v)}>
+                <Button type="button" variant="outline" size="sm" onClick={() => { setSelectorOpen((v) => !v); markDetailsChanged() }}>
                   {selectorOpen ? "Close" : "Change Address"}
                 </Button>
               )}
@@ -432,6 +495,7 @@ export default function Checkout() {
                     onSelect={() => {
                       setSelectedAddressId(address.id)
                       setSelectorOpen(false)
+                      markDetailsChanged()
                     }}
                   />
                 ))}
@@ -511,12 +575,16 @@ export default function Checkout() {
           </div>
 
           {bulkRecipientCount >= 1 && (
-            <BulkRecipientFields
-              count={bulkRecipientCount}
-              recipients={bulkRecipients}
-              errors={recipientErrors}
-              onChange={updateBulkRecipient}
-            />
+            <div ref={recipientDetailsRef}>
+              <BulkRecipientFields
+                count={bulkRecipientCount}
+                recipients={bulkRecipients}
+                errors={recipientErrors}
+                emailStatuses={recipientEmailAvailability.statuses}
+                onRetryEmailCheck={recipientEmailAvailability.retry}
+                onChange={updateBulkRecipient}
+              />
+            </div>
           )}
 
           <OffersSection enabled={lines.length > 0} />
@@ -541,7 +609,7 @@ export default function Checkout() {
           )}
         </div>
 
-        <div className="h-fit rounded-2xl border bg-card p-6 shadow-sm">
+        <div ref={orderSummaryRef} className="h-fit rounded-2xl border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-foreground">Order Summary</h2>
           {bulkRecipientCount > 0 && !validCardQuantity(bulkRecipientCount) && <p role="alert" className="mt-3 text-sm text-destructive">Orders support 1 to 10 cards. Update your cart quantity before checkout.</p>}
           <div className="mt-4 space-y-2 border-b pb-4 text-sm">
@@ -579,8 +647,36 @@ export default function Checkout() {
               <span>{formatCurrency(total, settings.currency)}</span>
             </div>
           </div>
+          {onlinePayment && checkoutStep === "confirmation" && (
+            <section aria-label="Order Confirmation and Payment Details" className="mt-5 space-y-3 rounded-xl border bg-muted/30 p-4 text-sm">
+              <h3 className="font-semibold text-foreground">Order Confirmation / Payment Details</h3>
+              <div>
+                <p className="font-medium text-foreground">Purchaser</p>
+                <p>{purchaserContact.full_name.trim()} · {customer.email} · {purchaserContact.phone}</p>
+              </div>
+              <div>
+                <p className="font-medium text-foreground">Delivery</p>
+                {selectedAddress && (
+                  <>
+                    <p>{selectedAddress.fullName} · {selectedAddress.phone}</p>
+                    <p>{[selectedAddress.addressLine1, selectedAddress.addressLine2].filter(Boolean).join(", ")}</p>
+                    <p>{[selectedAddress.landmark, selectedAddress.locality, selectedAddress.city, selectedAddress.district, selectedAddress.state, selectedAddress.pincode].filter(Boolean).join(", ")}</p>
+                  </>
+                )}
+              </div>
+              {bulkRecipients.length > 0 && (
+                <div>
+                  <p className="font-medium text-foreground">Recipients</p>
+                  {bulkRecipients.map((recipient, index) => (
+                    <p key={index}>{recipient.full_name} · {recipient.email} · {recipient.phone}</p>
+                  ))}
+                </div>
+              )}
+              <p className="text-muted-foreground">Review these details and the order amount before continuing to payment.</p>
+            </section>
+          )}
           <DesignerContactNotice className="mt-6" />
-          <Button type="submit" size="lg" className="mt-4 w-full" disabled={!addressVerified || busy || !validCardQuantity(bulkRecipientCount)}>
+          <Button type="submit" size="lg" className="mt-4 w-full" disabled={busy || !validCardQuantity(bulkRecipientCount) || !recipientEmailAvailability.allAvailable || (!onlinePayment && !addressVerified)}>
             {busy ? (onlinePayment ? "Processing…" : "Placing Order…") : onlinePayment ? "Pay Now" : "Place Order"}
           </Button>
         </div>

@@ -46,6 +46,7 @@ function loadScript(): Promise<void> {
 }
 
 export class PaymentCancelled extends Error {}
+export class PaymentFailed extends Error {}
 
 /** Opens Razorpay for a backend-created checkout. Resolves with the ids and
  * signature to verify server-side; rejects with PaymentCancelled when the
@@ -68,7 +69,7 @@ export async function payWithRazorpay(checkout: RazorpayCheckout, brandName: str
       modal: { ondismiss: () => reject(new PaymentCancelled("Payment cancelled.")) },
     })
     rzp.on("payment.failed", (response) => {
-      reject(new Error(response.error?.description || "The payment failed. No money was taken — please try again."))
+      reject(new PaymentFailed(response.error?.description || "The payment failed. No money was taken — please try again."))
     })
     rzp.open()
   })

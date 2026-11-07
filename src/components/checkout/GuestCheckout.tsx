@@ -1,8 +1,8 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 import { Link, Navigate, useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { AlertCircle, Loader2 } from "lucide-react"
+import { AlertCircle, LocateFixed, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DesignerContactNotice } from "@/components/checkout/DesignerContactNotice"
 import { BulkRecipientFields, type BulkRecipientErrors } from "@/components/checkout/BulkRecipientFields"
+import { useRecipientEmailAvailability } from "@/hooks/useRecipientEmailAvailability"
 import { DummyPaymentDialog } from "@/components/checkout/DummyPaymentDialog"
 import { OtpVerifier } from "@/components/checkout/OtpVerifier"
 import { INDIAN_STATES } from "@/data/indian-states"
@@ -33,8 +34,9 @@ import {
   type VerifiedPayment,
 } from "@/lib/api"
 import { formatCurrency } from "@/lib/mock-api"
-import { PaymentCancelled, payWithRazorpay } from "@/lib/razorpay"
+import { PaymentCancelled, PaymentFailed, payWithRazorpay } from "@/lib/razorpay"
 import { cn } from "@/lib/utils"
+import { CurrentLocationError, detectAddressFromCurrentLocation, mergeDetectedAddress } from "@/lib/checkout-location"
 import { resizeRecipients, validateRecipients, validCardQuantity, type CheckoutRecipient } from "@/lib/checkout-recipients"
 import { isFresh, useCheckoutVerificationStore } from "@/store/checkout-verification-store"
 import { storeOrderSuccess } from "@/pages/public/OrderSuccess"
@@ -124,8 +126,19 @@ export function GuestCheckout() {
   const [fullName, setFullName] = useState("")
   const [deliveryPhone, setDeliveryPhone] = useState("")
   const [address, setAddress] = useState<AddressFields>(EMPTY_ADDRESS)
+  const [detectingLocation, setDetectingLocation] = useState(false)
+  const [locationError, setLocationError] = useState<string | null>(null)
+  const deliveryDetailsRef = useRef<HTMLElement | null>(null)
+  const purchaserDetailsRef = useRef<HTMLElement | null>(null)
+  const recipientDetailsRef = useRef<HTMLDivElement | null>(null)
+  const orderSummaryRef = useRef<HTMLDivElement | null>(null)
+  const [checkoutStep, setCheckoutStep] = useState<"summary" | "address" | "confirmation">("summary")
   const [errors, setErrors] = useState<Errors>({})
   const [bulkRecipients, setBulkRecipients] = useState<CheckoutRecipient[]>(savedRecipients)
+  const availabilityBuyerEmail = viaMobile
+    ? verifiedEmail?.destination ?? emailInput
+    : contact?.destination ?? ""
+  const recipientEmailAvailability = useRecipientEmailAvailability(bulkRecipients, availabilityBuyerEmail)
   const [recipientErrors, setRecipientErrors] = useState<BulkRecipientErrors>([])
   const [paying, setPaying] = useState(false)
   const [payError, setPayError] = useState<string | null>(null)
@@ -147,9 +160,66 @@ export function GuestCheckout() {
     retry: false,
   })
 
+  function markDetailsChanged() {
+    setCheckoutStep((step) => step === "confirmation" ? "address" : step)
+  }
+
   function setField<K extends keyof AddressFields>(key: K, value: string) {
     setAddress((a) => ({ ...a, [key]: value }))
     setErrors((e) => ({ ...e, [key]: undefined }))
+    markDetailsChanged()
+  }
+
+  async function detectCurrentLocation() {
+    setLocationError(null)
+    if (!navigator.geolocation) {
+      setLocationError("Your browser doesn't support location access. Please enter your address manually.")
+      return
+    }
+
+    setDetectingLocation(true)
+    try {
+      const detected = await detectAddressFromCurrentLocation(
+        navigator.geolocation,
+        customerAddressApi.reverseGeocode,
+      )
+      setAddress((current) => mergeDetectedAddress(current, detected))
+      setErrors((current) => {
+        const next = { ...current }
+        for (const field of [
+          "address_line1",
+          "address_line2",
+          "landmark",
+          "locality",
+          "city",
+          "district",
+          "state",
+          "pincode",
+        ] as const) {
+          if (detected[field]?.trim()) next[field] = undefined
+        }
+        return next
+      })
+      markDetailsChanged()
+    } catch (error) {
+      setLocationError(
+        error instanceof CurrentLocationError
+          ? error.message
+          : error instanceof ApiError
+            ? error.message
+            : "We couldn't look up your location. Please try again, or enter your address manually.",
+      )
+    } finally {
+      setDetectingLocation(false)
+    }
+  }
+
+  function scrollToDeliveryDetails() {
+    deliveryDetailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
+
+  function scrollToOrderSummary() {
+    orderSummaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }
 
   const location = pinOk ? pinLookup.data : undefined
@@ -198,6 +268,7 @@ export function GuestCheckout() {
     setBulkRecipients(next)
     setSavedRecipients(next)
     setRecipientErrors((previous) => previous.map((entry, slot) => slot === index ? { ...entry, [field]: undefined } : entry))
+    markDetailsChanged()
   }
 
   function validateBulkRecipients() {
@@ -205,6 +276,10 @@ export function GuestCheckout() {
     setRecipientErrors(result.errors)
     if (!result.valid) {
       toast.error("Please complete each recipient's name, valid email and phone number. Orders support 1 to 10 cards.")
+      return null
+    }
+    if (!recipientEmailAvailability.allAvailable) {
+      toast.error("Please wait until every recipient email is confirmed as available.")
       return null
     }
     return result.recipients
@@ -226,9 +301,47 @@ export function GuestCheckout() {
     return found
   }
 
-  async function handlePay(e: FormEvent) {
-    e.preventDefault()
+  async function handlePay(e?: FormEvent) {
+    e?.preventDefault()
     setPayError(null)
+    const validatedRecipients = validateBulkRecipients()
+    if (validatedRecipients === null) {
+      recipientDetailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      return
+    }
+    if (checkoutStep === "summary") {
+      setCheckoutStep("address")
+      scrollToDeliveryDetails()
+      return
+    }
+    if (checkoutStep === "address") {
+      if (!isFresh(contact)) {
+        clearVerification()
+        navigate("/checkout/verify?redirect=%2Fcheckout", { replace: true })
+        return
+      }
+      if (!emailReady || !verifiedEmail) {
+        setPayError("Please verify your email address — your order confirmation is sent there.")
+        purchaserDetailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+        return
+      }
+      if (lines.length === 0) {
+        toast.error("Your cart is empty.")
+        return
+      }
+
+      const found = validate()
+      setErrors(found)
+      if (Object.keys(found).length > 0) {
+        toast.error("Please fix the highlighted fields.")
+        scrollToDeliveryDetails()
+        return
+      }
+      setCheckoutStep("confirmation")
+      scrollToOrderSummary()
+      return
+    }
+
     if (!isFresh(contact)) {
       clearVerification()
       navigate("/checkout/verify?redirect=%2Fcheckout", { replace: true })
@@ -249,9 +362,6 @@ export function GuestCheckout() {
       return
     }
 
-    const validatedRecipients = validateBulkRecipients()
-    if (validatedRecipients === null) return
-
     const payload: GuestCheckoutInput = {
       contact: {
         full_name: fullName.trim(),
@@ -267,6 +377,7 @@ export function GuestCheckout() {
     }
 
     const useDummy = !config.data?.enabled && Boolean(config.data?.dummy_enabled)
+    let checkoutId: string | null = null
     if (useDummy) {
       const key = JSON.stringify(payload)
       if (dummy && dummy.key === key) {
@@ -286,11 +397,19 @@ export function GuestCheckout() {
         return
       }
       const checkout = await paymentsApi.createGuestCheckout(payload)
+      checkoutId = checkout.checkout_id
       const paid = await payWithRazorpay(checkout, settings.site_name)
       finishOrder(await paymentsApi.verifyPayment(paid))
     } catch (err) {
-      if (err instanceof PaymentCancelled) {
-        setPayError("Payment was cancelled. You can try again whenever you're ready.")
+      if (err instanceof PaymentCancelled || err instanceof PaymentFailed) {
+        try {
+          if (checkoutId) await paymentsApi.cancelCheckout(checkoutId)
+          setPayError(err instanceof PaymentCancelled
+            ? "Payment was cancelled. You can try again whenever you're ready."
+            : err.message)
+        } catch {
+          setPayError("The payment window closed, but we couldn't release this checkout. Please try again.")
+        }
       } else if (err instanceof ApiError) {
         const contactErrors = (err.errors?.contact ?? {}) as Record<string, unknown>
         const addressErrors = (err.errors?.address ?? {}) as Record<string, unknown>
@@ -304,6 +423,11 @@ export function GuestCheckout() {
           if (msg) fieldErrors[key] = msg
         }
         setErrors(fieldErrors)
+        if (err.errors?.recipients) {
+          setCheckoutStep("summary")
+          recipientEmailAvailability.retry()
+          recipientDetailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+        }
         if (firstError(err.errors?.code) === "verification_required") {
           // Expired or not bound to this checkout — verify again.
           clearVerification()
@@ -350,7 +474,14 @@ export function GuestCheckout() {
       // Idempotent on the backend: a repeated click returns the same order.
       finishOrder(await paymentsApi.confirmDummyPayment(dummy.checkout.checkout_id, dummy.checkout.amount))
     } catch (err) {
-      if (err instanceof ApiError && firstError(err.errors?.code) === "amount_mismatch") {
+      if (err instanceof ApiError && err.errors.recipients) {
+        setDummy(null)
+        setDummyOpen(false)
+        setCheckoutStep("summary")
+        recipientEmailAvailability.retry()
+        recipientDetailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+        setPayError(err.message)
+      } else if (err instanceof ApiError && firstError(err.errors?.code) === "amount_mismatch") {
         // Prices changed since this checkout was priced — start a fresh one.
         setDummy(null)
         setDummyOpen(false)
@@ -390,7 +521,7 @@ export function GuestCheckout() {
     <form onSubmit={handlePay} noValidate className="grid gap-8 lg:grid-cols-3">
       <div className="space-y-6 lg:col-span-2">
         {/* Verified contact (+ the email, when verified by mobile) */}
-        <section className="rounded-2xl border bg-card p-6 shadow-sm" aria-labelledby="contact-heading">
+        <section ref={purchaserDetailsRef} className="rounded-2xl border bg-card p-6 shadow-sm" aria-labelledby="contact-heading">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <h2 id="contact-heading" className="text-lg font-semibold text-foreground">
               Your contact
@@ -421,13 +552,14 @@ export function GuestCheckout() {
                   label="Email Address"
                   placeholder="you@example.com"
                   value={emailReady && verifiedEmail ? verifiedEmail.destination : emailInput}
-                  onChange={setEmailInput}
+                  onChange={(value) => { setEmailInput(value); markDetailsChanged() }}
                   sessionRef={sessionRef}
                   verified={emailReady}
-                  onVerified={(token, destination) =>
+                  onVerified={(token, destination) => {
                     setVerifiedEmail({ channel: "EMAIL", destination, token, verifiedAt: Date.now() })
-                  }
-                  onChangeVerified={() => setVerifiedEmail(null)}
+                    markDetailsChanged()
+                  }}
+                  onChangeVerified={() => { setVerifiedEmail(null); markDetailsChanged() }}
                 />
                 {!emailReady && (
                   <p className="text-xs text-muted-foreground">
@@ -440,22 +572,39 @@ export function GuestCheckout() {
         </section>
 
         {bulkRecipientCount >= 1 && (
-          <BulkRecipientFields
-            count={bulkRecipientCount}
-            recipients={bulkRecipients}
-            errors={recipientErrors}
-            onChange={updateBulkRecipient}
-          />
+          <div ref={recipientDetailsRef}>
+            <BulkRecipientFields
+              count={bulkRecipientCount}
+              recipients={bulkRecipients}
+              errors={recipientErrors}
+              emailStatuses={recipientEmailAvailability.statuses}
+              onRetryEmailCheck={recipientEmailAvailability.retry}
+              onChange={updateBulkRecipient}
+            />
+          </div>
         )}
 
         {/* 2. Delivery details */}
-        <section className="rounded-2xl border bg-card p-6 shadow-sm" aria-labelledby="details-heading">
-          <h2 id="details-heading" className="text-lg font-semibold text-foreground">
-            Purchaser and delivery details
-          </h2>
+        <section ref={deliveryDetailsRef} className="rounded-2xl border bg-card p-6 shadow-sm" aria-labelledby="details-heading">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 id="details-heading" className="text-lg font-semibold text-foreground">
+              Purchaser and delivery details
+            </h2>
+            <Button type="button" variant="outline" onClick={detectCurrentLocation} disabled={detectingLocation}>
+              {detectingLocation
+                ? <Loader2 className="animate-spin" aria-hidden="true" />
+                : <LocateFixed aria-hidden="true" />}
+              {detectingLocation ? "Detecting Location…" : "Use Current Location"}
+            </Button>
+          </div>
+          {locationError && (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              {locationError}
+            </p>
+          )}
           <fieldset disabled={paying} className="mt-5 grid gap-4 sm:grid-cols-2">
             <Field id="g-name" label="Purchaser Full Name" error={errors.full_name}>
-              <Input id="g-name" autoComplete="name" value={fullName} onChange={(e) => { setFullName(e.target.value); setErrors((x) => ({ ...x, full_name: undefined })) }} aria-invalid={!!errors.full_name} />
+              <Input id="g-name" autoComplete="name" value={fullName} onChange={(e) => { setFullName(e.target.value); setErrors((x) => ({ ...x, full_name: undefined })); markDetailsChanged() }} aria-invalid={!!errors.full_name} />
             </Field>
             <Field id="g-phone" label="Purchaser Mobile Number" error={errors.phone}>
               <Input
@@ -466,13 +615,13 @@ export function GuestCheckout() {
                 placeholder="9876543210"
                 value={phone}
                 readOnly={viaMobile}
-                onChange={(e) => { setPhone(e.target.value); setErrors((x) => ({ ...x, phone: undefined })) }}
+                onChange={(e) => { setPhone(e.target.value); setErrors((x) => ({ ...x, phone: undefined })); markDetailsChanged() }}
                 aria-invalid={!!errors.phone}
               />
             </Field>
             <Field id="g-delivery-phone" label="Delivery Phone Number" error={errors.delivery_phone}>
               <Input id="g-delivery-phone" type="tel" required autoComplete="shipping tel" value={deliveryPhone}
-                onChange={(event) => { setDeliveryPhone(event.target.value); setErrors((previous) => ({ ...previous, delivery_phone: undefined })) }}
+                onChange={(event) => { setDeliveryPhone(event.target.value); setErrors((previous) => ({ ...previous, delivery_phone: undefined })); markDetailsChanged() }}
                 aria-invalid={Boolean(errors.delivery_phone)} />
             </Field>
             <Field id="g-line1" label="Address Line 1" error={errors.address_line1} className="sm:col-span-2">
@@ -536,7 +685,7 @@ export function GuestCheckout() {
       </div>
 
       {/* Summary + pay */}
-      <div className="h-fit rounded-2xl border bg-card p-6 shadow-sm">
+      <div ref={orderSummaryRef} className="h-fit rounded-2xl border bg-card p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-foreground">Order Summary</h2>
           {bulkRecipientCount > 0 && !validCardQuantity(bulkRecipientCount) && <p role="alert" className="mt-3 text-sm text-destructive">Orders support 1 to 10 cards. Update your cart quantity before checkout.</p>}
         {lines.length === 0 ? (
@@ -559,6 +708,29 @@ export function GuestCheckout() {
           <span>Estimated total</span>
           <span className="font-semibold text-foreground">{formatCurrency(estimate, settings.currency)}</span>
         </div>
+        {checkoutStep === "confirmation" && (
+          <section aria-label="Order Confirmation and Payment Details" className="mt-5 space-y-3 rounded-xl border bg-muted/30 p-4 text-sm">
+            <h3 className="font-semibold text-foreground">Order Confirmation / Payment Details</h3>
+            <div>
+              <p className="font-medium text-foreground">Purchaser</p>
+              <p>{fullName.trim()} · {verifiedEmail?.destination} · {phone}</p>
+            </div>
+            <div>
+              <p className="font-medium text-foreground">Delivery</p>
+              <p>{deliveryPhone}</p>
+              {deliveryLines.map((line, index) => <p key={index}>{line}</p>)}
+            </div>
+            {bulkRecipients.length > 0 && (
+              <div>
+                <p className="font-medium text-foreground">Recipients</p>
+                {bulkRecipients.map((recipient, index) => (
+                  <p key={index}>{recipient.full_name} · {recipient.email} · {recipient.phone}</p>
+                ))}
+              </div>
+            )}
+            <p className="text-muted-foreground">Review these details and the order amount before continuing to payment.</p>
+          </section>
+        )}
         <p className="mt-2 text-xs text-muted-foreground">
           The final amount — including any offers and the first-order discount — is calculated securely and shown in
           the payment window before you pay.
@@ -583,18 +755,13 @@ export function GuestCheckout() {
           </p>
         )}
         <Button
-          type="submit"
+          type="button"
           size="lg"
           className="mt-4 w-full"
-          disabled={!paymentsEnabled || !emailReady || paying || !validCardQuantity(bulkRecipientCount)}
+          onClick={() => void handlePay()}
+          disabled={paying || confirming || !validCardQuantity(bulkRecipientCount) || !recipientEmailAvailability.allAvailable}
         >
-          {paying ? (
-            <>
-              <Loader2 className="animate-spin" /> Processing…
-            </>
-          ) : (
-            "Pay Now"
-          )}
+          Pay Now
         </Button>
         {paymentsEnabled && !emailReady && (
           <p className="mt-2 text-center text-xs text-muted-foreground">Verify your email address to continue.</p>

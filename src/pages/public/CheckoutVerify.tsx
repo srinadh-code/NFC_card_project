@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { BulkRecipientFields, type BulkRecipientErrors } from "@/components/checkout/BulkRecipientFields"
+import { useRecipientEmailAvailability } from "@/hooks/useRecipientEmailAvailability"
 import { OtpVerifier } from "@/components/checkout/OtpVerifier"
 import { useCart } from "@/hooks/useCart"
 import { paymentsApi, type VerificationChannel } from "@/lib/api"
@@ -49,6 +50,10 @@ export default function CheckoutVerify() {
   const cartQuantity = lines.reduce((quantity, line) => quantity + line.qty, 0)
   const bulkRecipientCount =
     cartQuantity > 0 ? cartQuantity : savedRecipientCount
+  const recipientEmailAvailability = useRecipientEmailAvailability(
+    recipients,
+    contact?.channel === "EMAIL" ? contact.destination : "",
+  )
 
   useEffect(() => {
     if (bulkRecipientCount === null || !validCardQuantity(bulkRecipientCount) || recipients.length === bulkRecipientCount) return
@@ -120,6 +125,8 @@ export default function CheckoutVerify() {
           count={bulkRecipientCount}
           recipients={recipients}
           errors={recipientErrors}
+          emailStatuses={recipientEmailAvailability.statuses}
+          onRetryEmailCheck={recipientEmailAvailability.retry}
           onChange={updateRecipient}
         />
         <Button size="lg" className="w-full" onClick={continueToVerification}>

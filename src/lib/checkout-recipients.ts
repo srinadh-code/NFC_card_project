@@ -38,12 +38,21 @@ export function validateRecipients(recipients: CheckoutRecipient[], count: numbe
     if (!full_name) entry.full_name = "Full Name is required."
     else if (full_name.length > 150 || /[\u0000-\u001f\u007f]/.test(recipient.full_name) || !/\p{L}/u.test(full_name)) entry.full_name = "Enter a valid full name."
     if (!email) entry.email = "Email Address is required."
-    else if (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) entry.email = "Enter a valid email address."
+    else if (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) entry.email = "Please enter a valid email address."
     if (!phone) entry.phone = "Phone Number is required."
     else if (!/^\+?[0-9]{7,15}$/.test(phone)) entry.phone = "Enter a valid phone number with 7 to 15 digits, including country code if needed."
     errors[index] = entry
     return { full_name, email, phone }
   })
+  const emailSlots = new Map<string, number[]>()
+  cleaned.forEach((recipient, index) => {
+    if (!recipient.email) return
+    emailSlots.set(recipient.email, [...(emailSlots.get(recipient.email) ?? []), index])
+  })
+  for (const indexes of emailSlots.values()) {
+    if (indexes.length < 2) continue
+    for (const index of indexes) errors[index].email = "Use a different email address for each NFC card."
+  }
   return {
     recipients: cleaned,
     errors,

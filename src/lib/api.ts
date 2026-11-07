@@ -3014,8 +3014,22 @@ export const paymentsApi = {
   confirmDummyPayment: (checkoutId: string, amount: number) =>
     request<VerifiedPayment>("/payments/dummy/confirm/", { method: "POST", body: { checkout_id: checkoutId, amount } }),
 
+  cancelCheckout: (checkoutId: string) =>
+    request<null>("/payments/checkout/cancel/", { method: "POST", body: { checkout_id: checkoutId }, auth: false }),
+
   verifyPayment: (data: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) =>
     request<VerifiedPayment>("/payments/razorpay/verify/", { method: "POST", body: data, auth: false }),
+}
+
+export const recipientEmailApi = {
+  check: (email: string, buyerEmail = "") =>
+    request<{ available: boolean; message: string }>("/payments/recipient-email-availability/", {
+      method: "POST",
+      body: {
+        email: email.trim().toLowerCase(),
+        ...(buyerEmail.trim() ? { buyer_email: buyerEmail.trim().toLowerCase() } : {}),
+      },
+    }),
 }
 
 export type AccountStatus = "PENDING_PROCESSING" | "EMAIL_SENT" | "EMAIL_FAILED" | "ACTIVATED"

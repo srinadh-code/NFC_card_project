@@ -9,14 +9,20 @@ let RecipientFields
 let checkoutStore
 let previousSessionStorage
 let previousLocalStorage
+let previousWindow
 let cartStore
 let sanitizeCartLines
+let recipientEmailApi
+let NetworkError
+let recipientEmailsAreAvailable
+let addressValidation
 
 before(async () => {
   // Load the real TSX component and project aliases without a browser or
   // a listening development server; no extra test dependency is needed.
   previousSessionStorage = Object.getOwnPropertyDescriptor(globalThis, "sessionStorage")
   previousLocalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage")
+  previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window")
   const values = new Map()
   Object.defineProperty(globalThis, "sessionStorage", { configurable: true, value: {
     getItem: (key) => values.get(key) ?? null,
@@ -24,12 +30,18 @@ before(async () => {
     removeItem: (key) => values.delete(key),
   } })
   Object.defineProperty(globalThis, "localStorage", { configurable: true, value: globalThis.sessionStorage })
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { location: { pathname: "/checkout" }, localStorage: globalThis.localStorage } })
   vite = await createServer({ server: { middlewareMode: true }, appType: "custom" })
   RecipientFields = (await vite.ssrLoadModule("/src/components/checkout/BulkRecipientFields.tsx")).BulkRecipientFields
   checkoutStore = (await vite.ssrLoadModule("/src/store/checkout-verification-store.ts")).useCheckoutVerificationStore
   const cart = await vite.ssrLoadModule("/src/store/cart-store.ts")
   cartStore = cart.useCartStore
   sanitizeCartLines = cart.sanitizeCartLines
+  const api = await vite.ssrLoadModule("/src/lib/api.ts")
+  recipientEmailApi = api.recipientEmailApi
+  NetworkError = api.NetworkError
+  recipientEmailsAreAvailable = (await vite.ssrLoadModule("/src/hooks/useRecipientEmailAvailability.ts")).recipientEmailsAreAvailable
+  addressValidation = await vite.ssrLoadModule("/src/lib/address-validation.ts")
 })
 after(async () => {
   await vite?.close()
@@ -37,10 +49,12 @@ after(async () => {
   else delete globalThis.sessionStorage
   if (previousLocalStorage) Object.defineProperty(globalThis, "localStorage", previousLocalStorage)
   else delete globalThis.localStorage
+  if (previousWindow) Object.defineProperty(globalThis, "window", previousWindow)
+  else delete globalThis.window
 })
 
-function render(count, recipients = [], errors = []) {
-  return renderToStaticMarkup(createElement(RecipientFields, { count, recipients, errors, onChange() {} }))
+function render(count, recipients = [], errors = [], emailStatuses = [], onRetryEmailCheck) {
+  return renderToStaticMarkup(createElement(RecipientFields, { count, recipients, errors, emailStatuses, onRetryEmailCheck, onChange() {} }))
 }
 
 for (const quantity of [1, 2, 3, 5, 10]) {
@@ -77,6 +91,71 @@ test("field validation errors are visible on the correct recipient", () => {
   assert.equal((html.match(/aria-invalid="true"/g) ?? []).length, 2)
 })
 
+test("recipient warning and not-checked email state are shown", () => {
+  const html = render(1)
+  assert.ok(html.includes("Important: Please double-check the recipient&#x27;s full name, email address and phone number before continuing. These details will be used for NFC card allocation and digital profile creation."))
+  assert.ok(html.includes("bg-blue-50"))
+  assert.ok(html.includes("Email availability not checked yet."))
+  assert.ok(!html.includes("Email not verified"))
+})
+
+test("email checking, availability, allocation errors, and network retry render inline", () => {
+  const checking = render(1, [{ full_name: "Priya", email: "priya@example.com", phone: "1234567890" }], [], [
+    { email: "priya@example.com", state: "checking" },
+  ])
+  assert.ok(checking.includes("Checking email availability..."))
+  assert.ok(checking.includes('role="status"'))
+
+  const available = render(1, [], [], [{ email: "priya@example.com", state: "available" }])
+  assert.ok(!available.includes("Email Available"))
+  assert.ok(!available.includes("text-success"))
+
+  const allocated = render(1, [], [], [{
+    email: "priya@example.com",
+    state: "allocated",
+    message: "This email is already assigned to another NFC card. Please enter a different email.",
+  }])
+  assert.ok(allocated.includes("Email Already Assigned"))
+  assert.ok(allocated.includes("This email is already assigned to another NFC card. Please enter a different email."))
+  assert.ok(allocated.includes('aria-invalid="true"'))
+
+  const networkError = render(1, [], [], [{
+    email: "priya@example.com",
+    state: "network-error",
+    message: "We couldn't check email availability. Please try again.",
+  }], () => {})
+  assert.ok(networkError.includes("Check Failed"))
+  assert.ok(networkError.includes("Retry"))
+
+  const invalid = render(1, [], [], [{
+    email: "not-an-email",
+    state: "invalid",
+    message: "Please enter a valid email address.",
+  }])
+  assert.ok(invalid.includes("Please enter a valid email address."))
+  assert.ok(invalid.includes('aria-invalid="true"'))
+})
+
+test("availability API surfaces network failures for inline retry handling", async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => { throw new Error("offline") }
+  try {
+    await assert.rejects(recipientEmailApi.check("user@example.com"), NetworkError)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("recipient checkout gate fails closed until every email is confirmed available", () => {
+  const status = (state) => ({ email: "user@example.com", state, ...(state === "available" ? {} : { message: "Unavailable" }) })
+  assert.equal(recipientEmailsAreAvailable([status("available")]), true)
+  for (const blocked of ["idle", "checking", "allocated", "duplicate", "invalid", "network-error"]) {
+    assert.equal(recipientEmailsAreAvailable([status(blocked)]), false, blocked)
+  }
+  assert.equal(recipientEmailsAreAvailable([]), false)
+  assert.equal(recipientEmailsAreAvailable([status("available"), status("allocated")]), false)
+})
+
 
 test("actual persisted checkout store preserves remaining recipient slots through quantity changes", () => {
   checkoutStore.getState().clear()
@@ -96,6 +175,13 @@ test("actual persisted checkout store preserves remaining recipient slots throug
   assert.equal(checkoutStore.getState().contact, null)
 })
 
+test("manual address fields still satisfy existing checkout validation without location detection", () => {
+  assert.equal(addressValidation.validateAddressLine1("Flat 12, Main Road"), null)
+  assert.equal(addressValidation.validateCity("Hyderabad"), null)
+  assert.equal(addressValidation.validateDistrict("Hyderabad"), null)
+  assert.equal(addressValidation.validateState("Telangana"), null)
+  assert.equal(addressValidation.validatePincode("500001"), null)
+})
 
 test("actual cart store enforces quantity bounds and the total across lines", () => {
   cartStore.getState().clearCart()
