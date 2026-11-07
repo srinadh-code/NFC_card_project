@@ -13,11 +13,17 @@ from . import razorpay, sms, verification
 from .models import CheckoutSession, CheckoutVerification
 from .services import (
     CheckoutError,
+    cancel_checkout_session,
     confirm_dummy_payment,
     create_checkout_session,
     dummy_payments_enabled,
     fulfill_checkout,
+    is_recipient_email_available,
     mark_failed,
+    normalize_recipient_email,
+    RECIPIENT_EMAIL_ALLOCATED_MESSAGE,
+    RECIPIENT_EMAIL_AVAILABLE_MESSAGE,
+    RECIPIENT_EMAIL_INVALID_MESSAGE,
 )
 
 logger = logging.getLogger("payments")
@@ -78,6 +84,70 @@ class RazorpayConfigView(APIView):
                 "dummy_enabled": dummy_payments_enabled(),
             }
         )
+
+
+class RecipientEmailAvailabilitySerializer(serializers.Serializer):
+    email = serializers.EmailField(
+        max_length=254,
+        error_messages={"invalid": RECIPIENT_EMAIL_INVALID_MESSAGE},
+    )
+    buyer_email = serializers.EmailField(max_length=254, required=False, allow_blank=True)
+
+    def validate_email(self, value):
+        return normalize_recipient_email(value)
+
+    def validate_buyer_email(self, value):
+        return normalize_recipient_email(value)
+
+
+class RecipientEmailAvailabilityView(APIView):
+    """Checks NFC allocation eligibility without revealing account details."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [CheckoutAnonThrottle, CheckoutUserThrottle]
+
+    def post(self, request):
+        serializer = RecipientEmailAvailabilitySerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(
+                RECIPIENT_EMAIL_INVALID_MESSAGE,
+                errors={"email": [RECIPIENT_EMAIL_INVALID_MESSAGE]},
+                status=400,
+            )
+        customer = _activated_customer(request)
+        buyer_email = (
+            customer.email
+            if customer is not None
+            else serializer.validated_data.get("buyer_email", "")
+        )
+        available = is_recipient_email_available(serializer.validated_data["email"], buyer_email)
+        return success({
+            "available": available,
+            "message": RECIPIENT_EMAIL_AVAILABLE_MESSAGE if available else RECIPIENT_EMAIL_ALLOCATED_MESSAGE,
+        })
+
+
+class CheckoutCancelSerializer(serializers.Serializer):
+    checkout_id = serializers.UUIDField()
+
+
+class CheckoutCancelView(APIView):
+    """Releases a checkout's recipient holds when the buyer closes payment."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [CheckoutAnonThrottle, CheckoutUserThrottle]
+
+    def post(self, request):
+        serializer = CheckoutCancelSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error("This checkout wasn't found. Please start again.", status=404)
+        try:
+            cancel_checkout_session(serializer.validated_data["checkout_id"])
+        except CheckoutError as exc:
+            return error(exc.message, errors=exc.errors, status=exc.status)
+        return success(message="Checkout closed.")
 
 
 class RazorpayCheckoutView(APIView):
@@ -230,7 +300,7 @@ class RazorpayVerifyView(APIView):
         try:
             session, account_created = fulfill_checkout(order_id, payment_id, via="verify")
         except CheckoutError as exc:
-            return error(exc.message, status=exc.status)
+            return error(exc.message, errors=exc.errors, status=exc.status)
         order = session.order
         return success(
             {
@@ -314,7 +384,12 @@ class RazorpayWebhookView(APIView):
                 return success(message="Amount mismatch — not fulfilled.")
             try:
                 fulfill_checkout(order_id, payment.get("id") or session.razorpay_payment_id or "", via="webhook")
-            except CheckoutError:
+            except CheckoutError as exc:
+                logger.warning(
+                    "payments.webhook.fulfillment_rejected order=%s reason=%s",
+                    order_id,
+                    exc.message,
+                )
                 return success(message="Ignored.")
             return success(message="Fulfilled.")
         if name == "payment.failed":

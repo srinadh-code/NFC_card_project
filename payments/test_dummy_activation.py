@@ -304,8 +304,16 @@ class DummyPaymentActivationTests(APITestCase):
         self.assertFalse(onboarding.deliver_activation_email(record.pk, raw_token))
         self.assertEqual(self._activation_emails(), [])
 
-    def test_repeated_recipient_email_keeps_allocations_but_only_sends_one_activation(self):
-        self._assert_recipient_activation(["chinnu@example.com", "chinnu@example.com"])
+    def test_repeated_recipient_email_is_rejected_before_payment(self):
+        response = self._start(
+            qty=2,
+            recipients=[
+                {"full_name": "Recipient One", "email": "chinnu@example.com", "phone": "+44 7700 900123"},
+                {"full_name": "Recipient Two", "email": " CHINNU@example.com ", "phone": "+44 7700 900123"},
+            ],
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+        self.assertFalse(CheckoutSession.objects.exists())
 
     def test_brevo_activation_is_sent_only_to_actual_recipient(self):
         _, order = self._buy_for_recipients(["chinnu@example.com"])

@@ -257,6 +257,13 @@ class OrderRecipient(models.Model):
         blank=True,
         related_name="recipient_assignments",
     )
+    email_allocation = models.ForeignKey(
+        "RecipientEmailAllocation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recipients",
+    )
     invitation_status = models.CharField(max_length=12, choices=InvitationStatus.choices, default=InvitationStatus.PENDING)
     invitation_sent_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -274,3 +281,34 @@ class OrderRecipient(models.Model):
 
     def __str__(self):
         return f"{self.name} <{self.email}> ({self.order_id})"
+
+
+class RecipientEmailAllocation(models.Model):
+    """The buyer who first reserved this recipient email for NFC allocation."""
+
+    normalized_email = models.EmailField(max_length=254, unique=True)
+    owner_email = models.EmailField(max_length=254)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.normalized_email
+
+
+class RecipientEmailReservation(models.Model):
+    """A pending payment attempt using an existing buyer-owned allocation."""
+
+    allocation = models.ForeignKey(
+        RecipientEmailAllocation,
+        on_delete=models.CASCADE,
+        related_name="reservations",
+    )
+    checkout_session_id = models.UUIDField(db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["allocation", "checkout_session_id"],
+                name="unique_recipient_email_checkout_reservation",
+            ),
+        ]

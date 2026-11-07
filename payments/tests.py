@@ -239,7 +239,10 @@ class RazorpayOnboardingTests(APITestCase):
         CartItem.objects.create(cart=cart, product_id="PRD-NEXORA-CUSTOM", name="GATEWAY Custom", card_type="CUSTOM", qty=2, price="1.00")
         token = str(RefreshToken.for_user(customer).access_token)
         response = self.client.post(
-            reverse("razorpay-checkout"), {"address_id": address.pk, "recipients": [{"full_name": "Member", "email": customer.email, "phone": "9876543210"} for _ in range(2)]}, format="json", HTTP_AUTHORIZATION=f"Bearer {token}"
+            reverse("razorpay-checkout"), {"address_id": address.pk, "recipients": [
+                {"full_name": "Member", "email": customer.email, "phone": "9876543210"},
+                {"full_name": "Card Recipient", "email": "member.card@example.com", "phone": "9876543210"},
+            ]}, format="json", HTTP_AUTHORIZATION=f"Bearer {token}"
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
         checkout = response.data["data"]
@@ -249,7 +252,7 @@ class RazorpayOnboardingTests(APITestCase):
         self.assertEqual(order.customer, customer)
         self.assertFalse(verified.data["data"]["account_created"])
         self.assertFalse(cart.items.exists())
-        self.assertEqual(User.objects.count(), 1)
+        self.assertEqual(User.objects.count(), 2)
 
     @override_settings(RAZORPAY_KEY_ID="", RAZORPAY_KEY_SECRET="")
     def test_payments_unavailable_without_keys(self):
