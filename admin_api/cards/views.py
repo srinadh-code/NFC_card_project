@@ -1,13 +1,17 @@
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Min, Q
+from django.db.models.functions import Lower, Trim
 from django.utils import timezone
 from rest_framework.views import APIView
+from rest_framework.exceptions import ValidationError
 
 from accounts.models import User
 from admin_api.permissions import IsAdminRole
+from admin_api.customers.services import customer_profiles
 from common.pagination import StandardPagination
 from common.response import error, success
 from nfc_cards.models import NfcCard
+from nfc_cards.assignment import assignment_accounts, assigned_card_emails, ensure_card_assignment_available, normalize_assignment_email
 from orders.models import Order, OrderRecipient
 
 from .serializers import (
@@ -18,13 +22,48 @@ from .serializers import (
 )
 
 
-def _resolve_customer(email):
+def _resolve_customer(email, *, existing_card=None):
     """`email` has already passed AdminCardWriteSerializer/AdminCardAssignSerializer
     validation, so a blank string means "no customer" and any other value is
     guaranteed to match an existing CUSTOMER account."""
     if not email:
         return None
-    return User.objects.get(email__iexact=email, role=User.Role.CUSTOMER)
+    matches = assignment_accounts(email).filter(role=User.Role.CUSTOMER).order_by("pk")
+    customer = matches.filter(pk=existing_card.user_id).first() if existing_card and existing_card.user_id else None
+    customer = customer or matches.first()
+    if customer is None:
+        raise ValidationError({"customer_email": "No customer account found with that email."})
+    try:
+        ensure_card_assignment_available(customer, card=existing_card)
+    except ValueError as exc:
+        raise ValidationError({"customer_email": str(exc)}) from exc
+    return customer
+
+
+class AdminCardAssignmentCustomerListView(APIView):
+    """Assignment-only lookup; the normal Customers directory is unchanged."""
+
+    permission_classes = [IsAdminRole]
+
+    def get(self, request):
+        available = customer_profiles().annotate(_assignment_email=Lower(Trim("user__email"))).exclude(
+            _assignment_email__in=assigned_card_emails()
+        ).exclude(_assignment_email="")
+        search = request.query_params.get("search", "").strip()
+        if search:
+            available = available.filter(Q(user__full_name__icontains=search) | Q(user__email__icontains=search))
+        # Legacy accounts can differ only by email casing or whitespace.
+        # Choose one representative per email before applying pagination.
+        representatives = available.order_by().values("_assignment_email").annotate(
+            profile_id=Min("pk")
+        ).values("profile_id")
+        qs = available.filter(pk__in=representatives).order_by("-user__created_at", "-pk")
+        paginator = StandardPagination()
+        page = paginator.paginate_queryset(qs, request)
+        return paginator.get_paginated_response([
+            {"id": profile.user_id, "name": profile.user.full_name, "email": normalize_assignment_email(profile.user.email)}
+            for profile in page
+        ])
 
 
 class AdminCardListCreateView(APIView):
@@ -90,7 +129,7 @@ class AdminCardDetailView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         linked = OrderRecipient.objects.filter(assigned_card=card).exists() or Order.objects.filter(assigned_card=card).exists()
-        new_owner = _resolve_customer(data["customer_email"]) if "customer_email" in data else card.user
+        new_owner = _resolve_customer(data["customer_email"], existing_card=card) if "customer_email" in data else card.user
         if linked and ((new_owner.pk if new_owner else None) != card.user_id or data.get("status") == NfcCard.Status.UNASSIGNED):
             return error("This card belongs to an order allocation; its recipient cannot be changed here.", status=400)
 
@@ -101,7 +140,7 @@ class AdminCardDetailView(APIView):
                 update_fields.append(field)
 
         if "customer_email" in data:
-            card.user = _resolve_customer(data["customer_email"])
+            card.user = new_owner
             update_fields.append("user")
 
         if update_fields:
@@ -131,7 +170,7 @@ class AdminCardAssignView(APIView):
 
         serializer = AdminCardAssignSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        customer = _resolve_customer(serializer.validated_data["email"])
+        customer = _resolve_customer(serializer.validated_data["email"], existing_card=card)
         if card.user_id == customer.pk and card.status != NfcCard.Status.UNASSIGNED:
             return success(NfcCardAdminSerializer(card).data, message="Card is already assigned to this customer.")
         if card.user_id is not None or card.status != NfcCard.Status.UNASSIGNED:

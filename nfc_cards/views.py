@@ -9,6 +9,7 @@ from common.permissions import IsCustomerRole
 from common.response import error, success
 
 from .models import NfcCard
+from .assignment import ensure_card_assignment_available
 from .serializers import (
     ActivateCardSerializer,
     DeactivateCardSerializer,
@@ -47,6 +48,11 @@ class ActivateCardView(APIView):
             return error("This card has been blocked. Contact support.", status=400)
         if card.status == NfcCard.Status.LOST:
             return error("This card was reported lost. Contact support.", status=400)
+
+        try:
+            ensure_card_assignment_available(request.user, card=card)
+        except ValueError as exc:
+            return error(str(exc), status=400)
 
         now = timezone.now()
         card.user = request.user

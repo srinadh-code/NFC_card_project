@@ -15,6 +15,7 @@ from .announcements.views import (
 from .cards.views import (
     AdminCardActivateView,
     AdminCardAssignView,
+    AdminCardAssignmentCustomerListView,
     AdminCardBlockView,
     AdminCardDetailView,
     AdminCardListCreateView,
@@ -75,6 +76,7 @@ urlpatterns = [
     path("customers/<int:pk>/", AdminCustomerDetailView.as_view(), name="admin-customer-detail"),
     # NFC Cards
     path("cards/", AdminCardListCreateView.as_view(), name="admin-cards"),
+    path("cards/assignment-customers/", AdminCardAssignmentCustomerListView.as_view(), name="admin-card-assignment-customers"),
     path("cards/<int:pk>/", AdminCardDetailView.as_view(), name="admin-card-detail"),
     path("cards/<int:pk>/assign/", AdminCardAssignView.as_view(), name="admin-card-assign"),
     path("cards/<int:pk>/activate/", AdminCardActivateView.as_view(), name="admin-card-activate"),

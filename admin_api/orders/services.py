@@ -5,7 +5,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from nfc_cards.models import NfcCard
-from orders.models import Order, OrderRecipient, RecipientEmailAllocation, Transaction
+from nfc_cards.assignment import ensure_card_assignment_available
+from orders.models import Order, OrderRecipient, Transaction
 
 STEP_FIELDS = ["placed_at", "confirmed_at", "shipped_at", "out_for_delivery_at", "delivered_at"]
 
@@ -104,6 +105,8 @@ def assign_card_to_order(order, card, recipient_id=None):
         raise ValueError("This card is not available for assignment.")
     if OrderRecipient.objects.filter(assigned_card=card).exists() or Order.objects.filter(assigned_card=card).exclude(pk=locked_order.pk).exists():
         raise ValueError("This card already fulfils another allocation.")
+    owner = recipient.user if recipient is not None else locked_order.customer
+    ensure_card_assignment_available(owner, card=card, replacing_card_id=previous_id)
     if previous_id is not None:
         previous = NfcCard.objects.select_for_update().get(pk=previous_id)
         if previous.status != NfcCard.Status.ASSIGNED:
