@@ -8,7 +8,12 @@ from rest_framework.views import APIView
 
 from accounts import onboarding
 from accounts.models import CustomerOnboarding, User
-from payments.services import CheckoutError, validate_purchaser_contact, validate_recipients
+from payments.services import (
+    CheckoutError,
+    claim_recipient_email,
+    validate_purchaser_contact,
+    validate_recipients,
+)
 
 from admin_api.orders.services import apply_status_transition
 from common.discounts import calculate_first_order_discount
@@ -95,14 +100,6 @@ class CustomerOrderListCreateView(APIView):
         if not cart_items:
             return error("Your cart is empty.", status=400)
 
-        try:
-            recipient_details = validate_recipients(
-                data.get("recipients"),
-                sum(item.qty for item in cart_items),
-            )
-        except CheckoutError as exc:
-            return error(exc.message, errors=exc.errors, status=exc.status)
-
         # Real, backend-computed pricing per line — never the price a
         # client claims (see orders.pricing.price_lines).
         try:
@@ -141,6 +138,15 @@ class CustomerOrderListCreateView(APIView):
                 # already serializes this; select_for_update makes the same
                 # guarantee explicit and forward-compatible with Postgres.)
                 User.objects.select_for_update().get(pk=request.user.pk)
+                recipient_details = validate_recipients(
+                    data.get("recipients"),
+                    sum(item.qty for item in cart_items),
+                    request.user.email,
+                )
+                recipient_allocations = [
+                    claim_recipient_email(recipient["email"], request.user.email, index=index)
+                    for index, recipient in enumerate(recipient_details)
+                ]
                 first_order = calculate_first_order_discount(amount, request.user)
                 final_amount = first_order["final_amount"]
 
@@ -186,12 +192,17 @@ class CustomerOrderListCreateView(APIView):
                     method=data["payment_method"],
                     status=Order.PaymentStatus.PENDING,
                 )
-                # Unpaid COD allocations are snapshots only. Accounts and
-                # profiles are linked after payment is recorded by admin.
-                OrderRecipient.objects.bulk_create([
+                # Keep the recipient snapshots and buyer-owned email holds;
+                # accounts and profiles are linked after payment is recorded.
+                recipient_rows = OrderRecipient.objects.bulk_create([
                     OrderRecipient(order=order, name=r["full_name"], email=r["email"], phone=r["phone"])
                     for r in recipient_details
                 ])
+                for recipient_row, allocation in zip(recipient_rows, recipient_allocations):
+                    recipient_row.email_allocation = allocation
+                    recipient_row.save(update_fields=["email_allocation", "updated_at"])
+        except CheckoutError as exc:
+            return error(exc.message, errors=exc.errors, status=exc.status)
         except IntegrityError:
             # Lost a race against another request carrying the exact same
             # key (two near-simultaneous submissions of the same attempt) —

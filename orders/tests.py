@@ -14,7 +14,7 @@ from customer_management.customer_cart.models import Cart, CartItem
 from customer_management.customer_notifications.models import Announcement, Notification
 from customer_management.customer_settings.models import CustomerSettings
 
-from .models import Order, OrderRecipient
+from .models import Order, OrderRecipient, RecipientEmailAllocation
 
 # NOTE: CustomerOrderCreateSerializer takes no `items`/`shipping_line1`
 # fields — order items are built server-side from the customer's own cart
@@ -125,6 +125,31 @@ class CustomerOrderCreateViewTests(AuthenticatedAPITestCase):
             self.assertIsNone(recipient.assigned_card_id)
             self.assertTrue(recipient.phone)
         self.assertEqual(order.payment_status, Order.PaymentStatus.PENDING)
+        self.assertEqual(
+            set(RecipientEmailAllocation.objects.values_list("normalized_email", flat=True)),
+            {"recipient.one@example.com", "recipient.two@example.com", "recipient.three@example.com"},
+        )
+
+    def test_direct_order_creation_rejects_an_already_allocated_recipient_email(self):
+        _seed_cart_item(self.user, qty=1)
+        first_payload = _valid_payload(
+            self.address,
+            recipients=[{"full_name": "Recipient One", "email": "allocated@example.com", "phone": "+447700900123"}],
+        )
+        first = self.client.post(reverse("my-orders"), first_payload, format="json")
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED, first.content)
+
+        _seed_cart_item(self.user, qty=1)
+        repeated_payload = _valid_payload(
+            self.address,
+            idempotency_key="a-distinct-checkout-attempt",
+            recipients=[{"full_name": "Recipient One", "email": " ALLOCATED@example.com ", "phone": "+447700900123"}],
+        )
+        repeated = self.client.post(reverse("my-orders"), repeated_payload, format="json")
+
+        self.assertEqual(repeated.status_code, status.HTTP_400_BAD_REQUEST, repeated.content)
+        self.assertIn("already assigned to another NFC card", repeated.data["message"])
+        self.assertEqual(Order.objects.count(), 1)
 
     def test_legacy_checkout_cannot_claim_online_payment(self):
         _seed_cart_item(self.user)
@@ -479,7 +504,16 @@ class CustomerOrderIdempotencyTests(AuthenticatedAPITestCase):
         self.client.force_authenticate(user=self.other_user)
         _seed_cart_item(self.other_user)
         second = self.client.post(
-            reverse("my-orders"), _valid_payload(self.other_address, idempotency_key="shared-key"), format="json"
+            reverse("my-orders"),
+            _valid_payload(
+                self.other_address,
+                idempotency_key="shared-key",
+                recipients=[
+                    {"full_name": "Other Recipient One", "email": "other.one@example.com", "phone": "+447700900123"},
+                    {"full_name": "Other Recipient Two", "email": "other.two@example.com", "phone": "+447700900124"},
+                ],
+            ),
+            format="json",
         )
 
         self.assertEqual(first.status_code, status.HTTP_201_CREATED)
@@ -842,6 +876,25 @@ class CustomerOrderCancelTests(AuthenticatedAPITestCase):
             self.assertEqual(order.status, Order.Status.CANCELLED)
             # Payment is left for admin reconciliation, same as an admin cancel.
             self.assertEqual(order.payment_status, Order.PaymentStatus.PAID)
+
+    def test_cancelling_unassigned_order_releases_recipient_email_reservation(self):
+        order = self._order(Order.Status.PENDING)
+        recipient = OrderRecipient.objects.create(
+            order=order,
+            name="Recipient",
+            email="release@example.com",
+        )
+        allocation = RecipientEmailAllocation.objects.create(
+            normalized_email="release@example.com",
+            owner_email=order.customer.email,
+        )
+        recipient.email_allocation = allocation
+        recipient.save(update_fields=["email_allocation"])
+
+        response = self._cancel(order)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        self.assertFalse(RecipientEmailAllocation.objects.filter(pk=allocation.pk).exists())
 
     def test_shipped_orders_cannot_be_cancelled(self):
         for order_status in (Order.Status.SHIPPED, Order.Status.OUT_FOR_DELIVERY):

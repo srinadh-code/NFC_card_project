@@ -39,6 +39,7 @@ back to Django's console backend). Set `EMAIL_HOST`/`EMAIL_HOST_USER`/
 - `/api/profiles/social-links/`, `/api/profiles/custom-links/`, `/api/profiles/custom-fields/` (full CRUD + `/reorder/`)
 - `GET /api/profiles/public/<username>/` (public)
 - `GET /api/nfc/cards/mine/`, `POST /api/nfc/cards/activate/`, `POST /api/nfc/cards/<id>/activate-assigned/`, `GET /api/nfc/cards/<identifier>/` (public resolve)
+- `POST /api/payments/recipient-email-availability/` checks NFC recipient eligibility without email OTP; `POST /api/payments/checkout/cancel/` releases recipient reservations when a payment attempt is closed. Guest buyer email/mobile verification remains a separate checkout requirement.
 
 ## Tests
 

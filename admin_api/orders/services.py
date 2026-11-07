@@ -5,7 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from nfc_cards.models import NfcCard
-from orders.models import Order, OrderRecipient, Transaction
+from orders.models import Order, OrderRecipient, RecipientEmailAllocation, Transaction
 
 STEP_FIELDS = ["placed_at", "confirmed_at", "shipped_at", "out_for_delivery_at", "delivered_at"]
 
@@ -41,6 +41,21 @@ def apply_status_transition(order, new_status):
 
     order.status = new_status
     order.save(update_fields=update_fields)
+    if new_status == Order.Status.CANCELLED:
+        released_allocations = list(RecipientEmailAllocation.objects.filter(
+            recipients__order=order,
+            recipients__assigned_card__isnull=True,
+        ).distinct())
+        OrderRecipient.objects.filter(
+            order=order,
+            assigned_card__isnull=True,
+            email_allocation__in=released_allocations,
+        ).update(email_allocation=None)
+        RecipientEmailAllocation.objects.filter(
+            pk__in=[allocation.pk for allocation in released_allocations],
+            recipients__isnull=True,
+            reservations__isnull=True,
+        ).delete()
     return order
 
 
