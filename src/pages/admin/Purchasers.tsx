@@ -28,12 +28,12 @@ export default function AdminPurchasers() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Purchasers</h1>
-        <p className="text-sm text-muted-foreground">{data?.count ?? 0} purchasers with successful payments</p>
+        <p className="text-sm text-muted-foreground">{data?.count ?? 0} purchases with successful payments</p>
       </div>
       <Card><CardContent className="flex flex-col gap-4">
         <div className="relative">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input aria-label="Search purchasers" placeholder="Search by name, email or phone..." className="pl-9" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} />
+          <Input aria-label="Search purchasers" placeholder="Search by order, name, email or phone..." className="pl-9" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} />
         </div>
         {isLoading ? <div className="space-y-2">{[1, 2, 3, 4].map((row) => <Skeleton key={row} className="h-12 w-full" />)}</div> : isError ? (
           <div className="space-y-3 py-12 text-center">
@@ -42,19 +42,18 @@ export default function AdminPurchasers() {
           </div>
         ) : <div className="overflow-x-auto"><Table>
           <TableHeader><TableRow>
-            <TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Phone</TableHead>
-            <TableHead>Paid Orders</TableHead><TableHead>Cards Purchased</TableHead>
-            <TableHead>Total Paid</TableHead><TableHead>Last Purchase</TableHead><TableHead className="text-right">Actions</TableHead>
+            <TableHead>Order ID</TableHead><TableHead>Purchaser Name</TableHead><TableHead>Purchaser Email</TableHead><TableHead>Purchaser Phone</TableHead>
+            <TableHead>Cards Purchased</TableHead><TableHead>Total Paid</TableHead><TableHead>Purchase Date</TableHead><TableHead className="text-right">View Details</TableHead>
           </TableRow></TableHeader>
           <TableBody className={isFetching ? "opacity-60" : undefined}>
             {(data?.data ?? []).map((buyer) => <TableRow key={buyer.id}>
-              <TableCell><Link className="font-medium text-primary hover:underline" to={`/admin/purchasers/${buyer.id}`}>{buyer.name || buyer.email}</Link></TableCell>
-              <TableCell className="text-muted-foreground">{buyer.email}</TableCell>
+              <TableCell><Link className="font-mono text-xs font-medium text-primary hover:underline" to={`/admin/purchasers/${buyer.id}`}>{buyer.orderNumber ?? buyer.id}</Link></TableCell>
+              <TableCell><Link className="font-medium text-primary hover:underline" to={`/admin/purchasers/${buyer.id}`}>{buyer.name || "Not recorded"}</Link></TableCell>
+              <TableCell className="text-muted-foreground">{buyer.email || "Not recorded"}</TableCell>
               <TableCell className="whitespace-nowrap text-muted-foreground">{buyer.phone || "Not recorded"}</TableCell>
-              <TableCell>{buyer.paidOrderCount}</TableCell>
               <TableCell><Link className="font-medium text-primary hover:underline" to={`/admin/purchasers/${buyer.id}`}>{buyer.totalCardsPurchased} cards</Link></TableCell>
               <TableCell className="whitespace-nowrap">{formatCurrency(buyer.totalAmountPaid)}</TableCell>
-              <TableCell className="whitespace-nowrap">{formatDate(buyer.lastPurchaseDate)}</TableCell>
+              <TableCell className="whitespace-nowrap">{formatDate(buyer.purchaseDate)}</TableCell>
               <TableCell className="text-right"><Button asChild variant="ghost" size="sm"><Link to={`/admin/purchasers/${buyer.id}`}><Eye /> View Details</Link></Button></TableCell>
             </TableRow>)}
             {data?.data.length === 0 && <TableRow><TableCell colSpan={8} className="py-14 text-center">

@@ -4,35 +4,38 @@ import type { Order } from "@/types"
 
 interface ApiPurchaser {
   id: number
+  order_number: string | null
+  customer_id: number
   name: string
   email: string
   phone: string
-  paid_order_count: number
   total_cards_purchased: number
   total_amount_paid: string
-  last_purchase_date: string
+  purchase_date: string
   total_cards_assigned: number
   total_cards_activated: number
 }
 
 export interface AdminPurchaser {
   id: string
+  orderNumber: string | null
+  customerId: string
   name: string
   email: string
   phone: string
-  paidOrderCount: number
   totalCardsPurchased: number
   totalAmountPaid: number
-  lastPurchaseDate: string
+  purchaseDate: string
   totalCardsAssigned: number
   totalCardsActivated: number
 }
 
 function purchaser(row: ApiPurchaser): AdminPurchaser {
   return {
-    id: String(row.id), name: row.name, email: row.email, phone: row.phone,
-    paidOrderCount: row.paid_order_count, totalCardsPurchased: row.total_cards_purchased,
-    totalAmountPaid: Number(row.total_amount_paid), lastPurchaseDate: row.last_purchase_date,
+    id: String(row.id), orderNumber: row.order_number, customerId: String(row.customer_id),
+    name: row.name, email: row.email, phone: row.phone,
+    totalCardsPurchased: row.total_cards_purchased,
+    totalAmountPaid: Number(row.total_amount_paid), purchaseDate: row.purchase_date,
     totalCardsAssigned: row.total_cards_assigned, totalCardsActivated: row.total_cards_activated,
   }
 }
@@ -48,10 +51,10 @@ export const adminPurchaserApi = {
       numPages: result.pagination?.num_pages ?? 1,
     }
   },
-  async get(id: string): Promise<AdminPurchaser & { orders: Order[] }> {
-    const row = await request<ApiPurchaser & { orders: ApiAdminOrder[] }>(
+  async get(id: string): Promise<AdminPurchaser & { order: Order }> {
+    const row = await request<ApiPurchaser & { order: ApiAdminOrder }>(
       `/admin/purchasers/${encodeURIComponent(id)}/`, { area: "admin" },
     )
-    return { ...purchaser(row), orders: row.orders.map(toFrontendOrder) }
+    return { ...purchaser(row), order: toFrontendOrder(row.order) }
   },
 }
