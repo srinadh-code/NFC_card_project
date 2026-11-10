@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AddressFormDialog } from "@/components/customer/AddressFormDialog"
 import { PinnedLocationLink } from "@/components/customer/PinnedLocationLink"
-import { validateRecipients, resizeRecipients, validCardQuantity, type CheckoutRecipient, type RecipientErrors } from "@/lib/checkout-recipients"
+import { recipientErrorsAfterChange, validateRecipients, resizeRecipients, validCardQuantity, type CheckoutRecipient, type RecipientErrors } from "@/lib/checkout-recipients"
 import { useCheckoutVerificationStore } from "@/store/checkout-verification-store"
 import { BulkRecipientFields } from "@/components/checkout/BulkRecipientFields"
 import { useRecipientEmailAvailability } from "@/hooks/useRecipientEmailAvailability"
@@ -173,7 +173,7 @@ export default function Checkout() {
     const next = [...bulkRecipients]
     next[index] = { ...next[index], [field]: value }
     setBulkRecipients(next)
-    setRecipientErrors((previous) => previous.map((entry, slot) => slot === index ? { ...entry, [field]: undefined } : entry))
+    setRecipientErrors((previous) => recipientErrorsAfterChange(previous, index, field, value))
     markDetailsChanged()
   }
 
@@ -184,7 +184,7 @@ export default function Checkout() {
   }
 
   function validateBulkRecipients() {
-    const result = validateRecipients(bulkRecipients, bulkRecipientCount)
+    const result = validateRecipients(bulkRecipients, bulkRecipientCount, { indianMobilePhone: true })
     setRecipientErrors(result.errors)
     if (!result.valid) {
       toast.error("Please complete each recipient's name, valid email and phone number. Orders support 1 to 10 cards.")

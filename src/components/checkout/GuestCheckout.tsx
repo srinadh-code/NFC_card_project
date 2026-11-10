@@ -37,7 +37,7 @@ import { formatCurrency } from "@/lib/mock-api"
 import { PaymentCancelled, PaymentFailed, payWithRazorpay } from "@/lib/razorpay"
 import { cn } from "@/lib/utils"
 import { CurrentLocationError, detectAddressFromCurrentLocation, mergeDetectedAddress } from "@/lib/checkout-location"
-import { resizeRecipients, validateRecipients, validCardQuantity, type CheckoutRecipient } from "@/lib/checkout-recipients"
+import { recipientErrorsAfterChange, resizeRecipients, validateRecipients, validCardQuantity, type CheckoutRecipient } from "@/lib/checkout-recipients"
 import { isFresh, useCheckoutVerificationStore } from "@/store/checkout-verification-store"
 import { storeOrderSuccess } from "@/pages/public/OrderSuccess"
 
@@ -267,12 +267,12 @@ export function GuestCheckout() {
     next[index] = { ...next[index], [field]: value }
     setBulkRecipients(next)
     setSavedRecipients(next)
-    setRecipientErrors((previous) => previous.map((entry, slot) => slot === index ? { ...entry, [field]: undefined } : entry))
+    setRecipientErrors((previous) => recipientErrorsAfterChange(previous, index, field, value))
     markDetailsChanged()
   }
 
   function validateBulkRecipients() {
-    const result = validateRecipients(bulkRecipients, bulkRecipientCount)
+    const result = validateRecipients(bulkRecipients, bulkRecipientCount, { indianMobilePhone: true })
     setRecipientErrors(result.errors)
     if (!result.valid) {
       toast.error("Please complete each recipient's name, valid email and phone number. Orders support 1 to 10 cards.")

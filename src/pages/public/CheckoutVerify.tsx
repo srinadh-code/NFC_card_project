@@ -10,7 +10,7 @@ import { useRecipientEmailAvailability } from "@/hooks/useRecipientEmailAvailabi
 import { OtpVerifier } from "@/components/checkout/OtpVerifier"
 import { useCart } from "@/hooks/useCart"
 import { paymentsApi, type VerificationChannel } from "@/lib/api"
-import { resizeRecipients, validateRecipients, validCardQuantity, type CheckoutRecipient } from "@/lib/checkout-recipients"
+import { recipientErrorsAfterChange, resizeRecipients, validateRecipients, validCardQuantity, type CheckoutRecipient } from "@/lib/checkout-recipients"
 import { cn, sanitizeRedirect } from "@/lib/utils"
 import { useCustomerAuthStore } from "@/store/auth-store"
 import { isFresh, useCheckoutVerificationStore } from "@/store/checkout-verification-store"
@@ -74,17 +74,13 @@ export default function CheckoutVerify() {
     const updated = [...recipients]
     updated[index] = { ...(updated[index] ?? { full_name: "", email: "", phone: "" }), [field]: value }
     setRecipients(updated)
-    setRecipientErrors((previous) => {
-      const next = [...previous]
-      next[index] = { ...(next[index] ?? {}), [field]: undefined }
-      return next
-    })
+    setRecipientErrors((previous) => recipientErrorsAfterChange(previous, index, field, value))
   }
 
   function continueToVerification() {
     if (bulkRecipientCount === null) return
 
-    const result = validateRecipients(recipients, bulkRecipientCount)
+    const result = validateRecipients(recipients, bulkRecipientCount, { indianMobilePhone: true })
     setRecipientErrors(result.errors)
     if (!result.valid) {
       toast.error("Please complete each recipient's name, valid email and phone number.")
@@ -193,6 +189,7 @@ export default function CheckoutVerify() {
                   onChange={setEmail}
                   sessionRef={sessionRef}
                   verified={false}
+                  strictEmailValidation
                   onVerified={(token, destination) => handleVerified("EMAIL", token, destination)}
                 />
               ) : (

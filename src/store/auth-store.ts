@@ -150,7 +150,7 @@ type LoginResult =
 async function performLogin(email: string, password: string, expectedRole: "ADMIN" | "CUSTOMER"): Promise<LoginResult> {
   const area: SessionArea = expectedRole === "ADMIN" ? "admin" : "customer"
   try {
-    const payload = await authApi.login({ email, password })
+    const payload = await authApi.login({ email: email.trim().toLowerCase(), password })
     if (payload.user.role !== expectedRole) {
       if (import.meta.env.DEV) {
         // Temporary, dev-only — pairs with ProtectedRoute.tsx's and

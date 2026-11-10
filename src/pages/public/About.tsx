@@ -46,19 +46,23 @@ export default function About() {
   return (
     <div>
       {isLoading ? (
-        <section className="border-b border-border bg-gradient-to-b from-primary/5 to-background px-4 py-16 sm:py-20">
+        <section className="border-b border-border bg-gradient-to-b from-primary/5 to-background px-4 py-10 sm:py-12 lg:py-14">
           <div className="mx-auto max-w-4xl space-y-4 text-center">
             <Skeleton className="mx-auto h-10 w-full max-w-sm" />
             <Skeleton className="mx-auto h-6 w-full max-w-xl" />
           </div>
         </section>
       ) : (
-        <PageHeader title={data?.page.page_title ?? ""} subtitle={data?.page.page_subtitle} />
+        <PageHeader
+          title={data?.page.page_title ?? ""}
+          subtitle={data?.page.page_subtitle}
+          className="py-10 sm:py-12 lg:py-14"
+        />
       )}
 
       {/* Premium hero showcase — story left, NFC card product render right */}
-      <section className="bg-background py-16 sm:py-20">
-        <div className="container-page grid items-center gap-10 lg:grid-cols-2 lg:gap-12">
+      <section className="bg-background py-10 sm:py-12 lg:py-14">
+        <div className="container-page grid items-center gap-8 lg:grid-cols-2 lg:gap-12">
           <div>
             {isLoading ? (
               <div className="space-y-4">
@@ -90,7 +94,7 @@ export default function About() {
             )}
 
             {data && data.story_features.length > 0 && (
-              <ul className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <ul className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {data.story_features.map((f) => (
                   <li key={f.id} className="flex items-center gap-2 text-sm font-medium text-foreground sm:text-base">
                     <CheckCircle2 className="size-5 shrink-0 text-primary" />
@@ -156,13 +160,13 @@ export default function About() {
       {/* Why Choose VR's GATEWAY — skeleton reserves the space while loading
           so the sections below don't jump when the cards arrive. */}
       {isLoading && (
-        <section className="bg-background py-16 sm:py-20">
+        <section className="bg-background py-10 sm:py-12 lg:py-14">
           <div className="container-page">
             <div className="mx-auto max-w-2xl space-y-3 text-center">
               <Skeleton className="mx-auto h-9 w-full max-w-sm" />
               <Skeleton className="mx-auto h-5 w-full max-w-md" />
             </div>
-            <div className="centered-card-grid mt-12">
+            <div className="centered-card-grid mt-8 sm:mt-10">
               {Array.from({ length: 4 }).map((_, i) => (
                 <Skeleton key={i} className="h-52 w-full rounded-[24px]" />
               ))}
@@ -171,7 +175,7 @@ export default function About() {
         </section>
       )}
       {data && data.why_choose.length > 0 && (
-        <section className="bg-background py-16 sm:py-20">
+        <section className="bg-background py-10 sm:py-12 lg:py-14">
           <div className="container-page">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Why Choose VR's GATEWAY?</h2>
@@ -179,7 +183,7 @@ export default function About() {
                 Everything you need to network smarter, in one premium card.
               </p>
             </div>
-            <div className="centered-card-grid mt-12">
+            <div className="centered-card-grid mt-8 sm:mt-10">
               {data.why_choose.map((f) => {
                 const Icon = resolveIcon(f.icon)
                 return (
@@ -206,7 +210,7 @@ export default function About() {
       )}
 
       {/* Built From Experience + Values */}
-      <section className="bg-secondary py-16 sm:py-20">
+      <section className="bg-secondary py-10 sm:py-12 lg:py-14">
         <div className="container-page">
           {isLoading ? (
             <div className="mx-auto max-w-2xl space-y-3 text-center">
@@ -227,8 +231,8 @@ export default function About() {
           <div
             className={
               isLoading || builtImageUrl
-                ? "mt-12 grid gap-10 lg:grid-cols-2 lg:gap-12"
-                : "mx-auto mt-8 max-w-2xl text-center"
+                ? "mt-8 grid gap-8 sm:mt-10 lg:grid-cols-2 lg:gap-12"
+                : "mx-auto mt-6 max-w-2xl text-center"
             }
           >
             {/* Image pins to the top of the row and stays in view beside long
@@ -274,14 +278,14 @@ export default function About() {
             </div>
           </div>
           {isLoading ? (
-            <div className="mt-16 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-10 grid grid-cols-1 gap-6 sm:mt-12 sm:grid-cols-2 lg:grid-cols-4">
               {Array.from({ length: 4 }).map((_, i) => (
                 <Skeleton key={i} className="h-32 w-full" />
               ))}
             </div>
           ) : (
             data && data.values.length > 0 && (
-              <div className="mt-16 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="mt-10 grid grid-cols-1 gap-6 sm:mt-12 sm:grid-cols-2 lg:grid-cols-4">
                 {data.values.map((v) => {
                   const Icon = resolveIcon(v.icon)
                   return (

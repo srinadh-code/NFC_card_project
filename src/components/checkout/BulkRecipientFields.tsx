@@ -105,7 +105,7 @@ export function BulkRecipientFields({
                   type="tel"
                   autoComplete={`section-recipient-${index} tel`}
                   required
-                  placeholder="+91 98765 43210"
+                  placeholder="+919876543210"
                   value={recipients[index]?.phone ?? ""}
                   onChange={(event) => onChange(index, "phone", event.target.value)}
                   aria-invalid={Boolean(errors[index]?.phone)}

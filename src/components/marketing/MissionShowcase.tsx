@@ -51,8 +51,8 @@ export default function MissionShowcase({ badge, heading, description }: Mission
 
       <div className="container-page relative">
         <div className="rounded-[32px] bg-gradient-to-r from-[#6C4DFF] to-[#FF5DA8] p-[1.5px] shadow-[0_25px_70px_rgba(124,58,237,0.18)]">
-          <div className="glass-panel rounded-[30.5px] px-6 py-10 sm:px-12 sm:py-14">
-            <div className="flex flex-col items-center gap-10 lg:flex-row lg:justify-center lg:gap-16">
+          <div className="glass-panel rounded-[30.5px] px-6 py-8 sm:px-12 sm:py-10">
+            <div className="flex flex-col items-center gap-8 lg:flex-row lg:justify-center lg:gap-12">
               <TargetIllustration />
 
               <div className="max-w-2xl text-center lg:text-left">

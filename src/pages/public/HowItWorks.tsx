@@ -37,12 +37,13 @@ export default function HowItWorks() {
       <PageHeader
         title="How VR's GATEWAY Works"
         subtitle="Get from unboxing to your first tap in five simple steps."
+        className="py-10 sm:py-12 lg:py-14"
       />
 
-      <section className="bg-background py-20">
+      <section className="bg-background py-10 sm:py-12 lg:py-14">
         <div className="container-page">
           {isLoading ? (
-            <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
               {Array.from({ length: 5 }).map((_, i) => (
                 <Skeleton key={i} className="h-52 w-full rounded-[24px]" />
               ))}
@@ -50,7 +51,7 @@ export default function HowItWorks() {
           ) : (
             steps &&
             steps.length > 0 && (
-              <div className="relative grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="relative grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
                 <div className="pointer-events-none absolute inset-x-0 top-14 hidden h-0.5 bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#22C55E] opacity-20 lg:block" />
                 {steps.map((step, i) => {
                   const Icon = resolveIcon(step.icon)
@@ -78,7 +79,7 @@ export default function HowItWorks() {
         </div>
       </section>
 
-      <CtaBanner title="Ready to get your VR's GATEWAY Card?" buttonLabel="Order Now" />
+      <CtaBanner title="Ready to get your VR's GATEWAY Card?" buttonLabel="Order Now" className="py-12 sm:py-14" />
     </div>
   )
 }

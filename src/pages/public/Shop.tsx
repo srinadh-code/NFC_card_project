@@ -148,8 +148,8 @@ export default function Shop() {
   if (isLoading) {
     return (
       <div>
-        <PageHeader title="" subtitle="" />
-        <section className="bg-[#F8FAFC] px-4 py-16 dark:bg-transparent">
+        <PageHeader title="" subtitle="" className="pb-8 pt-10 sm:pb-8 sm:pt-12 lg:pb-10 lg:pt-14" />
+        <section className="bg-[#F8FAFC] px-4 pb-10 pt-8 dark:bg-transparent sm:pb-12 sm:pt-10">
           <div className="mx-auto grid max-w-[1100px] grid-cols-1 gap-6 sm:grid-cols-2">
             <Skeleton className="h-96 w-full rounded-[24px]" />
             <Skeleton className="h-96 w-full rounded-[24px]" />
@@ -163,12 +163,12 @@ export default function Shop() {
     <div ref={topRef} className="scroll-mt-28">
       {!selected ? (
         <>
-          <PageHeader title={data?.page.page_title ?? ""} subtitle={data?.page.page_subtitle}>
-            <span className="mt-5 inline-block rounded-full bg-primary/10 px-4 py-1.5 text-xs font-bold tracking-wider text-primary">
-              SHOP NFC CARDS
-            </span>
-          </PageHeader>
-          <section className="bg-[#F8FAFC] px-4 pb-14 pt-10 dark:bg-transparent sm:pt-12">
+          <PageHeader
+            title={data?.page.page_title ?? ""}
+            subtitle={data?.page.page_subtitle}
+            className="pb-8 pt-10 sm:pb-8 sm:pt-12 lg:pb-10 lg:pt-14"
+          />
+          <section className="bg-[#F8FAFC] px-4 pb-10 pt-8 dark:bg-transparent sm:pb-12 sm:pt-10">
             <div className="mx-auto max-w-[1100px]">
               {products.length === 0 ? (
                 <div className="flex flex-col items-center gap-3 py-16 text-center">

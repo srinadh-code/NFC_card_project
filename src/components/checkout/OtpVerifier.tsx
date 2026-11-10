@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ApiError, paymentsApi, type VerificationChannel } from "@/lib/api"
+import { checkoutEmailError } from "@/lib/checkout-email-validation"
 
 // Deliveries and SMS OTPs are India-only today (payments/sms.py sends to
 // +91), so India is the one country code offered.
@@ -32,6 +33,7 @@ export function OtpVerifier({
   verified,
   onVerified,
   onChangeVerified,
+  strictEmailValidation = false,
   disabled = false,
 }: {
   channel: VerificationChannel
@@ -45,6 +47,8 @@ export function OtpVerifier({
   onVerified: (token: string, destination: string) => void
   /** "Change" on a verified value. */
   onChangeVerified?: () => void
+  /** Enables stricter live email validation for the guest checkout verification screen. */
+  strictEmailValidation?: boolean
   disabled?: boolean
 }) {
   const [code, setCode] = useState("")
@@ -54,9 +58,11 @@ export function OtpVerifier({
   const [expiresIn, setExpiresIn] = useState(0)
   const [busy, setBusy] = useState<"send" | "verify" | null>(null)
   const [message, setMessage] = useState<{ tone: "error" | "info"; text: string } | null>(null)
+  const [emailTouched, setEmailTouched] = useState(false)
   const id = `otp-${channel.toLowerCase()}`
   const isSms = channel === "SMS"
   const destination = isSms ? value.replace(/\D/g, "") : value.trim()
+  const emailError = strictEmailValidation && !isSms && emailTouched ? checkoutEmailError(destination) : null
 
   useEffect(() => {
     if (cooldown <= 0 && expiresIn <= 0) return
@@ -69,12 +75,18 @@ export function OtpVerifier({
 
   function validDestination(): string | null {
     if (isSms) return /^[6-9]\d{9}$/.test(destination) ? null : "Enter a valid 10-digit mobile number."
+    if (strictEmailValidation) return checkoutEmailError(destination)
     return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(destination) ? null : "Enter a valid email address."
   }
 
   async function send() {
     const invalid = validDestination()
     if (invalid) {
+      if (strictEmailValidation && !isSms) {
+        setEmailTouched(true)
+        setMessage(null)
+        return
+      }
       setMessage({ tone: "error", text: invalid })
       return
     }
@@ -169,6 +181,7 @@ export function OtpVerifier({
             disabled={disabled || busy !== null}
             onChange={(e) => {
               onChange(isSms ? e.target.value.replace(/\D/g, "").slice(0, 10) : e.target.value)
+              if (strictEmailValidation && !isSms) setEmailTouched(true)
               setSent(false)
               setMessage(null)
             }}
@@ -178,13 +191,20 @@ export function OtpVerifier({
           type="button"
           variant="outline"
           className="shrink-0"
-          disabled={disabled || busy !== null || !destination || cooldown > 0}
+          disabled={
+            disabled ||
+            busy !== null ||
+            !destination ||
+            (strictEmailValidation && !isSms && checkoutEmailError(destination) !== null) ||
+            cooldown > 0
+          }
           onClick={send}
         >
           {busy === "send" ? <Loader2 className="animate-spin" /> : null}
           {cooldown > 0 ? `Resend in ${cooldown}s` : sent ? "Resend OTP" : "Send OTP"}
         </Button>
       </div>
+      {emailError && <p role="alert" className="text-sm text-destructive">{emailError}</p>}
       {sent && (
         <div className="flex flex-col gap-2 sm:flex-row">
           <Input

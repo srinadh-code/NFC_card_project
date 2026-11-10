@@ -38,8 +38,12 @@ export default function Login() {
   // dropping them on the generic dashboard.
   const redirectTo = sanitizeRedirect(searchParams.get("redirect"), "/dashboard")
 
-  // Pre-filled with the username after account activation (SetPassword.tsx).
-  const [email, setEmail] = useState(() => (location.state as { email?: string } | null)?.email ?? "")
+  // Activation may pass a profile username in navigation state; only prefill
+  // the field when the value is an email address.
+  const [email, setEmail] = useState(() => {
+    const value = (location.state as { email?: string } | null)?.email ?? ""
+    return value.includes("@") ? value : ""
+  })
   const [password, setPassword] = useState("")
   const [remember, setRemember] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -171,12 +175,12 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="email">Email or Username</Label>
+              <Label htmlFor="email">Email Address</Label>
               <Input
                 id="email"
-                type="text"
-                autoComplete="username"
-                placeholder="you@example.com or your username"
+                type="email"
+                autoComplete="email"
+                placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
