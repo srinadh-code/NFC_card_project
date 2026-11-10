@@ -75,6 +75,11 @@ def send_order_confirmation_email(user, order):
 
 BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 BREVO_TIMEOUT_SECONDS = 10
+BREVO_SAFE_ERROR_CODES = frozenset({
+    "unauthorized", "invalid_parameter", "missing_parameter", "bad_request",
+    "not_enough_credits", "permission_denied", "method_not_allowed",
+    "duplicate_parameter", "document_not_found", "account_under_validation",
+})
 
 
 def _frontend_link(path, token):
@@ -104,8 +109,8 @@ def send_brevo_email(to_email, subject, html_content, text_content, log_context)
     BREVO_API_KEY/BREVO_SENDER_EMAIL/BREVO_SENDER_NAME from settings, so
     switching keys or providers is purely a configuration change.
 
-    Logs only structural outcomes — the status code and Brevo's own error
-    code/message — never the API key, the recipient's link/token, or the
+    Logs only structural outcomes — the status and recognized error code —
+    never the API key, the recipient's link/token, or the
     email body.
     """
     if not settings.BREVO_API_KEY:
@@ -143,15 +148,17 @@ def send_brevo_email(to_email, subject, html_content, text_content, log_context)
     if not 200 <= response.status_code < 300:
         try:
             detail = response.json()
-            brevo_code, brevo_message = detail.get("code", ""), detail.get("message", "")
+            code = detail.get("code") if isinstance(detail, dict) else None
         except ValueError:
-            brevo_code, brevo_message = "", ""
+            code = None
+        # A provider's free-form message (or unexpected code) can echo the
+        # submitted email body, including its credential-bearing link.
+        safe_code = code if isinstance(code, str) and code in BREVO_SAFE_ERROR_CODES else "provider_error"
         logger.error(
-            "email.brevo.rejected %s status=%s code=%s message=%s",
+            "email.brevo.rejected %s status=%s code=%s",
             log_context,
             response.status_code,
-            brevo_code,
-            brevo_message[:200],
+            safe_code,
         )
         return False
 

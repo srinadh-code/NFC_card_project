@@ -111,6 +111,9 @@ class EmailOTP(models.Model):
         REGISTER = "REGISTER", "Register"
         RESET = "RESET", "Password Reset"
         ACTIVATE = "ACTIVATE", "Account Activation"
+        PURCHASER = "PURCHASER", "Purchaser Account Setup"
+
+    PURCHASER_LINK_LIFETIME_MINUTES = 60
 
     # Wrong-guess ceiling for `check_code()` — once reached the OTP is
     # locked out (is_used=True) and a fresh one must be requested. This is
@@ -261,22 +264,47 @@ class EmailOTP(models.Model):
             return f"{otp.pk}.{raw_secret}"
 
     @classmethod
-    def check_activation_link(cls, raw_token):
+    def issue_purchaser_setup_link(cls, user):
+        """A separate setup purpose; its secret is also bound to this inbox."""
+        with transaction.atomic():
+            cls._supersede(user, cls.Purpose.PURCHASER)
+            raw_secret = secrets.token_urlsafe(32)
+            otp = cls.objects.create(
+                user=user,
+                code_hash=make_password(f"{user.email.strip().lower()}:{raw_secret}"),
+                purpose=cls.Purpose.PURCHASER,
+                expires_at=timezone.now() + timedelta(minutes=cls.PURCHASER_LINK_LIFETIME_MINUTES),
+            )
+            return f"{otp.pk}.{raw_secret}"
+
+    @classmethod
+    def check_activation_link(cls, raw_token, *, purpose=None):
         """Returns (outcome, otp) for a set-password link. The secret is
         checked first, so nothing about an account is revealed to anyone
         without its genuine link. A link that was used, or replaced by a
         newer one, is LINK_USED; the account being active already is
         LINK_USED too."""
+        purpose = purpose or cls.Purpose.ACTIVATE
+        if purpose not in (cls.Purpose.ACTIVATE, cls.Purpose.PURCHASER):
+            return cls.LINK_INVALID, None
         pk, raw_secret = cls._split_token(raw_token)
         if pk is None:
             return cls.LINK_INVALID, None
-        otp = cls.objects.select_related("user").filter(pk=pk, purpose=cls.Purpose.ACTIVATE).first()
-        if otp is None or not raw_secret or not check_password(raw_secret, otp.code_hash):
+        otp = cls.objects.select_related("user").filter(pk=pk, purpose=purpose).first()
+        secret = f"{otp.user.email.strip().lower()}:{raw_secret}" if otp is not None and purpose == cls.Purpose.PURCHASER else raw_secret
+        if otp is None or not raw_secret or not check_password(secret, otp.code_hash):
             return cls.LINK_INVALID, None
         if otp.is_used or not otp.user.must_change_password:
             return cls.LINK_USED, otp
         if otp.is_expired:
             return cls.LINK_EXPIRED, otp
+        if not otp.user.is_active:
+            return cls.LINK_INVALID, None
+        if purpose == cls.Purpose.PURCHASER:
+            from .onboarding import purchaser_setup_eligible
+
+            if not purchaser_setup_eligible(otp.user):
+                return cls.LINK_INVALID, None
         return cls.LINK_VALID, otp
 
     @property

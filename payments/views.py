@@ -7,6 +7,7 @@ from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
 from accounts.models import User
+from accounts.onboarding import purchaser_setup_state
 from common.response import error, success
 
 from . import razorpay, sms, verification
@@ -35,6 +36,12 @@ class CheckoutAnonThrottle(AnonRateThrottle):
 
 class CheckoutUserThrottle(UserRateThrottle):
     scope = "checkout"
+
+
+class RecipientEmailAvailabilityThrottle(AnonRateThrottle):
+    """One per-IP budget for this public, unauthenticated lookup endpoint."""
+
+    scope = "recipient_email_availability"
 
 
 def _activated_customer(request):
@@ -105,7 +112,7 @@ class RecipientEmailAvailabilityView(APIView):
 
     permission_classes = [AllowAny]
     authentication_classes = []
-    throttle_classes = [CheckoutAnonThrottle, CheckoutUserThrottle]
+    throttle_classes = [RecipientEmailAvailabilityThrottle]
 
     def post(self, request):
         serializer = RecipientEmailAvailabilitySerializer(data=request.data)
@@ -311,6 +318,7 @@ class RazorpayVerifyView(APIView):
                 # True while the account is waiting for its first password
                 # setup — the page then points the buyer to their inbox.
                 "account_created": account_created or order.customer.must_change_password,
+                "purchaser_setup": purchaser_setup_state(order.customer),
                 "payment_method": order.payment_method,
             },
             message="Payment verified. Your order is confirmed.",
@@ -346,6 +354,7 @@ class DummyPaymentConfirmView(APIView):
                 "email": session.email,
                 "account_created": account_created or order.customer.must_change_password,
                 "payment_method": order.payment_method,
+                "purchaser_setup": purchaser_setup_state(order.customer),
             },
             message="Test payment completed. Your order is confirmed.",
         )

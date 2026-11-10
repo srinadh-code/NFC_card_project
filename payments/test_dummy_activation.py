@@ -212,6 +212,7 @@ class DummyPaymentActivationTests(APITestCase):
     def test_admin_cannot_resend_legacy_purchaser_only_activation(self):
         _, order = self._buy_for_recipients(["chinnu@example.com"])
         record, _ = self._legacy_purchaser_activation(order)
+        setup_links_before = EmailOTP.objects.filter(user=order.customer, purpose=EmailOTP.Purpose.PURCHASER).count()
         old_issued_at = record.credentials_issued_at
         self._as_admin()
         response = self.client.post(reverse("admin-onboarding-resend", args=[record.pk]))
@@ -221,7 +222,8 @@ class DummyPaymentActivationTests(APITestCase):
         self.assertEqual(record.credentials_issued_at, old_issued_at)
         self.assertEqual(record.email_attempts, 1)
         self.assertEqual(self._activation_emails(), [])
-        self.assertEqual(EmailOTP.objects.filter(user=order.customer).count(), 1)
+        self.assertEqual(EmailOTP.objects.filter(user=order.customer, purpose=EmailOTP.Purpose.ACTIVATE).count(), 1)
+        self.assertEqual(EmailOTP.objects.filter(user=order.customer, purpose=EmailOTP.Purpose.PURCHASER).count(), setup_links_before)
 
     def test_direct_resend_and_queued_delivery_skip_purchaser_only_accounts(self):
         _, order = self._buy_for_recipients(["chinnu@example.com"])
@@ -580,7 +582,10 @@ class DummyPaymentActivationTests(APITestCase):
         existing = make_user(email="regular@example.com", password="Exist@123", full_name="Regular")
         old_hash = existing.password
         _, first = self._buy(email="Regular@Example.com")
-        _, second = self._buy(email="regular@example.com", product_id="PRD-NEXORA-GOOGLE-REVIEW")
+        _, second = self._buy(
+            email="regular@example.com", product_id="PRD-NEXORA-GOOGLE-REVIEW",
+            recipients=[{"full_name": "Other Recipient", "email": "other.recipient@example.com", "phone": "+447700900123"}],
+        )
         self.assertEqual(User.objects.filter(email__iexact="regular@example.com").count(), 1)
         self.assertEqual(set(existing.orders.values_list("pk", flat=True)), {first["order_id"], second["order_id"]})
         self.assertFalse(first["account_created"])
@@ -592,13 +597,25 @@ class DummyPaymentActivationTests(APITestCase):
         self.assertFalse(CustomerOnboarding.objects.filter(user=existing).exists())
         self.assertEqual(self._activation_emails(), [])
 
-    def test_second_order_before_activation_does_not_send_a_second_email(self):
-        _, first = self._buy()
-        _, second = self._buy(product_id="PRD-NEXORA-GOOGLE-REVIEW")
+    def test_second_order_before_purchaser_setup_does_not_send_a_second_setup_email(self):
+        _, first = self._buy(recipients=[{"full_name": "First Recipient", "email": "first.recipient@example.com", "phone": "+447700900123"}])
+        setup_subject = "Set Up Your VR's Gateway Account"
+        self.assertEqual(len([message for message in mail.outbox if message.subject == setup_subject]), 1)
+        # _email_token clears the outbox for the next checkout. Check that
+        # the second purchase issues neither another email nor another link.
+        _, second = self._buy(
+            product_id="PRD-NEXORA-GOOGLE-REVIEW",
+            recipients=[{"full_name": "Second Recipient", "email": "second.recipient@example.com", "phone": "+447700900124"}],
+        )
         self.assertEqual(Order.objects.get(pk=second["order_id"]).customer, Order.objects.get(pk=first["order_id"]).customer)
         self.assertEqual(self._set_status(first["order_id"], "PROCESSING").data["data"]["activation_result"], "sent")
-        self.assertEqual(self._set_status(second["order_id"], "PROCESSING").data["data"]["activation_result"], "already_sent")
-        self.assertEqual(len(self._activation_emails()), 1)
+        repeated_processing = self._set_status(first["order_id"], "PROCESSING")
+        self.assertEqual(repeated_processing.status_code, 200, repeated_processing.content)
+        self.assertEqual(self._set_status(second["order_id"], "PROCESSING").data["data"]["activation_result"], "sent")
+        self.assertCountEqual([message.to[0] for message in self._activation_emails()], ["first.recipient@example.com", "second.recipient@example.com"])
+        self.assertEqual([message for message in mail.outbox if message.subject == setup_subject], [])
+        purchaser = Order.objects.get(pk=first["order_id"]).customer
+        self.assertEqual(EmailOTP.objects.filter(user=purchaser, purpose=EmailOTP.Purpose.PURCHASER).count(), 1)
 
     # --- email failure + resend ----------------------------------------------
     def test_email_failure_is_recorded_and_admin_can_resend(self):

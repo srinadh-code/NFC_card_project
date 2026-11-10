@@ -531,8 +531,9 @@ def _fulfill(session, *, via, payment_ref=None):
     """Turns a paid, row-locked CheckoutSession into the real order — exactly
     once (a FULFILLED session just returns). Must run inside the caller's
     transaction. The order starts as Pending with payment Paid; the customer
-    account (new ones pending activation) is linked now, and activated when
-    an admin moves the order to Processing (accounts/onboarding.py)."""
+    account (new ones pending password setup) is linked now. Purchaser-only
+    setup is dispatched after commit; recipient setup keeps its existing
+    Processing lifecycle (accounts/onboarding.py)."""
     if session.status == CheckoutSession.Status.FULFILLED:
         return False
     if session.status == CheckoutSession.Status.FAILED:
@@ -632,6 +633,7 @@ def _fulfill(session, *, via, payment_ref=None):
     session.fulfilled_via = via
     session.paid_at = timezone.now()
     session.save(update_fields=["status", "order", "razorpay_payment_id", "fulfilled_via", "paid_at"])
+    onboarding.start_purchaser_setup(order, session)
     logger.info(
         "payments.fulfilled session=%s order=%s via=%s provider=%s new_account=%s",
         session.public_id, order.pk, via, session.provider, account_created,

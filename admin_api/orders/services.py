@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from nfc_cards.models import NfcCard
 from nfc_cards.assignment import ensure_card_assignment_available
-from orders.models import Order, OrderRecipient, Transaction
+from orders.models import Order, OrderRecipient, RecipientEmailAllocation, Transaction
 
 STEP_FIELDS = ["placed_at", "confirmed_at", "shipped_at", "out_for_delivery_at", "delivered_at"]
 

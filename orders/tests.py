@@ -62,13 +62,18 @@ def _seed_cart_item(user, **overrides):
     return CartItem.objects.create(cart=cart, **defaults)
 
 
-def _valid_payload(address, **overrides):
+def _valid_payload(address, *, recipient_batch=1, **overrides):
     payload = {
         "shipping": "49.00",
         "payment_method": "COD",
         "address_id": address.pk,
         "recipients": [
             {"full_name": f"Recipient {i + 1}", "email": f"recipient.{i + 1}@example.com", "phone": "+917700900123"}
+            {
+                "full_name": f"Recipient {i + 1}",
+                "email": f"recipient.{i + 1}@example.com" if recipient_batch == 1 else f"recipient.{recipient_batch}.{i + 1}@example.com",
+                "phone": "+447700900123",
+            }
             for i in range(sum(CartItem.objects.filter(cart__customer=address.customer).values_list("qty", flat=True)))
         ],
     }
@@ -278,8 +283,9 @@ class FirstOrderDiscountTests(AuthenticatedAPITestCase):
         Order.objects.filter(pk=first.data["data"]["id"]).update(payment_status=Order.PaymentStatus.PAID)
 
         _seed_cart_item(self.user)
-        second = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
+        second = self.client.post(reverse("my-orders"), _valid_payload(self.address, recipient_batch=2), format="json")
 
+        self.assertEqual(second.status_code, status.HTTP_201_CREATED, second.content)
         data = second.data["data"]
         self.assertIsNone(data["first_order_discount_amount"])
         self.assertEqual(str(data["amount"]), "1998.00")
@@ -474,7 +480,7 @@ class CustomerOrderIdempotencyTests(AuthenticatedAPITestCase):
         )
         _seed_cart_item(self.user)  # clear_cart emptied it after the first order
         second = self.client.post(
-            reverse("my-orders"), _valid_payload(self.address, idempotency_key="attempt-2"), format="json"
+            reverse("my-orders"), _valid_payload(self.address, recipient_batch=2, idempotency_key="attempt-2"), format="json"
         )
 
         self.assertEqual(first.status_code, status.HTTP_201_CREATED)
@@ -490,7 +496,7 @@ class CustomerOrderIdempotencyTests(AuthenticatedAPITestCase):
         _seed_cart_item(self.user)
         first = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
         _seed_cart_item(self.user)  # clear_cart emptied it after the first order
-        second = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
+        second = self.client.post(reverse("my-orders"), _valid_payload(self.address, recipient_batch=2), format="json")
 
         self.assertEqual(first.status_code, status.HTTP_201_CREATED)
         self.assertEqual(second.status_code, status.HTTP_201_CREATED)
