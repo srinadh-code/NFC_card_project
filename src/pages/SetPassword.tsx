@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { PasswordInput, PasswordRequirements } from "@/components/ui/password-input"
 import { BrandMark } from "@/components/layout/BrandMark"
-import { ApiError, authApi } from "@/lib/api"
+import { PurchaserSetupRequestForm } from "@/components/auth/PurchaserSetupRequestForm"
+import { ApiError, authApi, type AccountSetupPurpose } from "@/lib/api"
 import { PASSWORD_MAX_LENGTH, isPasswordValid, passwordRequirementsMessage } from "@/lib/utils"
 
 type FieldErrors = Partial<Record<"next" | "confirm", string>>
@@ -48,6 +49,10 @@ export default function SetPassword() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const token = params.get("token") ?? ""
+  // This selects the expected token purpose; the server checks it against
+  // the stored token and account before permitting password setup.
+  const purpose: AccountSetupPurpose = params.get("purpose") === "purchaser" ? "purchaser" : "recipient"
+  const isPurchaser = purpose === "purchaser"
 
   const [next, setNext] = useState("")
   const [confirm, setConfirm] = useState("")
@@ -57,24 +62,43 @@ export default function SetPassword() {
   const [done, setDone] = useState<{ username: string; email: string } | null>(null)
 
   const check = useQuery({
-    queryKey: ["activation-check", token],
-    queryFn: () => authApi.checkActivation(token),
+    queryKey: ["activation-check", purpose, token],
+    queryFn: () => authApi.checkActivation(token, purpose),
     enabled: Boolean(token),
     retry: false,
     staleTime: Infinity,
+    gcTime: 0,
   })
+
+  if (isPurchaser && !token) {
+    return (
+      <Shell>
+        <h1 className="text-xl font-bold text-foreground">Set Up Your Purchaser Account</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Already paid for an order but haven&apos;t set a password? Enter the email you used at checkout to request a secure setup link and access My Orders.
+        </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          If you are also a card recipient, use your account-ready email when your order is processed.
+        </p>
+        <PurchaserSetupRequestForm />
+        <Link to="/login?redirect=%2Forders" className="mt-4 block text-center text-sm font-medium text-primary hover:underline">Back to Login</Link>
+      </Shell>
+    )
+  }
 
   if (done) {
     return (
       <Shell>
         <div className="flex flex-col items-center text-center" role="status" aria-live="polite">
           <CheckCircle2 className="size-12 text-success" aria-hidden="true" />
-          <h1 className="mt-4 text-xl font-bold text-foreground">Your account is active</h1>
+          <h1 className="mt-4 text-xl font-bold text-foreground">{isPurchaser ? "Your account is ready" : "Your account is active"}</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Log in with your username <span className="font-semibold text-foreground">{done.username}</span> or your
-            email address and the password you just created.
+            {isPurchaser ? <>Log in with <span className="font-semibold text-foreground">{done.email}</span> and your new password to view My Orders.</> : <>
+              Log in with your username <span className="font-semibold text-foreground">{done.username}</span> or your
+              email address and the password you just created.
+            </>}
           </p>
-          <Button className="mt-6 w-full" onClick={() => navigate("/login", { replace: true, state: { email: done.username } })}>
+          <Button className="mt-6 w-full" onClick={() => navigate(isPurchaser ? "/login?redirect=%2Forders" : "/login", { replace: true, state: { email: isPurchaser ? done.email : done.username } })}>
             Go to Login
           </Button>
         </div>
@@ -83,7 +107,7 @@ export default function SetPassword() {
   }
 
   if (!token || check.isError) {
-    const message = check.error instanceof ApiError ? check.error.message : "This activation link is invalid."
+    const message = check.error instanceof ApiError ? check.error.message : "This account setup link is invalid."
     return (
       <Shell>
         <div className="flex flex-col items-center text-center">
@@ -93,8 +117,8 @@ export default function SetPassword() {
           <Button asChild className="mt-6 w-full">
             <Link to="/login">Go to Login</Link>
           </Button>
-          <Link to="/contact" className="mt-3 text-sm font-medium text-primary hover:underline">
-            Need a new link? Contact us
+          <Link to={isPurchaser ? "/set-password?purpose=purchaser" : "/contact"} className="mt-3 text-sm font-medium text-primary hover:underline">
+            {isPurchaser ? "Request a new purchaser setup link" : "Need a new link? Contact us"}
           </Link>
         </div>
       </Shell>
@@ -130,8 +154,8 @@ export default function SetPassword() {
 
     setSubmitting(true)
     try {
-      const result = await authApi.completeActivation({ token, new_password: next, confirm_password: confirm })
-      toast.success("Password created. Your account is active.")
+      const result = await authApi.completeActivation({ token, new_password: next, confirm_password: confirm, purpose })
+      toast.success(isPurchaser ? "Password created. You can now log in to My Orders." : "Password created. Your account is active.")
       setDone(result)
     } catch (err) {
       if (err instanceof ApiError) {
@@ -147,15 +171,15 @@ export default function SetPassword() {
 
   return (
     <Shell>
-      <h1 className="text-xl font-bold text-foreground">Set Your Password</h1>
+      <h1 className="text-xl font-bold text-foreground">{isPurchaser ? "Set Up Your Account" : "Set Your Password"}</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Create a password to activate your VR&apos;s Gateway customer account.
+        {isPurchaser ? "Create a password to sign in and view your purchases in My Orders." : "Create a password to activate your VR's Gateway customer account."}
       </p>
       {check.data && (
         <div className="mt-4 space-y-1 rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-          <p>
+          {!isPurchaser && <p>
             Username: <span className="font-medium text-foreground">{check.data.username}</span>
-          </p>
+          </p>}
           <p className="break-all">
             Email: <span className="font-medium text-foreground">{check.data.email}</span>
           </p>
@@ -205,10 +229,10 @@ export default function SetPassword() {
         <Button type="submit" className="w-full" disabled={submitting}>
           {submitting ? (
             <>
-              <Loader2 className="animate-spin" /> Activating…
+              <Loader2 className="animate-spin" /> {isPurchaser ? "Creating Password..." : "Activating…"}
             </>
           ) : (
-            "Set Password & Activate"
+            isPurchaser ? "Create Password" : "Set Password & Activate"
           )}
         </Button>
       </form>

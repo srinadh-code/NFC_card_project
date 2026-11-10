@@ -456,6 +456,7 @@ export function GuestCheckout() {
       trackingToken: result.tracking_token,
       customerName: fullName.trim(),
       accountCreated: result.account_created,
+      purchaserSetup: result.purchaser_setup,
       email: result.email,
       testPayment: result.payment_method === "DUMMY",
     }

@@ -13,12 +13,13 @@ import { ProfileNotReady } from "@/components/customer/ProfileNotReady"
 import { useEnsuredProfile } from "@/hooks/use-ensured-profile"
 import { downloadQrPng, downloadQrSvg, downloadQrPdf, shareOrCopyLink } from "@/components/customer/qr-utils"
 import { qrApi, ordersApi } from "@/lib/api"
+import { customerOrderKeys } from "@/lib/customer-order-queries"
 import { NEXORA_CARD_TYPES } from "@/data/constants"
 
 // The Google Review Card is a separate purchasable product (see /shop), not
 // a profile template — its own section below is shown only once we can
 // tell, from the customer's real order history, that they actually bought
-// one. Reuses the same ["customer-orders", 1] query MyCard.tsx already
+// one. Reuses the same customer-scoped first-page query MyCard.tsx already
 // uses, so this is normally served from cache rather than firing a second
 // request. A cancelled order doesn't count as an active purchase.
 const GOOGLE_REVIEW_CARD = NEXORA_CARD_TYPES.find((c) => c.id === "google-review")
@@ -69,7 +70,7 @@ export default function CustomerQrCode() {
   // means this is a cache hit (no extra request) whenever that page has
   // already been visited this session.
   const ordersQuery = useQuery({
-    queryKey: ["customer-orders", 1],
+    queryKey: customerOrderKeys.page(customer?.id),
     queryFn: () => ordersApi.list(1),
     enabled: Boolean(customer),
   })

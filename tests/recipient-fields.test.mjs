@@ -14,6 +14,7 @@ let cartStore
 let sanitizeCartLines
 let recipientEmailApi
 let NetworkError
+let ApiError
 let recipientEmailsAreAvailable
 let addressValidation
 
@@ -40,6 +41,7 @@ before(async () => {
   const api = await vite.ssrLoadModule("/src/lib/api.ts")
   recipientEmailApi = api.recipientEmailApi
   NetworkError = api.NetworkError
+  ApiError = api.ApiError
   recipientEmailsAreAvailable = (await vite.ssrLoadModule("/src/hooks/useRecipientEmailAvailability.ts")).recipientEmailsAreAvailable
   addressValidation = await vite.ssrLoadModule("/src/lib/address-validation.ts")
 })
@@ -146,10 +148,61 @@ test("availability API surfaces network failures for inline retry handling", asy
   }
 })
 
+test("rate-limited email checks show a paused check and disabled retry countdown", () => {
+  const html = render(1, [], [], [{
+    email: "priya@example.com",
+    state: "rate-limited",
+    message: "Too many email checks. Please wait and retry.",
+    retryAt: Date.now() + 60_000,
+  }], () => {})
+  assert.ok(html.includes("Check Paused"))
+  assert.ok(html.includes("Retry in 60s"))
+  assert.ok(html.includes('disabled=""'))
+  assert.ok(!html.includes("Check Failed"))
+
+  const expired = render(1, [], [], [{
+    email: "priya@example.com",
+    state: "rate-limited",
+    message: "Too many email checks. Please wait and retry.",
+    retryAt: Date.now() - 1,
+  }], () => {})
+  assert.ok(expired.includes(">Retry</button>"))
+  assert.ok(!expired.includes('disabled=""'))
+})
+
+test("availability API preserves Retry-After seconds, dates and missing headers on HTTP 429", async () => {
+  const originalFetch = globalThis.fetch
+  try {
+    for (const [header, expected] of [["12", 12], ["0", 0], [null, null], ["invalid", null]]) {
+      globalThis.fetch = async () => new Response(JSON.stringify({ success: false, message: "Throttled" }), {
+        status: 429,
+        headers: header === null ? {} : { "Retry-After": header },
+      })
+      await assert.rejects(recipientEmailApi.check("user@example.com"), (error) => {
+        assert.ok(error instanceof ApiError)
+        assert.equal(error.status, 429)
+        assert.equal(error.retryAfterSeconds, expected)
+        return true
+      })
+    }
+    globalThis.fetch = async () => new Response(JSON.stringify({ success: false, message: "Throttled" }), {
+      status: 429,
+      headers: { "Retry-After": new Date(Date.now() + 120_000).toUTCString() },
+    })
+    await assert.rejects(recipientEmailApi.check("user@example.com"), (error) => {
+      assert.equal(error.status, 429)
+      assert.ok(error.retryAfterSeconds >= 119 && error.retryAfterSeconds <= 120)
+      return true
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test("recipient checkout gate fails closed until every email is confirmed available", () => {
   const status = (state) => ({ email: "user@example.com", state, ...(state === "available" ? {} : { message: "Unavailable" }) })
   assert.equal(recipientEmailsAreAvailable([status("available")]), true)
-  for (const blocked of ["idle", "checking", "allocated", "duplicate", "invalid", "network-error"]) {
+  for (const blocked of ["idle", "checking", "allocated", "duplicate", "invalid", "network-error", "rate-limited"]) {
     assert.equal(recipientEmailsAreAvailable([status(blocked)]), false, blocked)
   }
   assert.equal(recipientEmailsAreAvailable([]), false)

@@ -4,6 +4,7 @@ import { CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { formatOrderNumber } from "@/lib/mock-api"
 import { useCheckoutVerificationStore } from "@/store/checkout-verification-store"
+import type { PurchaserSetupStatus } from "@/lib/api"
 
 const ORDER_SUCCESS_STORAGE_KEY = "vrs-order-success"
 
@@ -15,6 +16,7 @@ interface OrderSuccessState {
   accountCreated?: boolean
   email?: string
   testPayment?: boolean
+  purchaserSetup?: PurchaserSetupStatus
 }
 
 function readStoredSuccess(): OrderSuccessState | null {
@@ -71,14 +73,23 @@ export default function OrderSuccess() {
         </p>
       )}
       <p className="mt-6 text-sm leading-relaxed text-muted-foreground">
-        Your order has been placed successfully! Our team will confirm your order within 24 hours. You will receive a confirmation
-        email with instructions to activate your customer account. Please check your registered email and follow the instructions
-        to set your password and log in to your dashboard.
+        Your order has been placed successfully. Your order confirmation and tracking details will be sent to your purchaser email.
       </p>
+      {state?.purchaserSetup === "required" && <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+        Check your inbox for a separate purchaser account setup link. Create your password to sign in and view this purchase in My Orders.
+        NFC recipient account-ready emails follow the recipients&apos; order processing.
+      </p>}
+      {state?.purchaserSetup === "recipient" && <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+        You are also a card recipient. Your account-ready email will arrive when your order is processed. Use that link to set your password, then sign in to My Orders.
+      </p>}
+      {state?.purchaserSetup === "active" && <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+        Your existing login is ready to use. View this purchase in My Orders.
+      </p>}
       <div className="mt-10 flex flex-wrap justify-center gap-4">
         <Button size="lg" onClick={() => navigate("/shop")}>
           Continue Shopping
         </Button>
+        <Button size="lg" variant="outline" onClick={() => navigate("/orders")}>My Orders</Button>
         <Button
           size="lg"
           variant="outline"
@@ -92,6 +103,9 @@ export default function OrderSuccess() {
           Track Your Order
         </Button>
       </div>
+      {state?.purchaserSetup === "required" && <button type="button" className="mt-4 text-sm font-medium text-primary underline" onClick={() => navigate("/set-password?purpose=purchaser")}>
+        Need another purchaser setup link?
+      </button>}
     </div>
   )
 }

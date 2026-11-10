@@ -1,9 +1,27 @@
+import { useEffect, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { AlertTriangle, Circle, CircleX, Info, Loader2 } from "lucide-react"
 import type { CheckoutRecipient } from "@/store/checkout-verification-store"
 import type { RecipientEmailStatus } from "@/hooks/useRecipientEmailAvailability"
 
 export type BulkRecipientErrors = Array<{ full_name?: string; email?: string; phone?: string }>
+
+function EmailCheckRetry({ retryAt, onRetry }: { retryAt: number; onRetry: () => void }) {
+  const [now, setNow] = useState(Date.now)
+  const seconds = Math.max(0, Math.ceil((retryAt - now) / 1000))
+  const waiting = seconds > 0
+  useEffect(() => {
+    if (!waiting) return
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [waiting])
+
+  return (
+    <button type="button" className="font-medium underline disabled:opacity-50" disabled={waiting} onClick={onRetry}>
+      {waiting ? `Retry in ${seconds}s` : "Retry"}
+    </button>
+  )
+}
 
 export function BulkRecipientFields({
   count,
@@ -17,9 +35,11 @@ export function BulkRecipientFields({
   recipients: CheckoutRecipient[]
   errors: BulkRecipientErrors
   emailStatuses?: RecipientEmailStatus[]
-  onRetryEmailCheck?: () => void
+  onRetryEmailCheck?: (email?: string) => void
   onChange: (index: number, field: keyof CheckoutRecipient, value: string) => void
 }) {
+  const retryAt = Math.max(0, ...emailStatuses.map((status) => status.state === "rate-limited" ? status.retryAt : 0))
+
   return (
     <section className="rounded-2xl border bg-card p-6 shadow-sm" aria-labelledby="recipient-heading">
       <div className="flex items-center justify-between gap-3">
@@ -64,7 +84,7 @@ export function BulkRecipientFields({
                   value={recipients[index]?.email ?? ""}
                   onChange={(event) => onChange(index, "email", event.target.value)}
                   aria-invalid={Boolean(errors[index]?.email || (
-                    emailStatuses[index] && ["invalid", "allocated", "duplicate", "network-error"].includes(emailStatuses[index].state)
+                    emailStatuses[index] && ["invalid", "allocated", "duplicate", "network-error", "rate-limited"].includes(emailStatuses[index].state)
                   ))}
                 />
                 {(() => {
@@ -88,7 +108,17 @@ export function BulkRecipientFields({
                     return (
                       <div role="status" className="flex flex-wrap items-center gap-2 text-sm text-warning">
                         <span className="flex items-center gap-1.5"><AlertTriangle className="size-3.5" />Check Failed: {message}</span>
-                        {onRetryEmailCheck && <button type="button" className="font-medium underline" onClick={onRetryEmailCheck}>Retry</button>}
+                        {onRetryEmailCheck && <button type="button" className="font-medium underline" onClick={() => onRetryEmailCheck(status.email)}>Retry</button>}
+                      </div>
+                    )
+                  }
+                  if (status?.state === "rate-limited") {
+                    return (
+                      <div role="status" className="flex flex-wrap items-center gap-2 text-sm text-warning">
+                        <span className="flex items-center gap-1.5"><AlertTriangle className="size-3.5" />Check Paused: {message}</span>
+                        {onRetryEmailCheck && (
+                          <EmailCheckRetry key={retryAt} retryAt={retryAt} onRetry={() => onRetryEmailCheck(status.email)} />
+                        )}
                       </div>
                     )
                   }

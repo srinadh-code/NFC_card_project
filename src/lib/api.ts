@@ -71,10 +71,12 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler) {
 export class ApiError extends Error {
   status: number
   errors: Record<string, unknown>
-  constructor(message: string, status: number, errors: Record<string, unknown> = {}) {
+  retryAfterSeconds: number | null
+  constructor(message: string, status: number, errors: Record<string, unknown> = {}, retryAfterSeconds: number | null = null) {
     super(message)
     this.status = status
     this.errors = errors
+    this.retryAfterSeconds = retryAfterSeconds
   }
 }
 
@@ -198,7 +200,16 @@ async function rawRequest<T>(path: string, options: RequestOptions = {}, retried
 
   if (!res.ok || !json || json.success === false) {
     const message = json?.message || `Request failed (${res.status})`
-    throw new ApiError(message, res.status, json?.errors ?? {})
+    let retryAfterSeconds: number | null = null
+    if (res.status === 429) {
+      const retryAfter = res.headers.get("Retry-After")
+      if (retryAfter) {
+        const seconds = Number(retryAfter)
+        const delay = Number.isFinite(seconds) ? seconds : (Date.parse(retryAfter) - Date.now()) / 1000
+        if (Number.isFinite(delay)) retryAfterSeconds = Math.max(0, Math.ceil(delay))
+      }
+    }
+    throw new ApiError(message, res.status, json?.errors ?? {}, retryAfterSeconds)
   }
 
   return json
@@ -302,6 +313,9 @@ export interface AuthPayload {
   refresh: string
 }
 
+export type AccountSetupPurpose = "recipient" | "purchaser"
+export type PurchaserSetupStatus = "required" | "recipient" | "active"
+
 export const authApi = {
   // No session is returned — the customer must verify their email (via the
   // emailed link) before they can log in. `verification_email_sent` is
@@ -336,14 +350,17 @@ export const authApi = {
 
   // The emailed /set-password?token=... link for an order-created account
   // (single use, expiring — accounts/views.py AccountActivation*View).
-  checkActivation: (token: string) =>
-    request<{ email: string; username: string; full_name: string }>("/auth/activation/check/", {
+  checkActivation: (token: string, purpose: AccountSetupPurpose = "recipient") =>
+    request<{ email: string; username: string; full_name: string; purpose: AccountSetupPurpose }>("/auth/activation/check/", {
       method: "POST",
-      body: { token },
+      body: { token, purpose },
       auth: false,
     }),
-  completeActivation: (data: { token: string; new_password: string; confirm_password: string }) =>
-    request<{ email: string; username: string }>("/auth/activation/complete/", { method: "POST", body: data, auth: false }),
+  completeActivation: (data: { token: string; new_password: string; confirm_password: string; purpose?: AccountSetupPurpose }) =>
+    request<{ email: string; username: string; purpose: AccountSetupPurpose }>("/auth/activation/complete/", { method: "POST", body: data, auth: false }),
+
+  requestPurchaserSetup: (email: string) =>
+    request<null>("/auth/purchaser-setup/request/", { method: "POST", body: { email: email.trim().toLowerCase() }, auth: false }),
 
   logout: (refresh: string, area?: SessionArea) =>
     request<null>("/auth/logout/", { method: "POST", body: { refresh }, area }),
@@ -2988,6 +3005,7 @@ export interface VerifiedPayment {
   tracking_token: string
   email: string
   account_created: boolean
+  purchaser_setup: PurchaserSetupStatus
   // Set by the dummy (test) payment confirmation.
   payment_method?: string
 }
