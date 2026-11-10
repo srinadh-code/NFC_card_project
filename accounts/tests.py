@@ -260,6 +260,21 @@ class LoginViewTests(APITestCase):
         self.assertIn("access", response.data["data"])
         self.assertIn("refresh", response.data["data"])
 
+    def test_login_accepts_case_insensitive_email_and_trims_spaces(self):
+        response = self.client.post(
+            reverse("auth-login"), {"email": "  LOGIN@EXAMPLE.COM  ", "password": "StrongPass123"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["data"]["user"]["id"], self.user.pk)
+
+    def test_login_rejects_unknown_email_and_profile_username(self):
+        for email in ("missing@example.com", "login"):
+            with self.subTest(email=email):
+                response = self.client.post(
+                    reverse("auth-login"), {"email": email, "password": "StrongPass123"}, format="json"
+                )
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_wrong_password_rejected(self):
         response = self.client.post(
             reverse("auth-login"), {"email": "login@example.com", "password": "wrong"}, format="json"

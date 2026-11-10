@@ -38,6 +38,23 @@ MAX_LINE_QUANTITY = 10
 RECIPIENT_EMAIL_AVAILABLE_MESSAGE = "Email available for NFC card allocation."
 RECIPIENT_EMAIL_ALLOCATED_MESSAGE = "This email is already assigned to another NFC card. Please enter a different email."
 RECIPIENT_EMAIL_INVALID_MESSAGE = "Please enter a valid email address."
+RECIPIENT_PHONE_INVALID_MESSAGE = "Enter a valid Indian mobile number with or without +91."
+# Recipient mobile: 9876543210, 919876543210 or +919876543210, where the
+# 10-digit number starts with 6-9. ASCII digits only ([0-9], not \d, which
+# also matches non-ASCII digits). Mirrors INDIAN_MOBILE_RE in
+# frontend/src/lib/checkout-recipients.ts — keep the two in sync.
+RECIPIENT_MOBILE_RE = re.compile(r"(?:\+91|91)?([6-9][0-9]{9})")
+
+
+def normalize_recipient_mobile(value):
+    """Return the bare 10-digit mobile number for an accepted recipient
+    phone (optional +91/91 prefix removed), or None when it is invalid."""
+    if not isinstance(value, str):
+        return None
+    match = RECIPIENT_MOBILE_RE.fullmatch(value.strip())
+    return match.group(1) if match else None
+
+
 ADDRESS_FIELDS = (
     "address_line1",
     "address_line2",
@@ -242,8 +259,15 @@ def fail_checkout_session(session):
         release_checkout_reservations(locked_session)
 
 
-def validate_recipients(raw_recipients, total_quantity, buyer_email="", *, checkout_session_id=None):
-    """Validate one distinct, available email allocation for every card."""
+def validate_recipients(raw_recipients, total_quantity, buyer_email="", *, checkout_session_id=None, indian_mobile=True):
+    """Validate one distinct, available email allocation for every card.
+
+    ``indian_mobile`` (the default for every new checkout/order) requires each
+    recipient phone to be an Indian mobile number and stores it as the bare
+    10 digits. ``_fulfill`` passes False when re-checking a session that was
+    already validated and paid for, so sessions created before this rule
+    existed are not stranded after payment.
+    """
     if type(total_quantity) is not int or not 1 <= total_quantity <= MAX_LINE_QUANTITY:
         raise CheckoutError("Choose between 1 and 10 cards.", errors={"quantity": ["Must be an integer from 1 to 10."]})
     if not isinstance(raw_recipients, list) or len(raw_recipients) != total_quantity:
@@ -270,12 +294,18 @@ def validate_recipients(raw_recipients, total_quantity, buyer_email="", *, check
                 raise ValidationError("Email too long")
         except ValidationError:
             errors["email"] = ["Enter a valid email address."]
-        digits = re.sub(r"\D", "", phone)
-        if not re.fullmatch(r"\+?[0-9 ().-]+", phone) or not 7 <= len(digits) <= 15 or len(phone) > 20:
-            errors["phone"] = ["Enter a phone number with 7 to 15 digits; a country code is allowed."]
+        if indian_mobile:
+            normalized_phone = normalize_recipient_mobile(phone)
+            if normalized_phone is None:
+                errors["phone"] = [RECIPIENT_PHONE_INVALID_MESSAGE]
+        else:
+            digits = re.sub(r"\D", "", phone)
+            if not re.fullmatch(r"\+?[0-9 ().-]+", phone) or not 7 <= len(digits) <= 15 or len(phone) > 20:
+                errors["phone"] = ["Enter a phone number with 7 to 15 digits; a country code is allowed."]
+            normalized_phone = ("+" if phone.startswith("+") else "") + digits
         if errors:
             raise CheckoutError(f"Please check recipient {index}.", errors={"recipients": {str(index - 1): errors}})
-        cleaned.append({"full_name": name, "email": email, "phone": ("+" if phone.startswith("+") else "") + digits})
+        cleaned.append({"full_name": name, "email": email, "phone": normalized_phone})
     seen_emails = set()
     for index, recipient in enumerate(cleaned):
         if recipient["email"] in seen_emails:
@@ -514,6 +544,7 @@ def _fulfill(session, *, via, payment_ref=None):
         sum(int(line.get("qty", 0)) for line in session.lines),
         session.email,
         checkout_session_id=session.public_id,
+        indian_mobile=False,
     )
 
     user, account_created = _provision_user(session)

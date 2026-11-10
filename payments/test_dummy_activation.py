@@ -116,7 +116,7 @@ class DummyPaymentActivationTests(APITestCase):
 
     def _buy_for_recipients(self, emails):
         recipients = [
-            {"full_name": "Kavya" if email == "kavya@example.com" else "Recipient", "email": email, "phone": "+44 7700 900123"}
+            {"full_name": "Kavya" if email == "kavya@example.com" else "Recipient", "email": email, "phone": "+917700900123"}
             for email in emails
         ]
         checkout, paid = self._buy(email="kavya@example.com", qty=len(recipients), recipients=recipients)
@@ -308,8 +308,8 @@ class DummyPaymentActivationTests(APITestCase):
         response = self._start(
             qty=2,
             recipients=[
-                {"full_name": "Recipient One", "email": "chinnu@example.com", "phone": "+44 7700 900123"},
-                {"full_name": "Recipient Two", "email": " CHINNU@example.com ", "phone": "+44 7700 900123"},
+                {"full_name": "Recipient One", "email": "chinnu@example.com", "phone": "+917700900123"},
+                {"full_name": "Recipient Two", "email": " CHINNU@example.com ", "phone": "+917700900123"},
             ],
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
@@ -406,10 +406,10 @@ class DummyPaymentActivationTests(APITestCase):
         reused = self._activate(token)
         self.assertEqual(reused.data["errors"]["code"], "used")
 
-        # Log in with the username or the email, then reach the dashboard API.
-        for identifier in (username, "New.Buyer@example.com"):
-            login = self._login(identifier)
-            self.assertEqual(login.status_code, status.HTTP_200_OK, login.content)
+        # Activated customers sign in with their registered email, not profile username.
+        login = self._login("New.Buyer@example.com")
+        self.assertEqual(login.status_code, status.HTTP_200_OK, login.content)
+        self.assertEqual(self._login(username).status_code, status.HTTP_400_BAD_REQUEST)
         me = self.client.get(reverse("auth-me"), HTTP_AUTHORIZATION=f"Bearer {login.data['data']['access']}")
         self.assertEqual(me.status_code, status.HTTP_200_OK)
         orders = self.client.get(reverse("my-orders"), HTTP_AUTHORIZATION=f"Bearer {login.data['data']['access']}")
@@ -417,9 +417,9 @@ class DummyPaymentActivationTests(APITestCase):
 
     def test_bulk_recipients_activate_and_resend_individually_after_one_failure(self):
         recipients = [
-            {"full_name": "Recipient One", "email": "recipient.one@example.com", "phone": "+44 7700 900123"},
-            {"full_name": "Recipient Two", "email": "recipient.two@example.com", "phone": "+44 7700 900123"},
-            {"full_name": "Recipient Three", "email": "recipient.three@example.com", "phone": "+44 7700 900123"},
+            {"full_name": "Recipient One", "email": "recipient.one@example.com", "phone": "+917700900123"},
+            {"full_name": "Recipient Two", "email": "recipient.two@example.com", "phone": "+917700900123"},
+            {"full_name": "Recipient Three", "email": "recipient.three@example.com", "phone": "+917700900123"},
         ]
         _, paid = self._buy(qty=3, recipients=recipients)
         order = Order.objects.get(pk=paid["order_id"])

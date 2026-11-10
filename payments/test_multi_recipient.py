@@ -33,7 +33,7 @@ from website_content.models import OrderCardProduct
 
 
 def recipient(index=1, email=None):
-    return {"full_name": f"Recipient {index}", "email": email or f"recipient{index}@example.com", "phone": "+44 7700 900123"}
+    return {"full_name": f"Recipient {index}", "email": email or f"recipient{index}@example.com", "phone": "+917700900123"}
 
 
 @override_settings(
@@ -79,7 +79,7 @@ class MultiRecipientPaymentTests(APITestCase):
                 self.assertEqual(sum(item.qty for item in order.items.all()), quantity)
                 self.assertFalse(Profile.objects.filter(user=order.customer).exists())
                 self.assertFalse(order.recipients.filter(user=order.customer).exists())
-                self.assertTrue(all(r.user_id and r.profile_id and r.phone == "+447700900123" for r in order.recipients.all()))
+                self.assertTrue(all(r.user_id and r.profile_id and r.phone == "7700900123" for r in order.recipients.all()))
                 self.assertEqual(order.delivery_phone, "9000000099")
                 self.assertEqual(order.customer.addresses.get().phone, "9000000099")
                 self.assertEqual(order.purchaser_email, order.customer.email)
@@ -110,7 +110,7 @@ class MultiRecipientPaymentTests(APITestCase):
         customers = self.as_admin_get("admin-customers")
         self.assertEqual([c["email"] for c in customers], ["priya@example.com"])
         detail = self.as_admin_get("admin-purchaser-detail", order.pk)
-        self.assertEqual(detail["order"]["recipients"][0]["phone"], "+447700900123")
+        self.assertEqual(detail["order"]["recipients"][0]["phone"], "7700900123")
         self.assertEqual(mail.outbox[-1].to, ["rahul@example.com"])
 
     def test_purchaser_is_also_recipient_uses_one_account_and_profile(self):

@@ -79,25 +79,16 @@ class ResendOtpSerializer(serializers.Serializer):
 
 
 def resolve_login_email(identifier):
-    """Login accepts an email address or a profile username; returns the
-    email to authenticate with (unchanged input when nothing matches, so a
-    wrong username fails exactly like a wrong email)."""
-    value = (identifier or "").strip()
-    if "@" in value:
-        # Preserve a legacy account's stored spelling for Django's exact
-        # natural-key authentication lookup, while matching case-insensitively.
-        existing = User.objects.filter(email__iexact=value).values_list("email", flat=True).first()
-        return existing or value.lower()
-    from profiles.models import Profile
-
-    profile = Profile.objects.filter(username__iexact=value).select_related("user").first()
-    return profile.user.email if profile else value.lower()
+    """Resolve a normalized email to the stored spelling used by Django auth."""
+    value = (identifier or "").strip().lower()
+    # Preserve a legacy account's stored spelling for Django's exact
+    # natural-key authentication lookup, while matching case-insensitively.
+    existing = User.objects.filter(email__iexact=value).values_list("email", flat=True).first()
+    return existing or value
 
 
 class LoginSerializer(serializers.Serializer):
-    # Email address or profile username (the username emailed to customers
-    # whose account was created from an order).
-    email = serializers.CharField(max_length=254)
+    email = serializers.EmailField(max_length=254)
     password = serializers.CharField(write_only=True)
 
     def validate(self, attrs):

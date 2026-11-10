@@ -68,7 +68,7 @@ def _valid_payload(address, **overrides):
         "payment_method": "COD",
         "address_id": address.pk,
         "recipients": [
-            {"full_name": f"Recipient {i + 1}", "email": f"recipient.{i + 1}@example.com", "phone": "+447700900123"}
+            {"full_name": f"Recipient {i + 1}", "email": f"recipient.{i + 1}@example.com", "phone": "+917700900123"}
             for i in range(sum(CartItem.objects.filter(cart__customer=address.customer).values_list("qty", flat=True)))
         ],
     }
@@ -108,9 +108,9 @@ class CustomerOrderCreateViewTests(AuthenticatedAPITestCase):
         payload = _valid_payload(
             self.address,
             recipients=[
-                {"full_name": "Recipient One", "email": "recipient.one@example.com", "phone": "+447700900121"},
-                {"full_name": "Recipient Two", "email": "recipient.two@example.com", "phone": "+447700900122"},
-                {"full_name": "Recipient Three", "email": "recipient.three@example.com", "phone": "+447700900123"},
+                {"full_name": "Recipient One", "email": "recipient.one@example.com", "phone": "+917700900121"},
+                {"full_name": "Recipient Two", "email": "recipient.two@example.com", "phone": "+917700900122"},
+                {"full_name": "Recipient Three", "email": "recipient.three@example.com", "phone": "+917700900123"},
             ],
         )
 
@@ -134,7 +134,7 @@ class CustomerOrderCreateViewTests(AuthenticatedAPITestCase):
         _seed_cart_item(self.user, qty=1)
         first_payload = _valid_payload(
             self.address,
-            recipients=[{"full_name": "Recipient One", "email": "allocated@example.com", "phone": "+447700900123"}],
+            recipients=[{"full_name": "Recipient One", "email": "allocated@example.com", "phone": "+917700900123"}],
         )
         first = self.client.post(reverse("my-orders"), first_payload, format="json")
         self.assertEqual(first.status_code, status.HTTP_201_CREATED, first.content)
@@ -143,7 +143,7 @@ class CustomerOrderCreateViewTests(AuthenticatedAPITestCase):
         repeated_payload = _valid_payload(
             self.address,
             idempotency_key="a-distinct-checkout-attempt",
-            recipients=[{"full_name": "Recipient One", "email": " ALLOCATED@example.com ", "phone": "+447700900123"}],
+            recipients=[{"full_name": "Recipient One", "email": " ALLOCATED@example.com ", "phone": "+917700900123"}],
         )
         repeated = self.client.post(reverse("my-orders"), repeated_payload, format="json")
 
@@ -509,8 +509,8 @@ class CustomerOrderIdempotencyTests(AuthenticatedAPITestCase):
                 self.other_address,
                 idempotency_key="shared-key",
                 recipients=[
-                    {"full_name": "Other Recipient One", "email": "other.one@example.com", "phone": "+447700900123"},
-                    {"full_name": "Other Recipient Two", "email": "other.two@example.com", "phone": "+447700900124"},
+                    {"full_name": "Other Recipient One", "email": "other.one@example.com", "phone": "+917700900123"},
+                    {"full_name": "Other Recipient Two", "email": "other.two@example.com", "phone": "+917700900124"},
                 ],
             ),
             format="json",
