@@ -20,6 +20,7 @@ import { ErrorState } from "@/components/customer/ErrorState"
 import { OrderTrackingView } from "@/components/orders/OrderTrackingView"
 import { useCustomerAuthStore } from "@/store/auth-store"
 import { ApiError, ordersApi, toFrontendOrder, type ApiOrder } from "@/lib/api"
+import { customerOrderKeys } from "@/lib/customer-order-queries"
 import { formatCurrency, formatDate } from "@/lib/mock-api"
 import { deriveCurrentStatus, estimateDeliveryWindow } from "@/lib/order-tracking"
 import type { Order, OrderStatus } from "@/types"
@@ -144,7 +145,7 @@ export default function CustomerOrders() {
   const queryClient = useQueryClient()
 
   const ordersQuery = useQuery({
-    queryKey: ["customer-orders", page],
+    queryKey: customerOrderKeys.page(customer?.id, page),
     queryFn: () => ordersApi.list(page),
     enabled: Boolean(customer),
   })
@@ -156,7 +157,7 @@ export default function CustomerOrders() {
       toast.error(err instanceof ApiError ? err.message : "Couldn't cancel the order. Please try again."),
     // Refetch either way — on failure the status may have changed (e.g.
     // admin just shipped it), so the card should show the real state.
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ["customer-orders"] }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: customerOrderKeys.customer(customer?.id) }),
   })
 
   if (!customer) return null

@@ -38,6 +38,7 @@ import { formatDate } from "@/lib/mock-api"
 import { orderStatusLabel } from "@/lib/order-status"
 import { downloadQrPng, shareOrCopyLink } from "@/components/customer/qr-utils"
 import { analyticsApi, nfcApi, ordersApi } from "@/lib/api"
+import { customerOrderKeys } from "@/lib/customer-order-queries"
 
 const IN_PROGRESS_ORDER_STATUSES = ["PENDING", "PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY"]
 
@@ -74,7 +75,7 @@ export default function CustomerMyCard() {
   const cards = cardsQuery.data ?? []
 
   const ordersQuery = useQuery({
-    queryKey: ["customer-orders", 1],
+    queryKey: customerOrderKeys.page(customer?.id),
     queryFn: () => ordersApi.list(1),
     enabled: Boolean(customer),
   })

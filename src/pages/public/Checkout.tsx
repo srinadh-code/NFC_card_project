@@ -103,7 +103,8 @@ export default function Checkout() {
   const recipientDetailsRef = useRef<HTMLDivElement | null>(null)
   const orderSummaryRef = useRef<HTMLDivElement | null>(null)
   const { recipients: bulkRecipients, setRecipients: setBulkRecipients } = useCheckoutVerificationStore()
-  const recipientEmailAvailability = useRecipientEmailAvailability(bulkRecipients, customer?.email ?? "")
+  // GuestCheckout owns the guest checks; avoid a second set in this parent.
+  const recipientEmailAvailability = useRecipientEmailAvailability(customer ? bulkRecipients : [], customer?.email ?? "")
   const [recipientErrors, setRecipientErrors] = useState<RecipientErrors[]>([])
   // Set -> the form dialog edits this address (e.g. to fix a PIN code that
   // failed verification); null -> it adds a new one.
@@ -221,6 +222,7 @@ export default function Checkout() {
       orderNumber: result.order_number,
       trackingToken: result.tracking_token,
       customerName: customer?.name,
+      purchaserSetup: result.purchaser_setup,
       testPayment: result.payment_method === "DUMMY",
     }
     storeOrderSuccess(successState)

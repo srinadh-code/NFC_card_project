@@ -10,6 +10,7 @@ import { ProductSelection } from "@/components/shop/ProductSelection"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ApiError, ordersApi, profileApi, CARD_TYPE_MAP } from "@/lib/api"
+import { customerOrderKeys } from "@/lib/customer-order-queries"
 import { publicWebsiteApi } from "@/lib/contentApi"
 import { CARD_THEME_IDS, PROFILE_THEMES } from "@/data/constants"
 import { useCart } from "@/hooks/useCart"
@@ -66,7 +67,7 @@ export default function Shop() {
   // gate template selection — shares its query key, so this is a cache hit
   // whenever that page (or My Card) was already visited this session.
   const ordersQuery = useQuery({
-    queryKey: ["customer-orders", 1],
+    queryKey: customerOrderKeys.page(customer?.id),
     queryFn: () => ordersApi.list(1),
     enabled: Boolean(customer),
   })

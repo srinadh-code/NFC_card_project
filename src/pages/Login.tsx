@@ -206,12 +206,11 @@ export default function Login() {
             )}
             {notActivated && (
               <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-                Your account is activated with the &quot;Set Your Password&quot; link we email once your order is being
-                processed. Didn&apos;t get it, or the link expired?{" "}
+                Use the setup link sent to your email. Card recipients receive their account-ready email when the order is
+                processed. Need help with recipient setup?{" "}
                 <Link to="/contact" className="font-medium text-primary hover:underline">
                   Contact us
-                </Link>{" "}
-                and we&apos;ll send a new one.
+                </Link>.
               </div>
             )}
 
@@ -233,6 +232,11 @@ export default function Login() {
               {submitting ? "Signing in..." : "Login"}
             </Button>
           </form>
+
+          <p className="text-center text-sm text-muted-foreground">
+            Bought cards but haven&apos;t set a password?{" "}
+            <Link to="/set-password?purpose=purchaser" className="font-medium text-primary hover:underline">Request your account setup link</Link>
+          </p>
 
           <div className="flex items-center gap-3">
             <div className="h-px flex-1 bg-border" />
