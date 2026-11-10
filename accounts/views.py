@@ -1,5 +1,6 @@
 import logging
 import threading
+from collections.abc import Mapping
 from datetime import timedelta
 
 from django.conf import settings
@@ -294,6 +295,8 @@ ACTIVATION_LINK_MESSAGES = {
     EmailOTP.LINK_USED: ("This activation link has already been used. Please log in.", "used"),
 }
 
+SETUP_PURPOSES = {"recipient": EmailOTP.Purpose.ACTIVATE, "purchaser": EmailOTP.Purpose.PURCHASER}
+
 
 class AccountActivationCheckView(APIView):
     """POST {token} — whether a set-password link can still be used, and the
@@ -305,12 +308,17 @@ class AccountActivationCheckView(APIView):
     throttle_scope = "first_login"
 
     def post(self, request):
-        outcome, otp = EmailOTP.check_activation_link(str(request.data.get("token", "")))
+        if not isinstance(request.data, Mapping):
+            return error("This activation link is invalid.", errors={"code": "invalid"}, status=400)
+        purpose = request.data.get("purpose", "recipient")
+        if not isinstance(purpose, str) or purpose not in SETUP_PURPOSES:
+            return error("This activation link is invalid.", errors={"code": "invalid"}, status=400)
+        outcome, otp = EmailOTP.check_activation_link(str(request.data.get("token", "")), purpose=SETUP_PURPOSES[purpose])
         if outcome != EmailOTP.LINK_VALID:
             message, code = ACTIVATION_LINK_MESSAGES[outcome]
             return error(message, errors={"code": code}, status=400)
         return success(
-            {"email": otp.user.email, "username": onboarding.username_for(otp.user), "full_name": otp.user.full_name}
+            {"email": otp.user.email, "username": onboarding.username_for(otp.user), "full_name": otp.user.full_name, "purpose": purpose}
         )
 
 
@@ -328,17 +336,21 @@ class AccountActivationCompleteView(APIView):
         serializer = AccountActivationCompleteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        purpose = data["purpose"]
 
         with transaction.atomic():
-            outcome, otp = EmailOTP.check_activation_link(data["token"])
+            outcome, otp = EmailOTP.check_activation_link(data["token"], purpose=SETUP_PURPOSES[purpose])
             if outcome != EmailOTP.LINK_VALID:
                 message, code = ACTIVATION_LINK_MESSAGES[outcome]
                 return error(message, errors={"code": code}, status=400)
-            otp = EmailOTP.objects.select_for_update().get(pk=otp.pk)
-            if otp.is_used:  # lost a race with a second submission
-                message, code = ACTIVATION_LINK_MESSAGES[EmailOTP.LINK_USED]
+            # Match issuance's lock order and recheck under both locks: a
+            # duplicate completion or a concurrent replacement cannot replay.
+            user = User.objects.select_for_update(no_key=True).get(pk=otp.user_id)
+            EmailOTP.objects.select_for_update().get(pk=otp.pk)
+            outcome, otp = EmailOTP.check_activation_link(data["token"], purpose=SETUP_PURPOSES[purpose])
+            if outcome != EmailOTP.LINK_VALID:
+                message, code = ACTIVATION_LINK_MESSAGES[outcome]
                 return error(message, errors={"code": code}, status=400)
-            user = otp.user
             user.set_password(data["new_password"])
             user.must_change_password = False
             user.temporary_password_expires_at = None
@@ -346,13 +358,33 @@ class AccountActivationCompleteView(APIView):
             user.save(update_fields=["password", "must_change_password", "temporary_password_expires_at", "email_verified"])
             otp.is_used = True
             otp.save(update_fields=["is_used"])
+            # Any older account-setup credentials are now redundant, including
+            # another setup purpose that predates a purchaser becoming a recipient.
+            EmailOTP._supersede(user, EmailOTP.Purpose.ACTIVATE)
+            EmailOTP._supersede(user, EmailOTP.Purpose.PURCHASER)
             CustomerOnboarding.objects.filter(user=user).update(password_set_at=timezone.now())
         _blacklist_all_tokens_for_user(user)
         logger.info("auth.activation.completed user_id=%s", user.id)
         return success(
-            {"email": user.email, "username": onboarding.username_for(user)},
+            {"email": user.email, "username": onboarding.username_for(user), "purpose": purpose},
             message="Your password is set and your account is active. You can now log in.",
         )
+
+
+class PurchaserSetupRequestView(APIView):
+    """Recover pending paid purchasers by proving the inbox with a fresh link."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = AUTH_EMAIL_THROTTLES
+
+    def post(self, request):
+        serializer = ForgotPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data["email"].strip().lower()
+        if not onboarding.request_purchaser_setup(email):
+            _equalize_hashing_time()
+        return success(message="If this email has a purchaser account awaiting setup, a secure setup link has been sent.")
 
 
 class LogoutView(APIView):
@@ -376,12 +408,18 @@ def _issue_and_send_reset_otp(user):
     None) does matching hashing work instead. Returns the code's expiry —
     a synthetic one for unknown emails, so the reply looks the same."""
     lifetime = EmailOTP.RESET_OTP_LIFETIME_MINUTES
-    if user is None:
+    if not _password_reset_eligible(user):
         _equalize_hashing_time()
         return timezone.now() + timedelta(minutes=lifetime)
     otp, raw_code = EmailOTP.issue(user, EmailOTP.Purpose.RESET, lifetime_minutes=lifetime)
     _send_in_background(send_password_reset_otp_email, user, raw_code, lifetime)
     return otp.expires_at
+
+
+def _password_reset_eligible(user):
+    # Password recovery is for existing login identities. Initial setup uses
+    # its own purpose, whether requested directly or through a resend.
+    return bool(user is not None and user.is_active and not user.must_change_password)
 
 
 class ForgotPasswordView(APIView):
@@ -444,6 +482,10 @@ class VerifyResetOtpView(APIView):
             _equalize_hashing_time()
             return error(self.GENERIC_ERROR, status=400)
 
+        if not _password_reset_eligible(user):
+            _equalize_hashing_time()
+            return error(self.GENERIC_ERROR, status=400)
+
         # Not filtered to is_used=False: once check_code() locks an OTP out
         # at MAX_ATTEMPTS it sets is_used=True, and a filtered query would
         # then find nothing on the next attempt — collapsing the specific
@@ -489,7 +531,7 @@ class ResetPasswordView(APIView):
         data = serializer.validated_data
 
         otp = EmailOTP.get_by_reset_token(data["reset_token"])
-        if otp is None:
+        if otp is None or not _password_reset_eligible(otp.user):
             return error(
                 "Your reset session has expired or was already used. Please request a new code.",
                 errors={"code": "token_invalid"},
@@ -497,16 +539,23 @@ class ResetPasswordView(APIView):
             )
 
         with transaction.atomic():
+            user = User.objects.select_for_update(no_key=True).get(pk=otp.user_id)
+            EmailOTP.objects.select_for_update().get(pk=otp.pk)
+            otp = EmailOTP.get_by_reset_token(data["reset_token"])
+            if otp is None or not _password_reset_eligible(user):
+                return error(
+                    "Your reset session has expired or was already used. Please request a new code.",
+                    errors={"code": "token_invalid"}, status=400,
+                )
             otp.consume_reset_token()
-            otp.user.set_password(data["new_password"])
+            user.set_password(data["new_password"])
             # Entering a code sent to this inbox proves the customer controls
-            # it — the same thing email verification checks. It also
-            # completes a pending first-login setup: they chose this password.
-            otp.user.email_verified = True
-            otp.user.must_change_password = False
-            otp.user.temporary_password_expires_at = None
-            otp.user.save(
-                update_fields=["password", "email_verified", "must_change_password", "temporary_password_expires_at"]
+            # it — the same thing email verification checks. Pending initial
+            # setup is deliberately handled only by its setup-purpose token.
+            user.email_verified = True
+            user.temporary_password_expires_at = None
+            user.save(
+                update_fields=["password", "email_verified", "temporary_password_expires_at"]
             )
 
         _blacklist_all_tokens_for_user(otp.user)

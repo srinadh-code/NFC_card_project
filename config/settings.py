@@ -386,6 +386,8 @@ REST_FRAMEWORK = {
         "testimonial_submit": "10/hour",
         "pincode_lookup": "60/min",
         "checkout": "20/min",
+        # Independent budget for up to ten recipient fields while typing.
+        "recipient_email_availability": "60/min",
         "checkout_otp": "10/min",
         "auth_login": "30/min",
         "first_login": "10/min",

@@ -155,6 +155,7 @@ class GoogleLoginSerializer(serializers.Serializer):
 
 class AccountActivationCompleteSerializer(serializers.Serializer):
     token = serializers.CharField(write_only=True)
+    purpose = serializers.ChoiceField(choices=("recipient", "purchaser"), default="recipient")
     new_password = serializers.CharField(write_only=True)
     confirm_password = serializers.CharField(write_only=True)
 

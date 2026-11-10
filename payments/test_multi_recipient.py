@@ -135,6 +135,20 @@ class MultiRecipientPaymentTests(APITestCase):
         self.assertEqual((person.password, person.full_name, person.phone), (password, "Original name", "9000000002"))
         self.assertEqual(Profile.objects.filter(user=person).count(), 1)
 
+    def test_checkout_rejects_duplicate_recipient_emails_without_an_availability_check(self):
+        payload = _guest_payload(qty=2)
+        payload["recipients"] = [
+            recipient(email=" Same.Recipient@example.com "),
+            recipient(2, "same.recipient@EXAMPLE.com"),
+        ]
+        response = self.client.post(reverse("razorpay-checkout"), self._with_token(payload), format="json")
+
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(response.data["message"], "Use a different email address for each NFC card.")
+        self.assertFalse(CheckoutSession.objects.exists())
+        self.assertFalse(RecipientEmailAllocation.objects.exists())
+        self.assertFalse(Order.objects.exists())
+
     def test_buyer_email_can_be_reused_across_orders_with_distinct_recipient_allocations(self):
         _, first = self.buy([recipient(), recipient(2)])
         _, second = self.buy([recipient(3), recipient(4, "recipient4@example.com"), recipient(5)])

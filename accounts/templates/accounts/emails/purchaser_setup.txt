@@ -1,0 +1,10 @@
+Hello {{ name }},
+
+Your payment is confirmed. Create a password to sign in and view your purchases in My Orders.
+
+Set Your Password: {{ action_url }}
+(This link can be used once and expires in {{ expires_text }}.)
+
+Use your purchaser email address to log in. You can view your purchases even when the cards are for other people.
+
+If you did not request account setup, ignore this email. Your password will not change unless you use the secure link and choose one.

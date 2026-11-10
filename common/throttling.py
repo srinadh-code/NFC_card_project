@@ -1,3 +1,5 @@
+from collections.abc import Mapping
+
 from rest_framework.throttling import SimpleRateThrottle
 
 
@@ -7,7 +9,12 @@ class OtpRequestThrottle(SimpleRateThrottle):
     scope = "otp"
 
     def get_cache_key(self, request, view):
-        email = (request.data.get("email") or "").strip().lower()
+        if not isinstance(request.data, Mapping):
+            return None
+        value = request.data.get("email")
+        if not isinstance(value, str):
+            return None
+        email = value.strip().lower()
         if not email:
             return None
         return self.cache_format % {"scope": self.scope, "ident": email}
