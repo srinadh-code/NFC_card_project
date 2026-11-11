@@ -23,6 +23,7 @@ import { Reveal } from "@/components/marketing/Reveal"
 import { resolveIcon } from "@/lib/icon-map"
 import { publicWebsiteApi } from "@/lib/contentApi"
 import { usePublicTestimonials } from "@/hooks/useTestimonials"
+import { useStaggeredEntrance } from "@/hooks/use-staggered-entrance"
 
 
 // Fallback only for a card that has neither an admin-uploaded image nor a
@@ -40,6 +41,12 @@ export default function Features() {
     queryFn: publicWebsiteApi.getFeaturesPage,
   })
   const page = data?.page
+  const featuresRef = useStaggeredEntrance({
+    selector: "[data-feature-entrance]",
+    staggerMs: 150,
+    content: data?.cards,
+    enabled: !isLoading && !isError,
+  })
 
   if (isError) {
     return (
@@ -254,12 +261,12 @@ export default function Features() {
           ) : (
             data &&
             data.cards.length > 0 && (
-              <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {data.cards.map((f, i) => {
+              <div ref={featuresRef} className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {data.cards.map((f) => {
                   const Icon = resolveIcon(f.icon)
                   return (
-                    <Reveal key={f.id} delayMs={i * 80}>
-                      <div className="card-hover group flex items-start gap-4 rounded-[24px] border border-border/70 bg-card p-6 shadow-[0_10px_30px_rgba(15,23,42,0.06)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                    <div key={f.id} data-feature-entrance>
+                      <div className="group flex items-start gap-4 rounded-[24px] border border-border/70 bg-card p-6 shadow-[0_10px_30px_rgba(15,23,42,0.06)] transition-[translate,scale,box-shadow]! duration-300! ease-out! hover:shadow-[0_18px_36px_rgba(15,23,42,0.12)] motion-safe:hover:-translate-y-[5px] motion-safe:hover:scale-[1.02] motion-reduce:transition-none! dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] dark:hover:shadow-[0_18px_36px_rgba(0,0,0,0.6)]">
                         {f.image_url ? (
                           <img
                             src={f.image_url}
@@ -293,7 +300,7 @@ export default function Features() {
                           </span>
                         )}
                       </div>
-                    </Reveal>
+                    </div>
                   )
                 })}
               </div>

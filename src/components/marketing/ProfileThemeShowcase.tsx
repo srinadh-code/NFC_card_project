@@ -5,6 +5,7 @@ import { cardClass } from "@/components/marketing/PremiumCard"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import type { ProfileTheme } from "@/data/constants"
+import { useStaggeredEntrance } from "@/hooks/use-staggered-entrance"
 
 // Code-built phone mockups — one genuinely different composition per
 // theme (not a shared template with swapped colors): header structure,
@@ -492,10 +493,18 @@ export default function ProfileThemeShowcase({ themes, selectedId, onSelect, pen
   const [previewTheme, setPreviewTheme] = useState<ProfileTheme | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const previewSelected = interactive && previewTheme != null && selectedId === previewTheme.id
+  const themesRef = useStaggeredEntrance({
+    selector: "[data-profile-theme-entrance]",
+    staggerMs: 150,
+    durationMs: 600,
+    offsetPx: 30,
+    content: themes.map((theme) => theme.id).join("|"),
+  })
 
   return (
     <>
     <div
+      ref={themesRef}
       className={cn(
         "grid grid-cols-1 gap-6",
         themes.length >= 3 ? "sm:grid-cols-2 lg:grid-cols-3" : themes.length === 2 ? "sm:grid-cols-2" : "",
@@ -506,43 +515,45 @@ export default function ProfileThemeShowcase({ themes, selectedId, onSelect, pen
         const isSaving = pendingId === theme.id
 
         return (
-          <button
-            key={theme.id}
-            type="button"
-            aria-haspopup="dialog"
-            onClick={() => {
-              setPreviewTheme(theme)
-              setPreviewOpen(true)
-            }}
-            className={cn(
-              cardClass,
-              "relative flex flex-col items-center p-6 text-center",
-              // Whole-card pop on hover (image, name, tagline, border and
-              // shadow move as one) — same for every card, selectable or not.
-              "transform-gpu ease-out hover:z-10 hover:-translate-y-2 hover:scale-[1.02] hover:shadow-[0_24px_48px_rgba(79,70,229,0.18)] dark:hover:shadow-[0_24px_48px_rgba(139,92,246,0.4)]",
-              "cursor-pointer",
-              isSelected && "border-primary ring-2 ring-primary/50",
-            )}
-          >
-            {isSelected && (
-              <span className="absolute right-3 top-3 z-10 flex items-center gap-1 rounded-full bg-primary px-2 py-1 text-[10px] font-semibold text-primary-foreground shadow-sm">
-                <Check className="size-3" /> Selected
-              </span>
-            )}
-            {isSaving && (
-              <span className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-white/70">
-                <Loader2 className="size-6 animate-spin text-primary" />
-              </span>
-            )}
+          <div key={theme.id} data-profile-theme-entrance className="min-w-0">
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              onClick={() => {
+                setPreviewTheme(theme)
+                setPreviewOpen(true)
+              }}
+              className={cn(
+                cardClass,
+                "relative flex h-full w-full flex-col items-center p-6 text-center",
+                // Whole-card pop on hover (image, name, tagline, border and
+                // shadow move as one) — same for every card, selectable or not.
+                "transform-gpu transition-[translate,scale,box-shadow]! duration-300! ease-out! hover:z-10 hover:-translate-y-1.5 hover:scale-[1.02] hover:shadow-[0_24px_48px_rgba(79,70,229,0.18)] dark:hover:shadow-[0_24px_48px_rgba(139,92,246,0.4)]",
+                "motion-reduce:translate-y-0! motion-reduce:scale-100! motion-reduce:transition-none!",
+                "cursor-pointer",
+                isSelected && "border-primary ring-2 ring-primary/50",
+              )}
+            >
+              {isSelected && (
+                <span className="absolute right-3 top-3 z-10 flex items-center gap-1 rounded-full bg-primary px-2 py-1 text-[10px] font-semibold text-primary-foreground shadow-sm">
+                  <Check className="size-3" /> Selected
+                </span>
+              )}
+              {isSaving && (
+                <span className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-white/70">
+                  <Loader2 className="size-6 animate-spin text-primary" />
+                </span>
+              )}
 
-            <PhoneMockup theme={theme} imageUrl={imagesByThemeId?.[theme.id]} />
+              <PhoneMockup theme={theme} imageUrl={imagesByThemeId?.[theme.id]} />
 
-            <p className="mt-5 text-lg font-bold text-foreground">{theme.name.replace(/^(NEXORA|GATEWAY) /, "")}</p>
-            <p className="mt-1 text-sm text-muted-foreground">{theme.tagline}</p>
-            {interactive && !isSelected && (
-              <p className="mt-3 text-xs font-semibold text-primary">Select this template</p>
-            )}
-          </button>
+              <p className="mt-5 text-lg font-bold text-foreground">{theme.name.replace(/^(NEXORA|GATEWAY) /, "")}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{theme.tagline}</p>
+              {interactive && !isSelected && (
+                <p className="mt-3 text-xs font-semibold text-primary">Select this template</p>
+              )}
+            </button>
+          </div>
         )
       })}
     </div>

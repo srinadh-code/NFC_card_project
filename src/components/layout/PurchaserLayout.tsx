@@ -14,14 +14,14 @@ export default function PurchaserLayout() {
 
   return (
     <div className="flex min-h-screen bg-muted/30">
-      <aside className="hidden w-64 shrink-0 md:block">
+      <aside className="hidden w-64 shrink-0 border-r border-[#0F172A] md:block">
         <div className="sticky top-0 h-screen">
           <PurchaserSidebar />
         </div>
       </aside>
 
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-        <SheetContent side="left" className="w-64 p-0">
+        <SheetContent side="left" className="w-64 bg-[#0F172A] p-0 text-white">
           <SheetHeader className="sr-only">
             <SheetTitle>Purchaser Dashboard navigation</SheetTitle>
           </SheetHeader>

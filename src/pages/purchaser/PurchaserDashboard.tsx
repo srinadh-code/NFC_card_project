@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatusBadge } from "@/components/admin/StatusBadge"
 import { ErrorState } from "@/components/customer/ErrorState"
+import { StatCard } from "@/components/customer/StatCard"
 import { useCustomerAuthStore } from "@/store/auth-store"
 import { ordersApi, toFrontendOrder } from "@/lib/api"
 import { customerOrderKeys } from "@/lib/customer-order-queries"
@@ -49,49 +50,43 @@ export default function PurchaserDashboard() {
   ]
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight">Welcome{customer?.name ? `, ${customer.name}` : ""}</h1>
-          <p className="text-sm text-muted-foreground">
-            Track the NFC cards you have purchased, their payments and delivery.
-          </p>
-        </div>
-        <Button asChild>
-          <Link to="/shop">
-            <ShoppingCart /> Order More Cards
-          </Link>
-        </Button>
-      </div>
+    <div className="space-y-6">
+      <Card className="overflow-hidden rounded-3xl border-0 bg-gradient-brand-br text-white shadow-glow-primary-lg">
+        <CardContent className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold">Welcome{customer?.name ? `, ${customer.name}` : ""}</h1>
+            <p className="max-w-md text-sm text-white/70">
+              Track the NFC cards you have purchased, their payments and delivery.
+            </p>
+          </div>
+          <Button asChild variant="secondary">
+            <Link to="/shop">
+              <ShoppingCart /> Order More Cards
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
 
       {ordersQuery.isError ? (
         <ErrorState error={ordersQuery.error} onRetry={() => ordersQuery.refetch()} />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {stats.map((stat) => {
               const card = (
-                <Card key={stat.label} className="rounded-2xl">
-                  <CardContent className="flex items-center gap-3 p-4">
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
-                      <stat.icon className="size-5" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-xs text-muted-foreground">{stat.label}</p>
-                      {ordersQuery.isLoading ? (
-                        <Skeleton className="mt-1 h-6 w-16" />
-                      ) : (
-                        <p className="truncate text-lg font-bold">{stat.value}</p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                <StatCard
+                  key={stat.label}
+                  label={stat.label}
+                  value={stat.value}
+                  icon={stat.icon}
+                  loading={ordersQuery.isLoading}
+                />
               )
               return stat.label === "Total Orders" ? (
                 <Link
                   key={stat.label}
                   to="/purchaser/orders"
-                  className="rounded-2xl transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"
+                  className="rounded-2xl focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   {card}
                 </Link>
@@ -154,9 +149,9 @@ export default function PurchaserDashboard() {
               { to: "/track-order", title: "Track by Order ID", text: "Look up an order with its tracking link.", icon: PackageSearch },
             ].map((link) => (
               <Link key={link.to} to={link.to} className="group">
-                <Card className="h-full rounded-2xl transition-colors group-hover:border-amber-300">
+                <Card className="h-full rounded-2xl transition-all group-hover:border-primary/50 group-hover:shadow-md">
                   <CardContent className="flex items-start gap-3 p-4">
-                    <link.icon className="mt-0.5 size-5 shrink-0 text-amber-700 dark:text-amber-300" />
+                    <link.icon className="mt-0.5 size-5 shrink-0 text-primary" />
                     <div>
                       <p className="font-medium">{link.title}</p>
                       <p className="text-sm text-muted-foreground">{link.text}</p>

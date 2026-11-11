@@ -26,31 +26,24 @@ interface PurchaserSidebarProps {
   onNavigate?: () => void
 }
 
-/** Purchaser Dashboard navigation — orders, payments and delivery only; no
- *  digital-profile features. Deliberately light, unlike the dark Customer
- *  Dashboard sidebar, so the two dashboards are never confused. */
+/** Purchaser Dashboard navigation — orders, payments and delivery only. */
 export function PurchaserSidebar({ onNavigate }: PurchaserSidebarProps) {
   const navigate = useNavigate()
   const logout = useCustomerAuthStore((s) => s.logout)
   const isRecipient = useIsRecipient()
 
   return (
-    <div className="flex h-full flex-col border-r bg-card text-foreground">
-      <div className="px-6 py-5">
-        <div className="flex items-center gap-2">
-          <BrandMark
-            className="size-9 rounded-xl"
-            fallback={
-              <div className="flex size-9 items-center justify-center rounded-xl bg-gradient-brand text-white">
-                <Zap className="size-5" fill="currentColor" />
-              </div>
-            }
-          />
-          <span className="text-lg font-bold tracking-tight">VR's GATEWAY</span>
-        </div>
-        <span className="mt-3 inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
-          Purchaser Dashboard
-        </span>
+    <div className="flex h-full flex-col bg-[#0F172A] text-white">
+      <div className="flex items-center gap-2 px-6 py-5">
+        <BrandMark
+          className="size-9 rounded-xl shadow-glow-primary"
+          fallback={
+            <div className="flex size-9 items-center justify-center rounded-xl bg-gradient-brand text-white shadow-glow-primary">
+              <Zap className="size-5" fill="currentColor" />
+            </div>
+          }
+        />
+        <span className="text-lg font-bold tracking-tight text-white">VR's GATEWAY</span>
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2" aria-label="Purchaser Dashboard">
@@ -64,8 +57,8 @@ export function PurchaserSidebar({ onNavigate }: PurchaserSidebarProps) {
               cn(
                 "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
                 isActive
-                  ? "bg-amber-50 text-amber-900 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-500/30"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  ? "bg-gradient-brand text-white shadow-glow-primary"
+                  : "text-slate-300 hover:bg-[#1E293B] hover:text-white",
               )
             }
           >
@@ -75,11 +68,11 @@ export function PurchaserSidebar({ onNavigate }: PurchaserSidebarProps) {
         ))}
       </nav>
 
-      <div className="space-y-1 border-t p-3">
+      <div className="space-y-1 border-t border-white/10 p-3">
         <NavLink
           to="/shop"
           onClick={onNavigate}
-          className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-[#1E293B] hover:text-white"
         >
           <ShoppingCart className="size-4.5" />
           Order More Cards
@@ -89,7 +82,7 @@ export function PurchaserSidebar({ onNavigate }: PurchaserSidebarProps) {
           <NavLink
             to="/dashboard"
             onClick={onNavigate}
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-amber-300 transition-colors hover:bg-[#1E293B] hover:text-amber-200"
           >
             <UserCircle className="size-4.5" />
             Switch to Customer Dashboard
@@ -101,7 +94,7 @@ export function PurchaserSidebar({ onNavigate }: PurchaserSidebarProps) {
             logout()
             navigate("/login")
           }}
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-[#1E293B] hover:text-red-400"
         >
           <LogOut className="size-4.5" />
           Logout

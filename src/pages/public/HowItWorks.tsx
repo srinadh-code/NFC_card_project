@@ -4,6 +4,7 @@ import CtaBanner from "@/components/marketing/CtaBanner"
 import { Skeleton } from "@/components/ui/skeleton"
 import { resolveIcon } from "@/lib/icon-map"
 import { publicWebsiteApi } from "@/lib/contentApi"
+import { useStaggeredEntrance } from "@/hooks/use-staggered-entrance"
 
 // The backend `HowItWorksStep` model has no from/to gradient-stop fields.
 // Keep the same fixed 5-color palette the page used to hardcode, cycling by
@@ -20,6 +21,13 @@ export default function HowItWorks() {
   const { data: steps, isLoading, isError } = useQuery({
     queryKey: ["content", "public-how-it-works"],
     queryFn: publicWebsiteApi.getHowItWorks,
+  })
+
+  const stepsRef = useStaggeredEntrance({
+    selector: "[data-how-it-works-step]",
+    staggerMs: 200,
+    content: steps,
+    enabled: !isLoading && !isError,
   })
 
   if (isError) {
@@ -51,7 +59,7 @@ export default function HowItWorks() {
           ) : (
             steps &&
             steps.length > 0 && (
-              <div className="relative grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
+              <div ref={stepsRef} className="relative grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
                 <div className="pointer-events-none absolute inset-x-0 top-14 hidden h-0.5 bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#22C55E] opacity-20 lg:block" />
                 {steps.map((step, i) => {
                   const Icon = resolveIcon(step.icon)
@@ -59,6 +67,7 @@ export default function HowItWorks() {
                   return (
                     <div
                       key={step.id}
+                      data-how-it-works-step
                       className="card-hover relative flex flex-col items-center rounded-[24px] p-6 text-center text-white shadow-[0_10px_30px_rgba(15,23,42,0.12)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
                       style={{ background: `linear-gradient(160deg, ${from}, ${to})` }}
                     >
