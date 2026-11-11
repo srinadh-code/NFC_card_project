@@ -26,9 +26,14 @@ import ThemeToggle from "@/components/layout/ThemeToggle"
 
 interface CustomerTopbarProps {
   onMenuClick?: () => void
+  /** "purchaser": the Purchaser Dashboard header — a title instead of the
+   *  search box and no digital-profile shortcut. Notifications stay, since
+   *  they carry order updates. */
+  variant?: "customer" | "purchaser"
 }
 
-export function CustomerTopbar({ onMenuClick }: CustomerTopbarProps) {
+export function CustomerTopbar({ onMenuClick, variant = "customer" }: CustomerTopbarProps) {
+  const isPurchaserView = variant === "purchaser"
   const navigate = useNavigate()
   const customer = useCustomerAuthStore((s) => s.customer)
   const logout = useCustomerAuthStore((s) => s.logout)
@@ -105,15 +110,19 @@ export function CustomerTopbar({ onMenuClick }: CustomerTopbarProps) {
         <Menu className="size-5" />
       </Button>
 
-      <div className="relative hidden max-w-sm flex-1 md:block">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search anything..."
-          className="pl-9"
-        />
-      </div>
+      {isPurchaserView ? (
+        <p className="text-sm font-semibold text-foreground md:text-base">Purchaser Dashboard</p>
+      ) : (
+        <div className="relative hidden max-w-sm flex-1 md:block">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search anything..."
+            className="pl-9"
+          />
+        </div>
+      )}
 
       <div className="flex flex-1 items-center justify-end gap-2">
         <ThemeToggle />
@@ -249,11 +258,13 @@ export function CustomerTopbar({ onMenuClick }: CustomerTopbarProps) {
               <p className="truncate text-xs font-normal text-muted-foreground">{customer?.email}</p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate("/profile")}>
-              <UserCircle />
-              My Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate("/settings")}>
+            {!isPurchaserView && (
+              <DropdownMenuItem onClick={() => navigate("/profile")}>
+                <UserCircle />
+                My Profile
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={() => navigate(isPurchaserView ? "/purchaser/settings" : "/settings")}>
               <Settings />
               Settings
             </DropdownMenuItem>

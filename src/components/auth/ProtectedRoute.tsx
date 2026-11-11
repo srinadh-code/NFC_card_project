@@ -1,6 +1,6 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom"
 import { Loader2 } from "lucide-react"
-import { useAdminSessionStore, useCustomerSessionStore, hasValidSession } from "@/store/auth-store"
+import { useAdminSessionStore, useCustomerSessionStore, hasValidSession, isRecipientUser, purchaserPathFor } from "@/store/auth-store"
 
 /**
  * Single source of truth for gating a route subtree behind a role. Used for
@@ -20,7 +20,15 @@ import { useAdminSessionStore, useCustomerSessionStore, hasValidSession } from "
  *     Zustand user (tokens cleared/expired independently) used to be
  *     enough to pass every guard in the app.
  */
-export function ProtectedRoute({ role }: { role: "ADMIN" | "CUSTOMER" }) {
+export function ProtectedRoute({
+  role,
+  requireRecipient = false,
+}: {
+  role: "ADMIN" | "CUSTOMER"
+  /** Customer Dashboard pages: card recipients only. A purchaser-only
+   *  account is sent to the matching Purchaser Dashboard page instead. */
+  requireRecipient?: boolean
+}) {
   // Each portal has its own independent session store (see auth-store.ts) —
   // both are subscribed unconditionally (hooks can't be called
   // conditionally) and the one matching `role` is picked below.
@@ -59,6 +67,10 @@ export function ProtectedRoute({ role }: { role: "ADMIN" | "CUSTOMER" }) {
     const loginPath = role === "ADMIN" ? "/admin/login" : "/login"
     const redirect = encodeURIComponent(location.pathname + location.search)
     return <Navigate to={`${loginPath}?redirect=${redirect}`} replace />
+  }
+
+  if (requireRecipient && !isRecipientUser(customerUser)) {
+    return <Navigate to={purchaserPathFor(location.pathname) + location.search} replace />
   }
 
   return <Outlet />

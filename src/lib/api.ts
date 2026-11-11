@@ -298,6 +298,10 @@ export interface ApiUser {
   full_name: string
   phone: string
   role: "ADMIN" | "CUSTOMER"
+  // CUSTOMER sub-roles computed by the backend (accounts/roles.py) from the
+  // account's orders and cards. A purchaser-only account has ["PURCHASER"]
+  // and no Customer Dashboard; one account may hold both.
+  roles?: Array<"PURCHASER" | "RECIPIENT">
   avatar: string
   email_verified: boolean
 }

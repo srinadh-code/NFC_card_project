@@ -111,6 +111,46 @@ export function hasValidSession(user: ApiUser | null, role: "ADMIN" | "CUSTOMER"
   return Boolean(user) && user!.role === role && Boolean(getAccessToken(area))
 }
 
+/**
+ * Card recipients get the Customer Dashboard and digital profile; a
+ * purchaser-only account (bought cards for other people) gets My Orders,
+ * Addresses, Testimonials and Settings only. The backend enforces the same
+ * rule on every recipient API (common.permissions.IsRecipientCustomer) —
+ * this only decides what the UI routes to.
+ */
+export function isRecipientUser(user: ApiUser | null): boolean {
+  return Boolean(user && user.role === "CUSTOMER" && user.roles?.includes("RECIPIENT"))
+}
+
+export function useIsRecipient(): boolean {
+  return useCustomerSessionStore((s) => isRecipientUser(s.user))
+}
+
+/** Owns at least one order — shows the Purchaser Dashboard switch. */
+export function useIsPurchaser(): boolean {
+  return useCustomerSessionStore((s) => Boolean(s.user?.roles?.includes("PURCHASER")))
+}
+
+/** Where a signed-in customer lands by default. */
+export function customerHomePath(user: ApiUser | null): string {
+  return isRecipientUser(user) ? "/dashboard" : "/purchaser"
+}
+
+// Customer-portal pages that also exist in the Purchaser Dashboard.
+const PURCHASER_EQUIVALENTS: Record<string, string> = {
+  "/orders": "/purchaser/orders",
+  "/addresses": "/purchaser/addresses",
+  "/testimonials": "/purchaser/testimonials",
+  "/reviews": "/purchaser/testimonials",
+  "/settings": "/purchaser/settings",
+}
+
+/** Where a purchaser-only account goes instead of a Customer Dashboard
+ *  page: the same page in the Purchaser Dashboard, else its overview. */
+export function purchaserPathFor(pathname: string): string {
+  return PURCHASER_EQUIVALENTS[pathname.replace(/\/+$/, "")] ?? "/purchaser"
+}
+
 function toCustomerUser(u: ApiUser): CustomerUser {
   return { id: String(u.id), name: u.full_name, email: u.email, phone: u.phone ?? "", avatar: u.avatar }
 }

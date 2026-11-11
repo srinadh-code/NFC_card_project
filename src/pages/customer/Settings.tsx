@@ -20,7 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ErrorState } from "@/components/customer/ErrorState"
-import { useCustomerAuthStore } from "@/store/auth-store"
+import { useCustomerAuthStore, useIsRecipient } from "@/store/auth-store"
 import { useThemeStore } from "@/store/theme-store"
 import { ApiError, authApi, customerSettingsApi, profileApi } from "@/lib/api"
 import { useEnsuredProfile } from "@/hooks/use-ensured-profile"
@@ -255,13 +255,17 @@ function PreferencesCard() {
 export default function CustomerSettings() {
   const authCustomer = useCustomerAuthStore((s) => s.customer)
   const { profile } = useEnsuredProfile()
+  // Purchaser-only accounts have no digital profile: the name (stored via
+  // the profile API) is shown read-only and profile privacy is hidden.
+  const isRecipient = useIsRecipient()
   const queryClient = useQueryClient()
   const { mode, setMode } = useThemeStore()
 
   const [fullName, setFullName] = useState("")
   useEffect(() => {
     if (profile) setFullName(profile.fullName)
-  }, [profile])
+    else if (!isRecipient && authCustomer) setFullName(authCustomer.name)
+  }, [profile, isRecipient, authCustomer])
 
   const [pwOpen, setPwOpen] = useState(false)
   const [currentPw, setCurrentPw] = useState("")
@@ -321,7 +325,7 @@ export default function CustomerSettings() {
         <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="settings-name">Full Name</Label>
-            <Input id="settings-name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            <Input id="settings-name" value={fullName} onChange={(e) => setFullName(e.target.value)} disabled={!isRecipient} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="settings-email">Email</Label>
@@ -332,9 +336,11 @@ export default function CustomerSettings() {
             <p className="text-xs text-muted-foreground">Contact support to change your login email.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
-            <Button onClick={() => saveNameMutation.mutate()} disabled={saveNameMutation.isPending}>
-              {saveNameMutation.isPending ? "Saving..." : "Save Changes"}
-            </Button>
+            {isRecipient && (
+              <Button onClick={() => saveNameMutation.mutate()} disabled={saveNameMutation.isPending}>
+                {saveNameMutation.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            )}
             <Button variant="outline" type="button" onClick={() => setPwOpen(true)}>
               <KeyRound /> Change Password
             </Button>
@@ -379,7 +385,7 @@ export default function CustomerSettings() {
         </CardContent>
       </Card>
 
-      <PrivacySettingsCard />
+      {isRecipient && <PrivacySettingsCard />}
       <PreferencesCard />
 
       <Card className="rounded-2xl border-destructive/40">

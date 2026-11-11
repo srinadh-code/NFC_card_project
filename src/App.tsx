@@ -12,6 +12,7 @@ import PublicLayout from "@/components/layout/PublicLayout"
 import AuthLayout from "@/components/layout/AuthLayout"
 import AdminLayout from "@/components/layout/AdminLayout"
 import CustomerLayout from "@/components/layout/CustomerLayout"
+import PurchaserLayout from "@/components/layout/PurchaserLayout"
 
 import Home from "@/pages/public/Home"
 import About from "@/pages/public/About"
@@ -69,6 +70,7 @@ import CustomerOrders from "@/pages/customer/Orders"
 import CustomerAddresses from "@/pages/customer/Addresses"
 import MyTestimonials from "@/pages/customer/MyTestimonials"
 import CustomerSettings from "@/pages/customer/Settings"
+import PurchaserDashboard from "@/pages/purchaser/PurchaserDashboard"
 
 import PublicProfile from "@/pages/profile/PublicProfile"
 import NotFound from "@/pages/NotFound"
@@ -173,21 +175,37 @@ function App() {
         {/* Customer portal — gated by ProtectedRoute(role="CUSTOMER") before
             CustomerLayout ever mounts. */}
         <Route element={<ProtectedRoute role="CUSTOMER" />}>
-          <Route element={<CustomerLayout />}>
-            <Route path="/dashboard" element={<CustomerDashboard />} />
-            <Route path="/my-card" element={<CustomerMyCard />} />
-            <Route path="/profile" element={<CustomerProfile />} />
-            <Route path="/services" element={<CustomerServices />} />
-            <Route path="/social-links" element={<CustomerSocialLinks />} />
-            <Route path="/qr-code" element={<CustomerQrCode />} />
-            <Route path="/analytics" element={<CustomerAnalytics />} />
-            <Route path="/enquiries" element={<CustomerEnquiries />} />
-            <Route path="/activity" element={<CustomerActivity />} />
-            <Route path="/orders" element={<CustomerOrders />} />
-            <Route path="/addresses" element={<CustomerAddresses />} />
-            <Route path="/testimonials" element={<MyTestimonials />} />
-            <Route path="/reviews" element={<Navigate to="/testimonials" replace />} />
-            <Route path="/settings" element={<CustomerSettings />} />
+          {/* Purchaser Dashboard — orders, payments and delivery for cards
+              bought. Its own layout, never the Customer Dashboard chrome. Any
+              signed-in customer may open it (one account can hold both roles). */}
+          <Route path="/purchaser" element={<PurchaserLayout />}>
+            <Route index element={<PurchaserDashboard />} />
+            <Route path="orders" element={<CustomerOrders />} />
+            <Route path="addresses" element={<CustomerAddresses />} />
+            <Route path="testimonials" element={<MyTestimonials />} />
+            <Route path="settings" element={<CustomerSettings />} />
+          </Route>
+
+          {/* Customer Dashboard and digital profile — card recipients only. A
+              purchaser-only account is redirected to the matching Purchaser
+              Dashboard page instead (ProtectedRoute's requireRecipient). */}
+          <Route element={<ProtectedRoute role="CUSTOMER" requireRecipient />}>
+            <Route element={<CustomerLayout />}>
+              <Route path="/dashboard" element={<CustomerDashboard />} />
+              <Route path="/my-card" element={<CustomerMyCard />} />
+              <Route path="/profile" element={<CustomerProfile />} />
+              <Route path="/services" element={<CustomerServices />} />
+              <Route path="/social-links" element={<CustomerSocialLinks />} />
+              <Route path="/qr-code" element={<CustomerQrCode />} />
+              <Route path="/analytics" element={<CustomerAnalytics />} />
+              <Route path="/enquiries" element={<CustomerEnquiries />} />
+              <Route path="/activity" element={<CustomerActivity />} />
+              <Route path="/orders" element={<CustomerOrders />} />
+              <Route path="/addresses" element={<CustomerAddresses />} />
+              <Route path="/testimonials" element={<MyTestimonials />} />
+              <Route path="/reviews" element={<Navigate to="/testimonials" replace />} />
+              <Route path="/settings" element={<CustomerSettings />} />
+            </Route>
           </Route>
         </Route>
 

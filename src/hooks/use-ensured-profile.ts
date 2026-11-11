@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { useCustomerAuthStore } from "@/store/auth-store"
+import { useCustomerAuthStore, useIsRecipient } from "@/store/auth-store"
 import { profileApi } from "@/lib/api"
 
 /**
@@ -13,6 +13,9 @@ import { profileApi } from "@/lib/api"
  */
 export function useEnsuredProfile() {
   const customer = useCustomerAuthStore((s) => s.customer)
+  // Only card recipients have a digital profile; a purchaser-only account
+  // never requests (or creates) one — the backend refuses it anyway.
+  const isRecipient = useIsRecipient()
   const queryClient = useQueryClient()
   const [stuck, setStuck] = useState(false)
 
@@ -28,7 +31,7 @@ export function useEnsuredProfile() {
         throw err
       }
     },
-    enabled: Boolean(customer),
+    enabled: Boolean(customer) && isRecipient,
     retry: 1,
   })
 

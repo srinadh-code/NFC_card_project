@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useCart } from "@/hooks/useCart"
-import { useCustomerAuthStore } from "@/store/auth-store"
+import { useCustomerAuthStore, useIsRecipient } from "@/store/auth-store"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
 import { cn } from "@/lib/utils"
 import ThemeToggle from "@/components/layout/ThemeToggle"
@@ -61,6 +61,8 @@ export default function Navbar() {
   // mismatch between displayed UI state and actual auth state that made a
   // real session look like a logged-out one.
   const customer = useCustomerAuthStore((s) => s.customer)
+  // Purchaser-only accounts have no Customer Dashboard — My Orders is home.
+  const isRecipient = useIsRecipient()
   const logout = useCustomerAuthStore((s) => s.logout)
 
   const initials = customer?.name
@@ -158,9 +160,9 @@ export default function Navbar() {
                     <p className="truncate text-xs font-normal text-muted-foreground">{customer.email}</p>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => navigate("/dashboard")}>
+                  <DropdownMenuItem onClick={() => navigate(isRecipient ? "/dashboard" : "/purchaser")}>
                     <LayoutDashboard />
-                    My Dashboard
+                    {isRecipient ? "My Dashboard" : "Purchaser Dashboard"}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/orders")}>
                     <Package />
@@ -245,10 +247,10 @@ export default function Navbar() {
                     <>
                       <SheetClose asChild>
                         <NavLink
-                          to="/dashboard"
+                          to={isRecipient ? "/dashboard" : "/purchaser"}
                           className="rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors duration-300 hover:bg-primary/10 hover:text-primary"
                         >
-                          My Dashboard
+                          {isRecipient ? "My Dashboard" : "Purchaser Dashboard"}
                         </NavLink>
                       </SheetClose>
                       <SheetClose asChild>
