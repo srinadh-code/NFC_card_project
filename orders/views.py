@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models import Prefetch
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 
@@ -47,7 +48,14 @@ class CustomerOrderListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        qs = Order.objects.select_related("customer").prefetch_related("items").filter(customer=request.user)
+        qs = (
+            Order.objects.select_related("customer")
+            .prefetch_related(
+                "items",
+                Prefetch("recipients", queryset=OrderRecipient.objects.select_related("user__onboarding", "profile", "assigned_card")),
+            )
+            .filter(customer=request.user)
+        )
         paginator = StandardPagination()
         page = paginator.paginate_queryset(qs, request)
         return paginator.get_paginated_response(OrderSerializer(page, many=True).data)
@@ -228,7 +236,10 @@ class CustomerOrderDetailView(APIView):
     def get(self, request, pk):
         order = (
             Order.objects.select_related("customer")
-            .prefetch_related("items")
+            .prefetch_related(
+                "items",
+                Prefetch("recipients", queryset=OrderRecipient.objects.select_related("user__onboarding", "profile", "assigned_card")),
+            )
             .filter(pk=pk, customer=request.user)
             .first()
         )

@@ -70,6 +70,7 @@ class OrderSerializer(serializers.ModelSerializer):
     customer_email = serializers.SerializerMethodField()
     customer_phone = serializers.SerializerMethodField()
     items = OrderItemSerializer(many=True, read_only=True)
+    recipients = serializers.SerializerMethodField()
     total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     subtotal = serializers.SerializerMethodField()
     # Promotional-offer discount only (per-item, from the Announcement/Offer
@@ -91,6 +92,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "customer_email",
             "customer_phone",
             "items",
+            "recipients",
             "amount",
             "subtotal",
             "discount_total",
@@ -119,6 +121,14 @@ class OrderSerializer(serializers.ModelSerializer):
 
     def get_customer_phone(self, obj):
         return obj.purchaser_phone or obj.customer.phone
+
+    def get_recipients(self, obj):
+        # Reuse the recipient representation shown in Admin Purchasers.
+        # Import here because the admin serializer also imports order-item
+        # choices from this module. The parent order is already owner-scoped.
+        from admin_api.orders.serializers import OrderRecipientSerializer
+
+        return OrderRecipientSerializer(obj.recipients.all(), many=True).data
 
     def get_subtotal(self, obj):
         # The pre-discount total — original_price falls back to the paid
