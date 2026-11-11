@@ -2,6 +2,7 @@ from django.db.models import Q
 from rest_framework.views import APIView
 
 from accounts.models import User
+from accounts.roles import is_purchaser, is_recipient, recipient_condition
 from admin_api.permissions import IsAdminRole
 from common.pagination import StandardPagination
 from common.response import error, success
@@ -14,7 +15,10 @@ class AdminProfileListCreateView(APIView):
     permission_classes = [IsAdminRole]
 
     def get(self, request):
-        qs = Profile.objects.select_related("user").filter(user__role=User.Role.CUSTOMER)
+        # Digital profiles of card recipients only (accounts/roles.py): a
+        # purchaser-only account never appears here, even if an older build
+        # auto-created a profile row for it (kept, not deleted).
+        qs = Profile.objects.select_related("user").filter(recipient_condition("user_id"))
 
         search = request.query_params.get("search", "").strip()
         if search:
@@ -42,6 +46,15 @@ class AdminProfileListCreateView(APIView):
         if user is None:
             return error("No customer account found with that id.", status=404)
 
+        # Purchasing cards for other people is not a card allocation: a
+        # purchaser-only account gets no digital profile.
+        if is_purchaser(user) and not is_recipient(user):
+            return error(
+                "This account is a purchaser only. A digital profile is created when a card is allocated to it.",
+                errors={"code": "purchaser_only"},
+                status=400,
+            )
+
         existing = getattr(user, "profile", None)
         if existing is not None:
             return success(
@@ -58,7 +71,7 @@ class AdminProfileDetailView(APIView):
     permission_classes = [IsAdminRole]
 
     def get_object(self, pk):
-        return Profile.objects.select_related("user").filter(pk=pk, user__role=User.Role.CUSTOMER).first()
+        return Profile.objects.select_related("user").filter(recipient_condition("user_id"), pk=pk).first()
 
     def get(self, request, pk):
         profile = self.get_object(pk)

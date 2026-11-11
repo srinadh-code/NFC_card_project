@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 
 from analytics.models import TapEvent
 from analytics.tracking import log_event
-from common.permissions import IsCustomerRole
+from common.permissions import IsRecipientCustomer
 from common.response import error, success
 
 from .models import CustomField, CustomLink, Profile, SocialLink
@@ -22,7 +22,7 @@ from .serializers import (
 
 
 class MyProfileView(APIView):
-    permission_classes = [IsCustomerRole]
+    permission_classes = [IsRecipientCustomer]
 
     def get(self, request):
         profile = Profile.ensure_for_user(request.user)
@@ -39,7 +39,7 @@ class MyProfileView(APIView):
 
 
 class MyAvatarView(APIView):
-    permission_classes = [IsCustomerRole]
+    permission_classes = [IsRecipientCustomer]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):
@@ -79,7 +79,7 @@ class OwnedByProfileMixin:
 class SocialLinkViewSet(OwnedByProfileMixin, viewsets.ModelViewSet):
     model = SocialLink
     serializer_class = SocialLinkSerializer
-    permission_classes = [IsCustomerRole]
+    permission_classes = [IsRecipientCustomer]
 
     @action(detail=False, methods=["patch"])
     def reorder(self, request):
@@ -89,7 +89,7 @@ class SocialLinkViewSet(OwnedByProfileMixin, viewsets.ModelViewSet):
 class CustomLinkViewSet(OwnedByProfileMixin, viewsets.ModelViewSet):
     model = CustomLink
     serializer_class = CustomLinkSerializer
-    permission_classes = [IsCustomerRole]
+    permission_classes = [IsRecipientCustomer]
 
     @action(detail=False, methods=["patch"])
     def reorder(self, request):
@@ -99,7 +99,7 @@ class CustomLinkViewSet(OwnedByProfileMixin, viewsets.ModelViewSet):
 class CustomFieldViewSet(OwnedByProfileMixin, viewsets.ModelViewSet):
     model = CustomField
     serializer_class = CustomFieldSerializer
-    permission_classes = [IsCustomerRole]
+    permission_classes = [IsRecipientCustomer]
 
     @action(detail=False, methods=["patch"])
     def reorder(self, request):

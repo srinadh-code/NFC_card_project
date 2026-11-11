@@ -1,7 +1,7 @@
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
-from common.permissions import IsCustomerRole
+from common.permissions import IsRecipientCustomer
 from common.response import error, success
 from common.views import PaginatedAPIView
 from profiles.models import Profile
@@ -14,7 +14,7 @@ from .serializers import AnalyticsEventSerializer, TrackSocialClickSerializer
 class CustomerAnalyticsOverviewView(APIView):
     """GET /api/customer/analytics/ — quick totals + most recent activity."""
 
-    permission_classes = [IsCustomerRole]
+    permission_classes = [IsRecipientCustomer]
 
     def get(self, request):
         data = services.overview(request.user)
@@ -25,14 +25,14 @@ class CustomerAnalyticsOverviewView(APIView):
 class CustomerAnalyticsSummaryView(APIView):
     """GET /api/customer/analytics/summary/ — today/week/month/year rollups per event type."""
 
-    permission_classes = [IsCustomerRole]
+    permission_classes = [IsRecipientCustomer]
 
     def get(self, request):
         return success(services.summary(request.user))
 
 
 class CustomerAnalyticsViewsView(PaginatedAPIView):
-    permission_classes = [IsCustomerRole]
+    permission_classes = [IsRecipientCustomer]
 
     def get(self, request):
         queryset = services.events_for(request.user, AnalyticsEvent.EventType.PROFILE_VIEW)
@@ -40,7 +40,7 @@ class CustomerAnalyticsViewsView(PaginatedAPIView):
 
 
 class CustomerAnalyticsTapsView(PaginatedAPIView):
-    permission_classes = [IsCustomerRole]
+    permission_classes = [IsRecipientCustomer]
 
     def get(self, request):
         queryset = services.events_for(request.user, AnalyticsEvent.EventType.NFC_TAP)
@@ -48,7 +48,7 @@ class CustomerAnalyticsTapsView(PaginatedAPIView):
 
 
 class CustomerAnalyticsScansView(PaginatedAPIView):
-    permission_classes = [IsCustomerRole]
+    permission_classes = [IsRecipientCustomer]
 
     def get(self, request):
         queryset = services.events_for(request.user, AnalyticsEvent.EventType.QR_SCAN)

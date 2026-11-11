@@ -68,11 +68,10 @@ def _valid_payload(address, *, recipient_batch=1, **overrides):
         "payment_method": "COD",
         "address_id": address.pk,
         "recipients": [
-            {"full_name": f"Recipient {i + 1}", "email": f"recipient.{i + 1}@example.com", "phone": "+917700900123"}
             {
                 "full_name": f"Recipient {i + 1}",
                 "email": f"recipient.{i + 1}@example.com" if recipient_batch == 1 else f"recipient.{recipient_batch}.{i + 1}@example.com",
-                "phone": "+447700900123",
+                "phone": "+917700900123",
             }
             for i in range(sum(CartItem.objects.filter(cart__customer=address.customer).values_list("qty", flat=True)))
         ],

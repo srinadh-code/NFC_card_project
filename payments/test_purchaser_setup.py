@@ -29,7 +29,7 @@ SETUP_SUBJECT = "Set Up Your VR's Gateway Account"
 
 
 def recipient(email, name="Recipient"):
-    return {"full_name": name, "email": email, "phone": "+447700900123"}
+    return {"full_name": name, "email": email, "phone": "+917700900123"}
 
 
 @override_settings(

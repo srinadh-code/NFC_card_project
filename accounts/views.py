@@ -59,7 +59,13 @@ def _dashboard_url_for(user):
     by design: this is what tells any client where a just-authenticated
     user's dashboard actually is.
     """
-    return "/admin/dashboard" if user.role == "ADMIN" else "/dashboard"
+    if user.role == "ADMIN":
+        return "/admin/dashboard"
+    # A purchaser-only account has no Customer Dashboard: its home is the
+    # Purchaser Dashboard.
+    from .roles import is_recipient
+
+    return "/dashboard" if is_recipient(user) else "/purchaser"
 
 
 def _auth_payload(user):

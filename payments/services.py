@@ -159,19 +159,33 @@ def is_recipient_email_available(email, buyer_email="", *, checkout_session_id=N
     buyer_email = normalize_recipient_email(buyer_email)
     allocation = RecipientEmailAllocation.objects.filter(normalized_email=normalized_email).first()
     if allocation is not None:
-        if not (
-            checkout_session_id
-            and buyer_email
-            and allocation.owner_email == buyer_email
-            and not allocation.recipients.exists()
-            and allocation.reservations.filter(checkout_session_id=checkout_session_id).exists()
-            and not allocation.reservations.exclude(checkout_session_id=checkout_session_id).exists()
-        ):
+        if _allocation_has_recipient_order(allocation):
             return False
-        return not _recipient_email_has_assigned_card(normalized_email)
+        reservations = _live_recipient_reservations(allocation)
+        if checkout_session_id and buyer_email == normalize_recipient_email(allocation.owner_email):
+            reservations = reservations.exclude(checkout_session_id=checkout_session_id)
+        if reservations.exists():
+            return False
     if _recipient_email_has_assigned_card(normalized_email):
         return False
     return True
+
+
+def _allocation_has_recipient_order(allocation):
+    # Keep paid and pending fulfilment slots protected before a physical card
+    # is assigned. Cancelled/failed/refunded history alone is not a claim.
+    return allocation.recipients.exclude(order__status=Order.Status.CANCELLED).filter(
+        order__payment_status__in=(Order.PaymentStatus.PAID, Order.PaymentStatus.PENDING),
+    ).exists()
+
+
+def _live_recipient_reservations(allocation):
+    # The UUID is intentionally not a foreign key. Ignore known terminal
+    # attempts, but keep unknown reservations conservative (including races).
+    terminal_sessions = CheckoutSession.objects.filter(
+        status__in=(CheckoutSession.Status.FAILED, CheckoutSession.Status.FULFILLED),
+    ).values("public_id")
+    return allocation.reservations.exclude(checkout_session_id__in=terminal_sessions)
 
 
 def _recipient_email_has_assigned_card(normalized_email):
@@ -207,6 +221,15 @@ def claim_recipient_email(email, buyer_email, *, index=0):
     normalized_email = normalize_recipient_email(email)
     try:
         with transaction.atomic():
+            allocation = RecipientEmailAllocation.objects.select_for_update().filter(
+                normalized_email=normalized_email,
+            ).first()
+            if allocation is not None:
+                if not is_recipient_email_available(normalized_email, buyer_email):
+                    raise _recipient_email_conflict(index, normalized_email)
+                allocation.owner_email = normalize_recipient_email(buyer_email)
+                allocation.save(update_fields=["owner_email"])
+                return allocation
             return RecipientEmailAllocation.objects.create(
                 normalized_email=normalized_email,
                 owner_email=normalize_recipient_email(buyer_email),
@@ -243,8 +266,12 @@ def reserve_recipient_emails(checkout_session_id, recipients, buyer_email):
 
 def release_checkout_reservations(session):
     with transaction.atomic():
+        allocation_ids = list(RecipientEmailReservation.objects.filter(
+            checkout_session_id=session.public_id,
+        ).values_list("allocation_id", flat=True))
         RecipientEmailReservation.objects.filter(checkout_session_id=session.public_id).delete()
         RecipientEmailAllocation.objects.filter(
+            pk__in=allocation_ids,
             recipients__isnull=True,
             reservations__isnull=True,
         ).delete()

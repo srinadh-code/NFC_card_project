@@ -284,7 +284,11 @@ class OrderRecipient(models.Model):
 
 
 class RecipientEmailAllocation(models.Model):
-    """The buyer who first reserved this recipient email for NFC allocation."""
+    """Unique email claim and its current buyer, not proof of a card assignment.
+
+    Empty claims can be reused in place; recipient orders and live payment
+    reservations determine whether the claim is still occupied.
+    """
 
     normalized_email = models.EmailField(max_length=254, unique=True)
     owner_email = models.EmailField(max_length=254)

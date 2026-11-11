@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 
 from analytics.models import TapEvent
 from analytics.tracking import log_event
-from common.permissions import IsCustomerRole
+from common.permissions import IsRecipientCustomer
 from common.response import error, success
 
 from .models import NfcCard
@@ -19,7 +19,7 @@ from .serializers import (
 
 
 class MyCardsView(APIView):
-    permission_classes = [IsCustomerRole]
+    permission_classes = [IsRecipientCustomer]
 
     def get(self, request):
         cards = NfcCard.objects.filter(user=request.user)
@@ -29,7 +29,7 @@ class MyCardsView(APIView):
 class ActivateCardView(APIView):
     """Customer claims a physical card by entering/scanning its UID."""
 
-    permission_classes = [IsCustomerRole]
+    permission_classes = [IsRecipientCustomer]
 
     @transaction.atomic
     def post(self, request):
@@ -68,7 +68,7 @@ class ActivateCardView(APIView):
 class ActivateAssignedCardView(APIView):
     """One-click activation for a card the admin already assigned to this customer."""
 
-    permission_classes = [IsCustomerRole]
+    permission_classes = [IsRecipientCustomer]
 
     @transaction.atomic
     def post(self, request, pk):
@@ -90,7 +90,7 @@ class ActivateAssignedCardView(APIView):
 class DeactivateCardView(APIView):
     """Customer takes their own card out of service (lets them re-activate later)."""
 
-    permission_classes = [IsCustomerRole]
+    permission_classes = [IsRecipientCustomer]
 
     @transaction.atomic
     def post(self, request):

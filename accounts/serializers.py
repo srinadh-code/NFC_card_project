@@ -18,6 +18,9 @@ _PHONE_NON_DIGITS_RE = re.compile(r"\D+")
 
 class UserSerializer(serializers.ModelSerializer):
     avatar = serializers.SerializerMethodField()
+    # CUSTOMER sub-roles, derived from orders/cards (accounts/roles.py):
+    # "PURCHASER" and/or "RECIPIENT". Empty for admins.
+    roles = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -27,6 +30,7 @@ class UserSerializer(serializers.ModelSerializer):
             "full_name",
             "phone",
             "role",
+            "roles",
             "avatar",
             "email_verified",
             "created_at",
@@ -35,6 +39,11 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_avatar(self, obj):
         return obj.avatar_url
+
+    def get_roles(self, obj):
+        from .roles import roles_for
+
+        return roles_for(obj)
 
 
 class RegisterSerializer(serializers.Serializer):

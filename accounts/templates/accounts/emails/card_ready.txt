@@ -1,0 +1,19 @@
+{% autoescape off %}Hello {{ customer_name }},
+
+An NFC card has been ordered for you, and it is linked to your existing VR's Gateway account.
+
+Your order is now being processed. Your Customer Dashboard is now available, where you can create and manage your digital business profile.
+
+Login email: {{ login_email }}
+
+Sign in with your existing password - nothing needs to be reset. If you have forgotten it, use "Forgot password" on the login page.
+
+Log In: {{ login_url }}
+
+Our designer will contact you within the next 24 hours to discuss your digital business profile design and customisation. Physical card assignment is managed separately.
+{% if order_number %}
+Order Number: {{ order_number }}
+{% endif %}
+Thank you,
+VR's Gateway Team
+{% endautoescape %}

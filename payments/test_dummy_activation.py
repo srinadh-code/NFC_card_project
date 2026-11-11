@@ -584,7 +584,7 @@ class DummyPaymentActivationTests(APITestCase):
         _, first = self._buy(email="Regular@Example.com")
         _, second = self._buy(
             email="regular@example.com", product_id="PRD-NEXORA-GOOGLE-REVIEW",
-            recipients=[{"full_name": "Other Recipient", "email": "other.recipient@example.com", "phone": "+447700900123"}],
+            recipients=[{"full_name": "Other Recipient", "email": "other.recipient@example.com", "phone": "+917700900123"}],
         )
         self.assertEqual(User.objects.filter(email__iexact="regular@example.com").count(), 1)
         self.assertEqual(set(existing.orders.values_list("pk", flat=True)), {first["order_id"], second["order_id"]})
@@ -598,14 +598,14 @@ class DummyPaymentActivationTests(APITestCase):
         self.assertEqual(self._activation_emails(), [])
 
     def test_second_order_before_purchaser_setup_does_not_send_a_second_setup_email(self):
-        _, first = self._buy(recipients=[{"full_name": "First Recipient", "email": "first.recipient@example.com", "phone": "+447700900123"}])
+        _, first = self._buy(recipients=[{"full_name": "First Recipient", "email": "first.recipient@example.com", "phone": "+917700900123"}])
         setup_subject = "Set Up Your VR's Gateway Account"
         self.assertEqual(len([message for message in mail.outbox if message.subject == setup_subject]), 1)
         # _email_token clears the outbox for the next checkout. Check that
         # the second purchase issues neither another email nor another link.
         _, second = self._buy(
             product_id="PRD-NEXORA-GOOGLE-REVIEW",
-            recipients=[{"full_name": "Second Recipient", "email": "second.recipient@example.com", "phone": "+447700900124"}],
+            recipients=[{"full_name": "Second Recipient", "email": "second.recipient@example.com", "phone": "+917700900124"}],
         )
         self.assertEqual(Order.objects.get(pk=second["order_id"]).customer, Order.objects.get(pk=first["order_id"]).customer)
         self.assertEqual(self._set_status(first["order_id"], "PROCESSING").data["data"]["activation_result"], "sent")

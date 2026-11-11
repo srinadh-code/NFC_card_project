@@ -1,7 +1,7 @@
 from django.http import HttpResponse
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
-from common.permissions import IsCustomerRole
+from common.permissions import IsRecipientCustomer
 from common.response import success
 from common.throttling import OtpRequestThrottle
 from common.views import PaginatedAPIView
@@ -27,7 +27,7 @@ class CustomerLeadsView(PaginatedAPIView):
     def get_permissions(self):
         if self.request.method == "POST":
             return [AllowAny()]
-        return [IsCustomerRole()]
+        return [IsRecipientCustomer()]
 
     def get_throttles(self):
         if self.request.method == "POST":
@@ -54,7 +54,7 @@ class CustomerLeadsView(PaginatedAPIView):
 class CustomerLeadDetailView(APIView):
     """PATCH /api/customer/leads/<id>/ - the owner updates a lead's status."""
 
-    permission_classes = [IsCustomerRole]
+    permission_classes = [IsRecipientCustomer]
 
     def patch(self, request, lead_id):
         serializer = UpdateLeadStatusSerializer(data=request.data)
@@ -64,7 +64,7 @@ class CustomerLeadDetailView(APIView):
 
 
 class CustomerLeadsExportView(APIView):
-    permission_classes = [IsCustomerRole]
+    permission_classes = [IsRecipientCustomer]
 
     def get(self, request):
         csv_content = services.leads_csv(request.user)

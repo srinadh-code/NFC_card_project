@@ -15,6 +15,20 @@ class IsCustomerRole(BasePermission):
         return bool(user and user.is_authenticated and user.role == "CUSTOMER")
 
 
+class IsRecipientCustomer(BasePermission):
+    """CUSTOMER accounts holding the RECIPIENT role (accounts/roles.py) —
+    the digital profile, card, QR, analytics and enquiry features. A
+    purchaser-only account (bought cards for others) is refused, so these
+    endpoints never create or expose a profile for it."""
+
+    message = "This feature is available to card recipients only."
+
+    def has_permission(self, request, view):
+        from accounts.roles import is_recipient
+
+        return is_recipient(request.user)
+
+
 class IsOwner(BasePermission):
     """
     Object-level check that the object belongs to the requesting user.

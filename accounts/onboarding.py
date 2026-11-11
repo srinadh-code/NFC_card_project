@@ -39,6 +39,7 @@ logger = logging.getLogger("accounts.onboarding")
 EMAIL_RETRY_DELAYS_SECONDS = (2, 10)
 
 ACTIVATION_SUBJECT = "Your VR's Gateway Customer Account Is Ready!"
+CARD_READY_SUBJECT = "Your VR's Gateway Card Is Ready"
 
 
 def normalize_email(email):
@@ -308,12 +309,97 @@ def _start_activation_for_user(user, *, order, sync=False):
     return "sent"
 
 
+def _render_card_ready(user, order):
+    name = user.full_name or user.email
+    context = {
+        # accounts/emails/base.html's layout fields. No action_url: base.html
+        # would describe it as a single-use expiring link, and this email
+        # carries no credential at all — just the normal login page.
+        "subject": CARD_READY_SUBJECT,
+        "heading": "Your NFC card is ready",
+        "name": name,
+        # this email's own fields
+        "customer_name": name,
+        "login_email": user.email,
+        "login_url": f"{settings.FRONTEND_URL.rstrip('/')}/login",
+        "order_number": order.order_number if order is not None else "",
+    }
+    return (
+        render_to_string("accounts/emails/card_ready.html", context),
+        render_to_string("accounts/emails/card_ready.txt", context),
+    )
+
+
+def deliver_card_ready_email(recipient_id):
+    """Tells an already-activated account (e.g. a purchaser who has set their
+    password and now bought a card for themselves) that a card is allocated
+    to it and its Customer Dashboard is available. Contains no password or
+    token — the existing password is never reset. Retries like the
+    activation email; the outcome is recorded on the OrderRecipient row.
+    Never raises."""
+    from orders.models import OrderRecipient
+
+    allocation = OrderRecipient.objects.select_related("user", "order").filter(pk=recipient_id).first()
+    if allocation is None or allocation.user is None or allocation.user.must_change_password:
+        return False
+    user = allocation.user
+    error_text = ""
+    try:
+        html, text = _render_card_ready(user, allocation.order)
+    except Exception as exc:  # noqa: BLE001 — recorded, never propagated
+        html = text = None
+        error_text = type(exc).__name__
+    if html is not None:
+        for attempt, delay in enumerate((0, *EMAIL_RETRY_DELAYS_SECONDS), start=1):
+            if delay and not getattr(settings, "ONBOARDING_EMAIL_SYNC", False):
+                time.sleep(delay)
+            try:
+                ok = send_email(user.email, CARD_READY_SUBJECT, html, text, f"purpose=card_ready user_id={user.pk}")
+                error_text = "" if ok else "Email provider rejected the message"
+            except Exception as exc:  # noqa: BLE001 — recorded, never propagated
+                ok, error_text = False, type(exc).__name__
+            if ok:
+                OrderRecipient.objects.filter(pk=allocation.pk).update(
+                    invitation_status=OrderRecipient.InvitationStatus.SENT, invitation_sent_at=timezone.now()
+                )
+                logger.info("onboarding.card_ready_sent user_id=%s order_id=%s attempt=%s", user.pk, allocation.order_id, attempt)
+                return True
+    # Clearing the claim lets a later move into Processing retry it.
+    OrderRecipient.objects.filter(pk=allocation.pk).update(
+        invitation_status=OrderRecipient.InvitationStatus.FAILED, invitation_sent_at=None
+    )
+    logger.warning("onboarding.card_ready_failed user_id=%s order_id=%s reason=%s", user.pk, allocation.order_id, error_text)
+    return False
+
+
+def _notify_card_ready(user, *, order, sync=False):
+    """An already-activated account gained a card on this order: send one
+    card-ready email (no credentials) per allocation, claimed under a row
+    lock so a repeated status change can't send it twice."""
+    from orders.models import OrderRecipient
+
+    with transaction.atomic():
+        claimable = list(
+            OrderRecipient.objects.select_for_update()
+            .filter(order=order, user=user, invitation_sent_at__isnull=True)
+            .values_list("pk", flat=True)
+        )
+        if not claimable:
+            return
+        OrderRecipient.objects.filter(pk__in=claimable).update(
+            invitation_status=OrderRecipient.InvitationStatus.PENDING, invitation_sent_at=timezone.now()
+        )
+        # One email per account per order, even for several allocations.
+        _dispatch_after_commit(deliver_card_ready_email, claimable[0], sync=sync)
+
+
 def start_activation_for_order(order, *, sync=False):
     """Called when an admin moves a paid order to Processing. Returns what
     happened: "sent" (link issued and email queued), "already_sent" (this
     account's activation was already started — nothing sent again),
-    "active" (an existing, activated account — nothing to send; its
-    password is never touched) or "no_onboarding"."""
+    "active" (an existing, activated account — its password is never
+    touched; it gets a one-time card-ready email with a login link instead
+    of a set-password link) or "no_onboarding"."""
     if order.payment_status != order.PaymentStatus.PAID:
         return "no_onboarding"
     ensure_recipient_accounts(order)
@@ -323,7 +409,13 @@ def start_activation_for_order(order, *, sync=False):
     statuses = []
     for user in sorted(users.values(), key=lambda u: normalize_email(u.email)):
         try:
-            statuses.append(_start_activation_for_user(user, order=order, sync=sync))
+            status = _start_activation_for_user(user, order=order, sync=sync)
+            if status == "active":
+                # Already has a password (e.g. a purchaser who set one up and
+                # now bought a card for themselves): no activation is needed,
+                # but they must still learn their Customer Dashboard is ready.
+                _notify_card_ready(user, order=order, sync=sync)
+            statuses.append(status)
         except Exception as exc:
             logger.error("onboarding.activation_start_failed user_id=%s order_id=%s reason=%s", user.pk, order.pk, type(exc).__name__)
             statuses.append("failed")
