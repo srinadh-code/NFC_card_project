@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Download, Mail, PackageSearch, Truck, XCircle } from "lucide-react"
@@ -18,6 +19,7 @@ import { ConfirmDialog } from "@/components/admin/ConfirmDialog"
 import { StatusBadge } from "@/components/admin/StatusBadge"
 import { ErrorState } from "@/components/customer/ErrorState"
 import { OrderTrackingView } from "@/components/orders/OrderTrackingView"
+import { OrderDetailsView } from "@/components/orders/OrderDetailsView"
 import { useCustomerAuthStore } from "@/store/auth-store"
 import { ApiError, ordersApi, toFrontendOrder, type ApiOrder } from "@/lib/api"
 import { customerOrderKeys } from "@/lib/customer-order-queries"
@@ -64,7 +66,12 @@ function downloadInvoice(order: ApiOrder) {
  * plain table row — real data only (ApiOrder → the same normalized Order
  * shape admin's orders and the public Track Order page already use, via
  * the shared toFrontendOrder adapter), no fields invented per card. */
-function OrderCard({ order, onTrack, onCancel }: { order: Order; onTrack: () => void; onCancel: () => void }) {
+function OrderCard({ order, onTrack, onDetails, onCancel }: {
+  order: Order
+  onTrack: () => void
+  onDetails: () => void
+  onCancel: () => void
+}) {
   const current = deriveCurrentStatus(order)
   const deliveryWindow = estimateDeliveryWindow(order)
   const [first, ...rest] = order.items
@@ -116,7 +123,7 @@ function OrderCard({ order, onTrack, onCancel }: { order: Order; onTrack: () => 
         <Button size="sm" onClick={onTrack}>
           <Truck className="size-3.5" /> Track Order
         </Button>
-        <Button variant="outline" size="sm" onClick={onTrack}>
+        <Button variant="outline" size="sm" onClick={onDetails}>
           View Details
         </Button>
         {CANCELLABLE_STATUSES.includes(order.status) && (
@@ -139,6 +146,8 @@ function OrderCard({ order, onTrack, onCancel }: { order: Order; onTrack: () => 
 
 export default function CustomerOrders() {
   const customer = useCustomerAuthStore((s) => s.customer)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedOrderId = searchParams.get("order") ?? ""
   const [page, setPage] = useState(1)
   const [trackingApiOrder, setTrackingApiOrder] = useState<ApiOrder | null>(null)
   const [cancellingOrder, setCancellingOrder] = useState<ApiOrder | null>(null)
@@ -149,6 +158,22 @@ export default function CustomerOrders() {
     queryFn: () => ordersApi.list(page),
     enabled: Boolean(customer),
   })
+
+  const detailsQuery = useQuery({
+    queryKey: customerOrderKeys.detail(customer?.id, selectedOrderId),
+    queryFn: () => ordersApi.getById(selectedOrderId),
+    enabled: Boolean(customer && selectedOrderId),
+    retry: false,
+  })
+
+  function selectOrder(id: string | null) {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (id) next.set("order", id)
+      else next.delete("order")
+      return next
+    })
+  }
 
   const cancelMutation = useMutation({
     mutationFn: (id: number) => ordersApi.cancel(id),
@@ -208,6 +233,7 @@ export default function CustomerOrders() {
                 key={order.id}
                 order={toFrontendOrder(order)}
                 onTrack={() => setTrackingApiOrder(order)}
+                onDetails={() => selectOrder(String(order.id))}
                 onCancel={() => setCancellingOrder(order)}
               />
             ))}
@@ -272,6 +298,25 @@ export default function CustomerOrders() {
           )}
         </>
       )}
+
+      <Dialog open={Boolean(selectedOrderId)} onOpenChange={(open) => !open && selectOrder(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Order Details</DialogTitle>
+            <DialogDescription>Purchase information and recipients for this order.</DialogDescription>
+          </DialogHeader>
+          {detailsQuery.isLoading ? (
+            <div role="status" aria-label="Loading order details" className="space-y-4">
+              <Skeleton className="h-32 w-full rounded-xl" />
+              <Skeleton className="h-48 w-full rounded-xl" />
+            </div>
+          ) : detailsQuery.isError ? (
+            <ErrorState error={detailsQuery.error} onRetry={() => detailsQuery.refetch()} />
+          ) : detailsQuery.data ? (
+            <OrderDetailsView order={toFrontendOrder(detailsQuery.data)} />
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={Boolean(cancellingOrder)}

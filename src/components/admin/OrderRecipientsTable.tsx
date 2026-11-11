@@ -4,7 +4,10 @@ import { StatusBadge } from "@/components/admin/StatusBadge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { OrderRecipient } from "@/types"
 
-export function OrderRecipientsTable({ recipients }: { recipients: OrderRecipient[] }) {
+export function OrderRecipientsTable({ recipients, showAdminDetails = true }: {
+  recipients: OrderRecipient[]
+  showAdminDetails?: boolean
+}) {
   return (
     <div className="overflow-x-auto">
       <Table>
@@ -12,7 +15,7 @@ export function OrderRecipientsTable({ recipients }: { recipients: OrderRecipien
           <TableRow>
             <TableHead>Card</TableHead><TableHead>Recipient</TableHead><TableHead>Phone</TableHead>
             <TableHead>Physical Card</TableHead><TableHead>Card Activation</TableHead>
-            <TableHead>Account</TableHead><TableHead>Profile</TableHead>
+            {showAdminDetails && <><TableHead>Account</TableHead><TableHead>Profile</TableHead></>}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -20,7 +23,7 @@ export function OrderRecipientsTable({ recipients }: { recipients: OrderRecipien
             <TableRow key={recipient.id}>
               <TableCell>{index + 1}</TableCell>
               <TableCell>
-                {recipient.userId ? (
+                {showAdminDetails && recipient.userId ? (
                   <Link className="font-medium text-primary hover:underline" to={`/admin/customers/${recipient.userId}`}>
                     {recipient.name}
                   </Link>
@@ -38,20 +41,24 @@ export function OrderRecipientsTable({ recipients }: { recipients: OrderRecipien
                 ) : <StatusBadge status="Unassigned" />}
               </TableCell>
               <TableCell><StatusBadge status={recipient.activationStatus === "ACTIVE" ? "Active" : recipient.assignedCardId ? "Pending" : "Unassigned"} /></TableCell>
-              <TableCell>
-                <AccountStatusBadge status={recipient.accountStatus ?? "PENDING_PROCESSING"} />
-              </TableCell>
-              <TableCell>
-                {recipient.profileUsername ? (
-                  <a className="text-primary hover:underline" href={`/u/${encodeURIComponent(recipient.profileUsername)}`} target="_blank" rel="noreferrer">
-                    @{recipient.profileUsername}
-                  </a>
-                ) : <span className="text-muted-foreground">Pending</span>}
-              </TableCell>
+              {showAdminDetails && (
+                <>
+                  <TableCell>
+                    <AccountStatusBadge status={recipient.accountStatus ?? "PENDING_PROCESSING"} />
+                  </TableCell>
+                  <TableCell>
+                    {recipient.profileUsername ? (
+                      <a className="text-primary hover:underline" href={`/u/${encodeURIComponent(recipient.profileUsername)}`} target="_blank" rel="noreferrer">
+                        @{recipient.profileUsername}
+                      </a>
+                    ) : <span className="text-muted-foreground">Pending</span>}
+                  </TableCell>
+                </>
+              )}
             </TableRow>
           ))}
           {recipients.length === 0 && (
-            <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+            <TableRow><TableCell colSpan={showAdminDetails ? 7 : 5} className="py-8 text-center text-muted-foreground">
               Recipient details were not recorded for this historical order.
             </TableCell></TableRow>
           )}

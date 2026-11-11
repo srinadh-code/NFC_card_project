@@ -2682,6 +2682,7 @@ export interface ApiOrder {
   customer_email: string
   customer_phone: string
   items: ApiOrderItem[]
+  recipients?: ApiOrderRecipient[]
   amount: string
   shipping: string
   total: string

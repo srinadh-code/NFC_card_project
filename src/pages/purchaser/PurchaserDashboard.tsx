@@ -69,23 +69,34 @@ export default function PurchaserDashboard() {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {stats.map((stat) => (
-              <Card key={stat.label} className="rounded-2xl">
-                <CardContent className="flex items-center gap-3 p-4">
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
-                    <stat.icon className="size-5" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-xs text-muted-foreground">{stat.label}</p>
-                    {ordersQuery.isLoading ? (
-                      <Skeleton className="mt-1 h-6 w-16" />
-                    ) : (
-                      <p className="truncate text-lg font-bold">{stat.value}</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+            {stats.map((stat) => {
+              const card = (
+                <Card key={stat.label} className="rounded-2xl">
+                  <CardContent className="flex items-center gap-3 p-4">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
+                      <stat.icon className="size-5" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-xs text-muted-foreground">{stat.label}</p>
+                      {ordersQuery.isLoading ? (
+                        <Skeleton className="mt-1 h-6 w-16" />
+                      ) : (
+                        <p className="truncate text-lg font-bold">{stat.value}</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+              return stat.label === "Total Orders" ? (
+                <Link
+                  key={stat.label}
+                  to="/purchaser/orders"
+                  className="rounded-2xl transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  {card}
+                </Link>
+              ) : card
+            })}
           </div>
 
           <Card className="rounded-2xl">
@@ -125,6 +136,9 @@ export default function PurchaserDashboard() {
                         <StatusBadge status={order.status} />
                         <StatusBadge status={order.paymentStatus} />
                         <span className="text-sm font-semibold">{formatCurrency(order.total)}</span>
+                        <Button asChild variant="outline" size="sm">
+                          <Link to={`/purchaser/orders?order=${order.id}`}>View Details</Link>
+                        </Button>
                       </div>
                     </div>
                   )

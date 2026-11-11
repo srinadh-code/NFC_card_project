@@ -3,4 +3,6 @@
 export const customerOrderKeys = {
   customer: (customerId: string | null | undefined) => ["customer-orders", customerId ?? null] as const,
   page: (customerId: string | null | undefined, page = 1) => ["customer-orders", customerId ?? null, page] as const,
+  detail: (customerId: string | null | undefined, orderId: string | number) =>
+    ["customer-orders", customerId ?? null, "detail", String(orderId)] as const,
 }
