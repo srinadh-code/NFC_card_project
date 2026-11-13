@@ -16,6 +16,7 @@ import secrets
 from datetime import timedelta
 
 from django.conf import settings
+from django.db import transaction
 from django.template.loader import render_to_string
 from django.utils import timezone
 
@@ -147,17 +148,35 @@ def send_code(channel, destination, session_ref=""):
 
 
 def verify_code(channel, destination, code, session_ref=""):
-    """Checks a code; returns a verification token on success."""
+    """Atomically checks and consumes a challenge, committing wrong guesses."""
     destination = normalize_destination(channel, destination)
+    with transaction.atomic():
+        try:
+            return _verify_code_locked(channel, destination, code, session_ref)
+        except VerificationError as exc:
+            # Catch before leaving atomic: failed-attempt and expiry updates
+            # must commit before the view receives its validation error.
+            failure = exc
+    raise failure
+
+
+def _verify_code_locked(channel, destination, code, session_ref):
     challenge = (
-        CheckoutVerification.objects.filter(
-            channel=channel, destination=destination, session_ref=_clean_ref(session_ref), verified_at__isnull=True
+        CheckoutVerification.objects.select_for_update().filter(
+            channel=channel, destination=destination
         )
-        .exclude(code_hash="")
-        .order_by("-created_at")
+        .order_by("-created_at", "-pk")
         .first()
     )
-    if challenge is None:
+    # Concurrent sends can insert two challenges before either sees the
+    # other's row. Never fall back to an older code after consuming or
+    # locking the newest challenge, including across browser sessions.
+    if (
+        challenge is None
+        or challenge.session_ref != _clean_ref(session_ref)
+        or challenge.verified_at is not None
+        or not challenge.code_hash
+    ):
         raise VerificationError("Please request a new code.", code="no_active_code")
     if challenge.expires_at <= timezone.now():
         challenge.code_hash = ""

@@ -140,6 +140,10 @@ if DJANGO_ENV not in ("development", "production"):
     )
 
 if DJANGO_ENV == "production":
+    if DEBUG:
+        raise ImproperlyConfigured("Production requires DEBUG=False.")
+    if not SECRET_KEY.strip() or SECRET_KEY.startswith("django-insecure-"):
+        raise ImproperlyConfigured("Production requires a private SECRET_KEY from the environment.")
     DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
     if not DATABASE_URL:
         raise ImproperlyConfigured(
@@ -386,6 +390,8 @@ REST_FRAMEWORK = {
         "testimonial_submit": "10/hour",
         "pincode_lookup": "60/min",
         "checkout": "20/min",
+        # Shared IP budget for both public order tracking lookups.
+        "order_tracking": "60/min",
         # Independent budget for up to ten recipient fields while typing.
         "recipient_email_availability": "60/min",
         "checkout_otp": "10/min",

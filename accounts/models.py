@@ -183,6 +183,7 @@ class EmailOTP(models.Model):
         only its hash, so callers must send/return it to the user immediately
         (it cannot be read back from the returned `otp` afterwards)."""
         with transaction.atomic():
+            User.objects.select_for_update(no_key=True).get(pk=user.pk)
             cls._supersede(user, purpose)
             raw_code = cls.generate_code()
             otp = cls.objects.create(
@@ -217,6 +218,7 @@ class EmailOTP(models.Model):
         hash is stored (in code_hash), so the raw token must be emailed
         immediately — it cannot be read back afterwards."""
         with transaction.atomic():
+            User.objects.select_for_update(no_key=True).get(pk=user.pk)
             cls._supersede(user, cls.Purpose.REGISTER)
             raw_secret = secrets.token_urlsafe(32)
             otp = cls.objects.create(
@@ -253,6 +255,7 @@ class EmailOTP(models.Model):
         a paid order. Only the secret's hash is stored, so the raw token must
         be emailed immediately — it cannot be read back afterwards."""
         with transaction.atomic():
+            User.objects.select_for_update(no_key=True).get(pk=user.pk)
             cls._supersede(user, cls.Purpose.ACTIVATE)
             raw_secret = secrets.token_urlsafe(32)
             otp = cls.objects.create(
@@ -267,6 +270,7 @@ class EmailOTP(models.Model):
     def issue_purchaser_setup_link(cls, user):
         """A separate setup purpose; its secret is also bound to this inbox."""
         with transaction.atomic():
+            User.objects.select_for_update(no_key=True).get(pk=user.pk)
             cls._supersede(user, cls.Purpose.PURCHASER)
             raw_secret = secrets.token_urlsafe(32)
             otp = cls.objects.create(
@@ -315,22 +319,25 @@ class EmailOTP(models.Model):
         return not self.is_used and not self.is_expired and self.attempts < self.MAX_ATTEMPTS
 
     def check_code(self, raw_code):
-        """Verifies `raw_code` against the stored hash, tracking the attempt
-        regardless of outcome. Locks the OTP out (is_used=True) once
-        MAX_ATTEMPTS is reached, so a wrong guess can never be retried
-        indefinitely. Callers must check `is_valid()`/expiry BEFORE calling
-        this — it does not re-check expiry itself, only the attempt ceiling."""
-        if self.attempts >= self.MAX_ATTEMPTS:
-            return False
+        """Reserve each guess under a row lock, including stale callers.
 
-        self.attempts += 1
-        matched = check_password(raw_code, self.code_hash)
-        update_fields = ["attempts"]
-        if not matched and self.attempts >= self.MAX_ATTEMPTS:
-            self.is_used = True
-            update_fields.append("is_used")
-        self.save(update_fields=update_fields)
-        return matched
+        Return False normally so a failed guess commits its counter. The
+        verification endpoint holds the account and OTP locks through the
+        subsequent reset-token grant, preventing concurrent consumption.
+        """
+        with transaction.atomic():
+            current = type(self).objects.select_for_update().get(pk=self.pk)
+            self.attempts, self.is_used = current.attempts, current.is_used
+            if not current.is_valid():
+                return False
+            self.attempts += 1
+            matched = check_password(raw_code, current.code_hash)
+            update_fields = ["attempts"]
+            if not matched and self.attempts >= self.MAX_ATTEMPTS:
+                self.is_used = True
+                update_fields.append("is_used")
+            self.save(update_fields=update_fields)
+            return matched
 
     def issue_reset_token(self):
         """Called once, immediately after a successful RESET-purpose

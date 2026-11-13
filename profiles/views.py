@@ -9,6 +9,7 @@ from analytics.models import TapEvent
 from analytics.tracking import log_event
 from common.permissions import IsRecipientCustomer
 from common.response import error, success
+from common.uploads import image_upload_error
 
 from .models import CustomField, CustomLink, Profile, SocialLink
 from .serializers import (
@@ -45,12 +46,9 @@ class MyAvatarView(APIView):
     def post(self, request):
         profile = Profile.ensure_for_user(request.user)
         file = request.FILES.get("avatar")
-        if not file:
-            return error("No avatar file provided.", status=400)
-        if not file.content_type.startswith("image/"):
-            return error("Avatar must be an image file.", status=400)
-        if file.size > 5 * 1024 * 1024:
-            return error("Avatar must be smaller than 5MB.", status=400)
+        upload_error = image_upload_error(file)
+        if upload_error is not None:
+            return upload_error
 
         profile.avatar = file
         profile.save(update_fields=["avatar"])

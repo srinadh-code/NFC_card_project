@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
 
 from accounts import onboarding
@@ -123,7 +124,10 @@ class CustomerOrderListCreateView(APIView):
                 status=400,
             )
 
-        shipping = data.get("shipping") or Decimal("0")
+        # Checkout currently offers free shipping. Keep that policy owned by
+        # the server, consistent with payments.create_checkout_session; the
+        # legacy client field must never reduce the computed order total.
+        shipping = Decimal("0.00")
         if not address.phone.strip():
             return error("A delivery phone number is required.", errors={"address_id": ["Add a delivery phone number."]}, status=400)
         shipping_snapshot = compose_shipping_snapshot(address)
@@ -287,6 +291,15 @@ class CustomerOrderCancelView(APIView):
         return success(OrderSerializer(order).data, message="Order cancelled.")
 
 
+class OrderTrackingIPThrottle(SimpleRateThrottle):
+    """One shared per-IP lookup budget, including signed-in callers."""
+
+    scope = "order_tracking"
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {"scope": self.scope, "ident": self.get_ident(request)}
+
+
 class PublicOrderTrackingView(APIView):
     """Unauthenticated order lookup for the public /track-order marketing
     page — a visitor who has (or was given) the order's public
@@ -297,6 +310,7 @@ class PublicOrderTrackingView(APIView):
     never the full customer/admin shape."""
 
     permission_classes = [AllowAny]
+    throttle_classes = [OrderTrackingIPThrottle]
 
     def get(self, request, order_number):
         # Case-insensitive: "nxtrk483920" and "NXTRK483920" must resolve to
@@ -334,6 +348,7 @@ class OrderTrackingByTokenView(APIView):
     CustomerOrderDetailView, scoped by `customer=request.user`."""
 
     permission_classes = [AllowAny]
+    throttle_classes = [OrderTrackingIPThrottle]
 
     def get(self, request):
         raw = request.query_params.get("order", "").strip()

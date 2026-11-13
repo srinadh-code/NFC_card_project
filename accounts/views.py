@@ -8,10 +8,12 @@ from django.contrib.auth.hashers import make_password
 from django.db import connection, transaction
 from django.utils import timezone
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
 from common.response import error, success
@@ -21,10 +23,11 @@ from . import onboarding
 from .emails import send_password_reset_otp_email, send_verification_email
 from .google_oauth import GoogleTokenError, verify_google_id_token
 from .models import CustomerOnboarding, EmailOTP, User
-from .security import access_token_minutes
+from .tokens import ConfiguredRefreshToken
 from .serializers import (
     ChangePasswordSerializer,
     AccountActivationCompleteSerializer,
+    AccountTokenRefreshSerializer,
     ForgotPasswordSerializer,
     GoogleLoginSerializer,
     LoginSerializer,
@@ -41,13 +44,7 @@ logger = logging.getLogger("accounts.auth")
 
 
 def _issue_tokens(user):
-    refresh = RefreshToken.for_user(user)
-    # Admin-configured session timeout (Settings > Security) overrides the
-    # server's env-configured default at the moment each token is minted —
-    # real enforcement, not a stored-but-ignored preference.
-    minutes = access_token_minutes()
-    if minutes:
-        refresh.access_token.set_exp(lifetime=timedelta(minutes=minutes))
+    refresh = ConfiguredRefreshToken.for_user(user)
     return {"access": str(refresh.access_token), "refresh": str(refresh)}
 
 
@@ -196,6 +193,25 @@ class VerifyEmailView(APIView):
 
         user = otp.user
         with transaction.atomic():
+            # Match link issuance's account -> OTP lock order, then recheck
+            # a concurrent verification or resend before modifying state.
+            user = User.objects.select_for_update(no_key=True).get(pk=user.pk)
+            otp = EmailOTP.objects.select_for_update().get(pk=otp.pk)
+            if user.email_verified:
+                return success(
+                    {"email": user.email, "already_verified": True},
+                    message="Your email is already verified. You can log in.",
+                )
+            if otp.is_expired:
+                return error(
+                    "This verification link has expired. Request a new one below.",
+                    errors={"code": "token_expired"}, status=400,
+                )
+            if otp.is_used:
+                return error(
+                    "This verification link is invalid or has been replaced by a newer one. Request a new one below.",
+                    errors={"code": "token_invalid"}, status=400,
+                )
             otp.is_used = True
             otp.save(update_fields=["is_used"])
             user.email_verified = True
@@ -401,11 +417,31 @@ class LogoutView(APIView):
         serializer.is_valid(raise_exception=True)
         try:
             token = RefreshToken(serializer.validated_data["refresh"])
+            if str(token.get(api_settings.USER_ID_CLAIM)) != str(request.user.pk):
+                return error("The refresh token does not belong to this account.", status=403)
             token.blacklist()
         except TokenError:
             return error("Invalid or already-expired refresh token.", status=400)
 
         return success(message="Logged out.")
+
+
+class AccountTokenRefreshView(APIView):
+    """Keep SimpleJWT's raw {access, refresh} response contract."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get_authenticate_header(self, request):
+        return f'{api_settings.AUTH_HEADER_TYPES[0]} realm="api"'
+
+    def post(self, request):
+        serializer = AccountTokenRefreshSerializer(data=request.data)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except TokenError as exc:
+            raise InvalidToken(str(exc)) from exc
+        return Response(serializer.validated_data)
 
 
 def _issue_and_send_reset_otp(user):
@@ -492,34 +528,42 @@ class VerifyResetOtpView(APIView):
             _equalize_hashing_time()
             return error(self.GENERIC_ERROR, status=400)
 
-        # Not filtered to is_used=False: once check_code() locks an OTP out
-        # at MAX_ATTEMPTS it sets is_used=True, and a filtered query would
-        # then find nothing on the next attempt — collapsing the specific
-        # "too many attempts" outcome into the generic one below. Look up
-        # the latest RESET row regardless of is_used, then classify why.
-        otp = (
-            EmailOTP.objects.filter(user=user, purpose=EmailOTP.Purpose.RESET)
-            .order_by("-created_at")
-            .first()
-        )
+        with transaction.atomic():
+            # Issuance and reset completion use this same account -> OTP
+            # lock order. Return failed responses normally so attempts commit.
+            user = User.objects.select_for_update(no_key=True).filter(pk=user.pk).first()
+            if not _password_reset_eligible(user):
+                _equalize_hashing_time()
+                return error(self.GENERIC_ERROR, status=400)
 
-        if otp is None or otp.is_expired:
-            _equalize_hashing_time()
-            return error(self.GENERIC_ERROR, status=400)
+            # Not filtered to is_used=False: once check_code() locks an OTP out
+            # at MAX_ATTEMPTS it sets is_used=True, and a filtered query would
+            # then find nothing on the next attempt — collapsing the specific
+            # "too many attempts" outcome into the generic one below. Look up
+            # the latest RESET row regardless of is_used, then classify why.
+            otp = (
+                EmailOTP.objects.select_for_update().filter(user=user, purpose=EmailOTP.Purpose.RESET)
+                .order_by("-created_at")
+                .first()
+            )
 
-        if otp.attempts >= EmailOTP.MAX_ATTEMPTS:
-            return error("Too many incorrect attempts. Please request a new code.", status=400)
+            if otp is None or otp.is_expired:
+                _equalize_hashing_time()
+                return error(self.GENERIC_ERROR, status=400)
 
-        if otp.is_used:  # superseded by a resend, or already verified once
-            return error(self.GENERIC_ERROR, status=400)
-
-        if not otp.check_code(data["otp"]):
             if otp.attempts >= EmailOTP.MAX_ATTEMPTS:
                 return error("Too many incorrect attempts. Please request a new code.", status=400)
-            return error(self.GENERIC_ERROR, status=400)
 
-        reset_token = otp.issue_reset_token()
-        return success({"reset_token": reset_token}, message="Code verified.")
+            if otp.is_used:  # superseded by a resend, or already verified once
+                return error(self.GENERIC_ERROR, status=400)
+
+            if not otp.check_code(data["otp"]):
+                if otp.attempts >= EmailOTP.MAX_ATTEMPTS:
+                    return error("Too many incorrect attempts. Please request a new code.", status=400)
+                return error(self.GENERIC_ERROR, status=400)
+
+            reset_token = otp.issue_reset_token()
+            return success({"reset_token": reset_token}, message="Code verified.")
 
 
 class ResetPasswordView(APIView):
@@ -630,6 +674,9 @@ class GoogleLoginView(APIView):
             user = User.objects.filter(google_id=google_id).first()
             if user is None:
                 user = User.objects.filter(email__iexact=email).first()
+
+            if user is not None and not user.is_active:
+                return error("This account has been deactivated.", errors={"code": "account_inactive"}, status=403)
 
             created = user is None
             if created and not getattr(settings, "PUBLIC_REGISTRATION_ENABLED", False):

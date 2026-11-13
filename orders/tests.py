@@ -64,7 +64,7 @@ def _seed_cart_item(user, **overrides):
 
 def _valid_payload(address, *, recipient_batch=1, **overrides):
     payload = {
-        "shipping": "49.00",
+        "shipping": "0.00",
         "payment_method": "COD",
         "address_id": address.pk,
         "recipients": [
@@ -104,7 +104,7 @@ class CustomerOrderCreateViewTests(AuthenticatedAPITestCase):
         self.assertEqual(data["payment_status"], "PENDING")
         # Real catalog price (999.00 x 2), not the cart item's own price.
         self.assertEqual(str(data["amount"]), "1998.00")
-        self.assertEqual(str(data["total"]), "2047.00")
+        self.assertEqual(str(data["total"]), "1998.00")
         self.assertEqual(len(data["items"]), 1)
 
     def test_unpaid_bulk_cod_order_preserves_allocations_without_provisioning_accounts(self):
@@ -248,7 +248,7 @@ class CustomerOrderCreateViewTests(AuthenticatedAPITestCase):
         response = self.client.post(reverse("my-orders"), _valid_payload(self.address), format="json")
         order = Order.objects.get(pk=response.data["data"]["id"])
         self.assertEqual(order.transactions.count(), 1)
-        self.assertEqual(str(order.transactions.first().amount), "2047.00")
+        self.assertEqual(str(order.transactions.first().amount), "1998.00")
         self.assertEqual(order.transactions.first().status, Order.PaymentStatus.PENDING)
 
 

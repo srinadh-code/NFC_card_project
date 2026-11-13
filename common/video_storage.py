@@ -72,8 +72,8 @@ def upload_video(file_obj, folder):
             chunk_size=CHUNK_SIZE,
             filename=getattr(file_obj, "name", None) or "video.mp4",
         )
-    except Exception as exc:
-        raise ValidationError({"video": [f"Video upload failed: {exc}"]})
+    except Exception:
+        raise ValidationError({"video": ["Video upload failed. Please try again."]}) from None
 
     public_id = (result or {}).get("public_id")
     url = (result or {}).get("secure_url")

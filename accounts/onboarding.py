@@ -122,18 +122,23 @@ def username_for(user):
 
 
 def _activation_url(raw_token):
-    return f"{settings.FRONTEND_URL.rstrip('/')}/set-password?token={raw_token}"
+    from .emails import _frontend_link
+
+    return _frontend_link("/set-password", raw_token)
 
 
 def _render_activation(user, raw_token, order):
     name = user.full_name or user.email
     hours = settings.ACCOUNT_ACTIVATION_LINK_HOURS
+    action_url = _activation_url(raw_token)
+    if action_url is None:
+        raise ValueError("Secure account activation delivery is not configured.")
     context = {
         # accounts/emails/base.html's layout fields
         "subject": ACTIVATION_SUBJECT,
         "heading": "Your customer account is ready!",
         "name": name,
-        "action_url": _activation_url(raw_token),
+        "action_url": action_url,
         "action_label": "Set Your Password",
         "expires_text": f"{hours} hours" if hours != 1 else "1 hour",
         # this email's own fields
@@ -211,6 +216,18 @@ def deliver_activation_email(onboarding_id, raw_token):
         return False
     user = onboarding.user
     if not user.must_change_password or not eligible_activation_recipients().filter(user=user).exists():
+        return False
+    if (
+        settings.DJANGO_ENV == "production"
+        and not settings.BREVO_API_KEY
+        and not smtp_configured()
+        and settings.EMAIL_BACKEND == "django.core.mail.backends.console.EmailBackend"
+    ):
+        CustomerOnboarding.objects.filter(pk=onboarding.pk).update(
+            email_status=CustomerOnboarding.EmailStatus.FAILED,
+            email_last_error="Email delivery is not configured",
+        )
+        logger.warning("onboarding.email_delivery_unavailable user_id=%s", user.pk)
         return False
     try:
         html, text = _render_activation(user, raw_token, onboarding.source_order)

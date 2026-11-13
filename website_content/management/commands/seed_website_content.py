@@ -1,13 +1,15 @@
 """
 Idempotent seed for the Website Content module.
 
-Populates every table from the copy that is (or, for genuinely new sections
-like Companies, was) hardcoded in the public frontend today, so the site
+Populates established marketing sections from the original public-site copy, so the site
 looks identical the moment the frontend switches from static arrays to the
 API. Safe to run more than once: singletons are created only if missing,
 and collection rows are keyed by their natural text field (question, title,
 label, ...) via get_or_create, so re-running never duplicates rows or
 clobbers edits an admin has already made.
+
+Trusted Companies are intentionally never seeded: an admin must verify a
+business relationship before publishing that company name.
 """
 
 from django.core.management.base import BaseCommand
@@ -18,7 +20,6 @@ from website_content.models import (
     AboutMission,
     AboutPage,
     AboutWhyChoose,
-    Company,
     Faq,
     Feature,
     HomeBottomBarItem,
@@ -43,7 +44,6 @@ class Command(BaseCommand):
         self._seed_features()
         self._seed_how_it_works()
         self._seed_faqs()
-        self._seed_companies()
         self._seed_statistics()
         self.stdout.write(self.style.SUCCESS("Website content seeded."))
 
@@ -355,11 +355,6 @@ class Command(BaseCommand):
         ]
         for order, (question, answer) in enumerate(faqs):
             Faq.objects.get_or_create(question=question, defaults=dict(answer=answer, display_order=order))
-
-    def _seed_companies(self):
-        companies = ["Google", "Microsoft", "Amazon", "Airtel", "Tata", "Flipkart"]
-        for order, name in enumerate(companies):
-            Company.objects.get_or_create(name=name, defaults=dict(display_order=order))
 
     def _seed_statistics(self):
         home_stats = [

@@ -302,7 +302,14 @@ class CartAndCheckoutPricingTests(AuthenticatedAPITestCase):
     def test_order_records_tier_price_and_label(self):
         self._add(3)
         response = self.client.post(
-            reverse("my-orders"), {"payment_method": "UPI", "address_id": self._address().pk}, format="json"
+            reverse("my-orders"), {
+                "payment_method": "COD",
+                "address_id": self._address().pk,
+                "recipients": [
+                    {"full_name": f"Tier Recipient {index}", "email": f"tier{index}@example.com", "phone": "+917700900123"}
+                    for index in range(3)
+                ],
+            }, format="json"
         )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)

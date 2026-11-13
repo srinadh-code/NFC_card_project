@@ -31,6 +31,10 @@ class GeneralSettingsPublicViewTests(APITestCase):
         self.assertEqual(data["site_email"], "support@vrsnexora.com")
         self.assertEqual(set(data.keys()), {
             "site_name", "site_email", "site_phone", "site_address", "currency", "timezone",
+            "office_name", "office_address_line1", "office_address_line2", "office_landmark",
+            "office_locality", "office_city", "office_district", "office_state", "office_pincode",
+            "office_country", "office_phone", "support_email", "support_phone", "website_url",
+            "company_logo_url", "favicon_url",
         })
 
     def test_reflects_admin_updates(self):

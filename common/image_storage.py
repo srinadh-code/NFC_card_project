@@ -24,6 +24,8 @@ structurally different flow and is left as-is.
 import cloudinary.uploader
 from rest_framework.exceptions import ValidationError
 
+from common.image_validation import validate_image_content
+
 ALLOWED_CONTENT_TYPES = {
     "image/jpeg",
     "image/png",
@@ -44,6 +46,10 @@ def validate_image_file(file_obj):
         raise ValidationError({"image": ["Unsupported image type. Use JPEG, PNG, WEBP, or SVG."]})
     if file_obj.size > MAX_UPLOAD_BYTES:
         raise ValidationError({"image": ["Image must be smaller than 5MB."]})
+    try:
+        validate_image_content(file_obj)
+    except ValueError as exc:
+        raise ValidationError({"image": [str(exc)]}) from exc
 
 
 def _cloudinary_configured():
@@ -72,8 +78,8 @@ def upload_image(file_obj, folder, request=None):
         result = cloudinary.uploader.upload(file_obj, folder=folder, resource_type="image")
     except ValidationError:
         raise
-    except Exception as exc:
-        raise ValidationError({"image": [f"Image upload failed: {exc}"]})
+    except Exception:
+        raise ValidationError({"image": ["Image upload failed. Please try again."]}) from None
 
     return {"url": result["secure_url"], "public_id": result["public_id"]}
 

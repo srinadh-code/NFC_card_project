@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from profiles.models import Profile
+from common.csv_export import safe_csv_cell
 
 from .models import Lead
 
@@ -67,7 +68,7 @@ def leads_csv(user):
     writer.writerow(["Name", "Email", "Phone", "Company", "Message", "Status", "Date"])
     for lead in list_leads(user):
         writer.writerow(
-            [
+            [safe_csv_cell(value) for value in [
                 lead.name,
                 lead.email,
                 lead.phone,
@@ -75,6 +76,6 @@ def leads_csv(user):
                 lead.message,
                 lead.get_status_display(),
                 lead.created_at.strftime("%Y-%m-%d %H:%M"),
-            ]
+            ]]
         )
     return buffer.getvalue()

@@ -247,9 +247,8 @@ class OrderTrackingByTokenSerializer(OrderSerializer):
 class CustomerOrderCreateSerializer(serializers.Serializer):
     """Self-service checkout — the customer places and owns this order
     directly (unlike AdminOrderCreateSerializer, which is an admin entering
-    an offline order on someone else's behalf). No payment gateway is wired
-    up yet, so the resulting order is stamped PAID immediately, matching
-    what the checkout page already assumed before this endpoint existed.
+    an offline order on someone else's behalf). This route creates unpaid
+    COD orders; online payments use the separate verified checkout flow.
 
     Deliberately takes NO `items` field — the client used to send its own
     cart lines directly, which meant trusting whatever product/price a
@@ -272,7 +271,9 @@ class CustomerOrderCreateSerializer(serializers.Serializer):
     # but the admin-created-order path is a separate serializer entirely)
     # aren't forced to supply one.
     idempotency_key = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
-    shipping = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, default=0)
+    # Retain the old field for compatibility, while ignoring all submitted
+    # values. The current server shipping policy is free shipping.
+    shipping = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     payment_method = serializers.ChoiceField(choices=Order.PaymentMethod.choices)
     address_id = serializers.IntegerField()
     recipients = serializers.JSONField()

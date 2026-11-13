@@ -60,6 +60,7 @@ from website_content.serializers import (
     AboutPageSerializer,
     AboutWhyChooseSerializer,
     CompanySerializer,
+    CompanyReorderSerializer,
     ContactMessageReplyCreateSerializer,
     ContactMessageSerializer,
     EmailSettingsSerializer,
@@ -702,6 +703,25 @@ class CompanyAdminDetailView(AdminDetailAPIView):
 
 class CompanyAdminReorderView(AdminReorderAPIView):
     model = Company
+
+    def patch(self, request):
+        serializer = CompanyReorderSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        ids = serializer.validated_data["order"]
+        with transaction.atomic():
+            companies = {
+                company.pk: company
+                for company in Company.objects.select_for_update().filter(pk__in=ids).order_by("pk")
+            }
+            if len(companies) != len(ids):
+                return error("`order` contains a company that does not exist.", status=400)
+            ordered = []
+            for index, company_id in enumerate(ids):
+                company = companies[company_id]
+                company.display_order = index
+                ordered.append(company)
+            Company.objects.bulk_update(ordered, ["display_order"])
+        return success(None, message="Order updated.")
 
 
 class CompanyImageAdminView(AdminImageUploadAPIView):

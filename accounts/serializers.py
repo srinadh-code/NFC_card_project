@@ -3,9 +3,13 @@ import re
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.settings import api_settings
 
 from .models import User
 from .security import enforce_password_policy
+from .tokens import ConfiguredRefreshToken
 
 #: Registration's phone field is submitted as "+91 " + the 10 digits the
 #: user typed (see tracker-main/src/pages/customer/Register.tsx) — so this
@@ -115,6 +119,19 @@ class LoginSerializer(serializers.Serializer):
 
 class LogoutSerializer(serializers.Serializer):
     refresh = serializers.CharField()
+
+
+class AccountTokenRefreshSerializer(TokenRefreshSerializer):
+    token_class = ConfiguredRefreshToken
+
+    def validate(self, attrs):
+        # Check the account before rotation or issuance. Access-token
+        # authentication enforces the same pending-activation boundary.
+        refresh = self.token_class(attrs["refresh"])
+        user = User.objects.filter(pk=refresh.get(api_settings.USER_ID_CLAIM)).first()
+        if user is None or not user.is_active or user.must_change_password:
+            raise AuthenticationFailed("No active account found for the given token.", code="no_active_account")
+        return super().validate(attrs)
 
 
 class ForgotPasswordSerializer(serializers.Serializer):

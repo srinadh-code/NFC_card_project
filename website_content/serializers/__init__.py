@@ -33,7 +33,7 @@ from .order_card import (
 )
 from .how_it_works import HowItWorksStepSerializer
 from .faqs import FaqSerializer
-from .companies import CompanySerializer
+from .companies import CompanyReorderSerializer, CompanySerializer, PublicCompanySerializer
 from .statistics import StatisticSerializer
 from .contact import (
     ContactMessageCreateSerializer,
@@ -79,6 +79,8 @@ __all__ = [
     "HowItWorksStepSerializer",
     "FaqSerializer",
     "CompanySerializer",
+    "PublicCompanySerializer",
+    "CompanyReorderSerializer",
     "StatisticSerializer",
     "ContactMessageSerializer",
     "ContactMessageCreateSerializer",

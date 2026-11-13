@@ -50,7 +50,7 @@ from website_content.serializers import (
     AboutMissionSerializer,
     AboutPageSerializer,
     AboutWhyChooseSerializer,
-    CompanySerializer,
+    PublicCompanySerializer,
     ContactMessageCreateSerializer,
     FaqSerializer,
     FeatureSerializer,
@@ -109,7 +109,7 @@ class HomePublicView(APIView):
                 else None
             ),
             "our_story": HomeOurStorySerializer(our_story).data if our_story else None,
-            "companies": CompanySerializer(Company.objects.filter(is_active=True), many=True).data,
+            "companies": PublicCompanySerializer(Company.objects.filter(is_active=True), many=True).data,
             "statistics": StatisticSerializer(
                 Statistic.objects.filter(is_active=True, page=Statistic.Page.HOME), many=True
             ).data,
@@ -250,7 +250,7 @@ class FaqsPublicView(PublicListAPIView):
 
 class CompaniesPublicView(PublicListAPIView):
     model = Company
-    serializer_class = CompanySerializer
+    serializer_class = PublicCompanySerializer
 
 
 class ValuesPublicView(PublicListAPIView):
