@@ -38,6 +38,7 @@ from .serializers import (
     UserSerializer,
     VerifyEmailSerializer,
     VerifyResetOtpSerializer,
+    resolve_login_email,
 )
 
 logger = logging.getLogger("accounts.auth")
@@ -79,14 +80,18 @@ AUTH_EMAIL_THROTTLES = [OtpRequestThrottle, AuthEmailHourlyThrottle, AuthEmailIP
 
 
 def _send_in_background(send_fn, *args):
-    """Runs an email send after the response has gone out, for endpoints
-    whose reply must not reveal whether an account exists — otherwise the
-    extra time spent calling Brevo for a real account would give it away.
-    The send functions never raise and never touch the database."""
+    """Send off the response path without exposing account or delivery state."""
+    purpose = {
+        "send_verification_email": "verify_email",
+        "send_password_reset_otp_email": "reset_password_otp",
+    }.get(getattr(send_fn, "__name__", ""), "auth_email")
 
     def run():
         try:
-            send_fn(*args)
+            if not send_fn(*args):
+                logger.warning("auth.email.failed purpose=%s reason=sender_rejected", purpose)
+        except Exception:
+            logger.error("auth.email.failed purpose=%s reason=sender_exception", purpose)
         finally:
             connection.close()
 
@@ -241,7 +246,7 @@ class ResendOtpView(APIView):
     def post(self, request):
         serializer = ResendOtpSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        email = serializer.validated_data["email"].strip().lower()
+        email = resolve_login_email(serializer.validated_data["email"])
         purpose = serializer.validated_data["purpose"]
 
         user = User.objects.filter(email=email, is_active=True).first()
@@ -271,12 +276,11 @@ class LoginView(APIView):
     throttle_scope = "auth_login"
 
     def post(self, request):
-        email = str(request.data.get("email", "")).strip().lower()
         serializer = LoginSerializer(data=request.data, context={"request": request})
         try:
             serializer.is_valid(raise_exception=True)
         except Exception:
-            logger.info("auth.login.failed email=%s", email)
+            logger.info("auth.login.failed")
             raise
 
         user = serializer.validated_data["user"]
@@ -481,7 +485,7 @@ class ForgotPasswordView(APIView):
     def post(self, request):
         serializer = ForgotPasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        email = serializer.validated_data["email"].strip().lower()
+        email = resolve_login_email(serializer.validated_data["email"])
 
         user = User.objects.filter(email=email, is_active=True).first()
         # An order-created account not yet activated sets its first password
@@ -514,7 +518,7 @@ class VerifyResetOtpView(APIView):
         serializer = VerifyResetOtpSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        email = data["email"].strip().lower()
+        email = resolve_login_email(data["email"])
 
         try:
             user = User.objects.get(email=email)

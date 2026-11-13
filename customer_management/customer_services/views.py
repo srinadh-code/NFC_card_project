@@ -1,3 +1,5 @@
+from collections.abc import Mapping
+
 from rest_framework.views import APIView
 
 from common.permissions import IsRecipientCustomer
@@ -60,6 +62,10 @@ class ReorderCustomerServicesView(APIView):
     permission_classes = [IsRecipientCustomer]
 
     def patch(self, request):
+        if not isinstance(request.data, Mapping):
+            return error("`order` must be a list of integer ids.", status=400)
         order = request.data.get("order", [])
+        if not isinstance(order, list) or any(type(item_id) is not int for item_id in order):
+            return error("`order` must be a list of integer ids.", status=400)
         services.reorder_services(request.user, order)
         return success(message="Order updated.")

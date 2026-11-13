@@ -1,5 +1,6 @@
 import json
 import logging
+from collections.abc import Mapping
 
 from rest_framework import serializers
 from rest_framework.permissions import AllowAny
@@ -167,6 +168,8 @@ class RazorpayCheckoutView(APIView):
     throttle_classes = [CheckoutAnonThrottle, CheckoutUserThrottle]
 
     def post(self, request):
+        if not isinstance(request.data, Mapping):
+            return error("Please check your details.", errors={"non_field_errors": ["Expected an object."]})
         customer = _activated_customer(request)
         # "dummy" = temporary test payment instead of Razorpay (refused unless
         # DUMMY_PAYMENTS_ENABLED); anything else is Razorpay.
@@ -236,6 +239,8 @@ class OtpThrottle(AnonRateThrottle):
 
 
 def _channel(request):
+    if not isinstance(request.data, Mapping):
+        return None
     value = str(request.data.get("channel", "")).upper()
     return value if value in CheckoutVerification.Channel.values else None
 
@@ -298,11 +303,13 @@ class RazorpayVerifyView(APIView):
     throttle_classes = [CheckoutAnonThrottle]
 
     def post(self, request):
+        if not isinstance(request.data, Mapping):
+            return error("We couldn't verify this payment.", errors={"code": "invalid_signature"}, status=400)
         order_id = str(request.data.get("razorpay_order_id", ""))
         payment_id = str(request.data.get("razorpay_payment_id", ""))
         signature = str(request.data.get("razorpay_signature", ""))
         if not (order_id and payment_id and razorpay.verify_payment_signature(order_id, payment_id, signature)):
-            logger.warning("payments.verify.bad_signature order=%s", order_id)
+            logger.warning("payments.verify.bad_signature")
             return error("We couldn't verify this payment.", errors={"code": "invalid_signature"}, status=400)
         try:
             session, account_created = fulfill_checkout(order_id, payment_id, via="verify")
@@ -335,11 +342,13 @@ class DummyPaymentConfirmView(APIView):
     throttle_classes = [CheckoutAnonThrottle, CheckoutUserThrottle]
 
     def post(self, request):
+        if not isinstance(request.data, Mapping):
+            return error("Invalid payload.", status=400)
         checkout_id = str(request.data.get("checkout_id", ""))
         amount = request.data.get("amount")
         try:
             amount_paise = int(amount) if amount is not None else None
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return error("Invalid amount.", status=400)
         try:
             session, account_created = confirm_dummy_payment(checkout_id, amount_paise=amount_paise)
@@ -378,9 +387,19 @@ class RazorpayWebhookView(APIView):
         except ValueError:
             return error("Invalid payload.", status=400)
 
+        if not isinstance(event, Mapping):
+            return error("Invalid payload.", status=400)
+        payload = event.get("payload") or {}
+        if not isinstance(payload, Mapping):
+            return error("Invalid payload.", status=400)
+        payment_data, order_data = payload.get("payment") or {}, payload.get("order") or {}
+        if not isinstance(payment_data, Mapping) or not isinstance(order_data, Mapping):
+            return error("Invalid payload.", status=400)
+        payment, order = payment_data.get("entity") or {}, order_data.get("entity") or {}
+        if not isinstance(payment, Mapping) or not isinstance(order, Mapping):
+            return error("Invalid payload.", status=400)
         name = event.get("event", "")
-        payment = ((event.get("payload") or {}).get("payment") or {}).get("entity") or {}
-        order_id = payment.get("order_id") or (((event.get("payload") or {}).get("order") or {}).get("entity") or {}).get("id")
+        order_id = payment.get("order_id") or order.get("id")
         if not order_id:
             return success(message="Ignored.")
 
@@ -388,7 +407,11 @@ class RazorpayWebhookView(APIView):
             session = CheckoutSession.objects.filter(razorpay_order_id=order_id).first()
             if session is None:
                 return success(message="Ignored.")
-            if payment.get("amount") is not None and int(payment["amount"]) != session.amount_paise:
+            try:
+                amount = int(payment["amount"]) if payment.get("amount") is not None else None
+            except (TypeError, ValueError, OverflowError):
+                return error("Invalid payload.", status=400)
+            if amount is not None and amount != session.amount_paise:
                 logger.error("payments.webhook.amount_mismatch order=%s", order_id)
                 return success(message="Amount mismatch — not fulfilled.")
             try:

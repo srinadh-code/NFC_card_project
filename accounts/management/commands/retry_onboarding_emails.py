@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 
 from accounts import onboarding
+from accounts.emails import PERMANENT_RECIPIENT_FAILURE_CODES
 from accounts.models import CustomerOnboarding
 
 
@@ -16,7 +17,7 @@ class Command(BaseCommand):
             email_status=CustomerOnboarding.EmailStatus.FAILED,
             user__must_change_password=True,
             credentials_issued_at__isnull=False,
-        )
+        ).exclude(email_last_error__in=PERMANENT_RECIPIENT_FAILURE_CODES)
         count = 0
         for item in pending:
             # Inline (sync) — a background thread would die with the command.

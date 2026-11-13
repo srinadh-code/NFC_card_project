@@ -11,6 +11,7 @@ from django.core.validators import validate_email
 from django.db import IntegrityError, OperationalError, connection, transaction
 from django.db.models.functions import Lower
 from django.utils import timezone
+from rest_framework import serializers
 
 from accounts import onboarding
 from accounts.models import CustomerOnboarding, User
@@ -89,7 +90,13 @@ def guest_lines(items):
             raise CheckoutError("Each cart item must be an object.")
         product_id = str(raw.get("product_id", "")).strip()
         raw_qty = raw.get("qty", 0)
-        qty = int(raw_qty) if type(raw_qty) is int or (isinstance(raw_qty, str) and re.fullmatch(r"[0-9]+", raw_qty)) else 0
+        qty = raw_qty if type(raw_qty) is int else 0
+        if isinstance(raw_qty, str) and re.fullmatch(r"[0-9]+", raw_qty):
+            # Bound conversion before int(): Python rejects overlong digit
+            # strings. Leading zeroes do not change a legitimate quantity.
+            digits = raw_qty.lstrip("0")
+            if 0 < len(digits) <= len(str(MAX_LINE_QUANTITY)):
+                qty = int(digits)
         if qty < 1 or qty > MAX_LINE_QUANTITY:
             raise CheckoutError(f"Quantity must be between 1 and {MAX_LINE_QUANTITY}.")
         product = get_catalog_product(None, product_id) if product_id else None
@@ -412,6 +419,10 @@ def create_checkout_session(
     if customer is not None:
         if address_id is None:
             raise CheckoutError("Please choose a delivery address.", errors={"address_id": ["Required."]})
+        try:
+            address_id = serializers.IntegerField(min_value=1, max_value=2**63 - 1).run_validation(address_id)
+        except serializers.ValidationError:
+            raise CheckoutError("Please choose a delivery address.", errors={"address_id": ["Invalid."]})
         saved = CustomerAddress.objects.filter(pk=address_id, customer=customer).first()
         if saved is None:
             raise CheckoutError("Please choose a delivery address.", errors={"address_id": ["Not found."]})

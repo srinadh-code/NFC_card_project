@@ -307,7 +307,7 @@ def _get_json(url, label):
         response.raise_for_status()
         return response.json()[0]
     except (requests.RequestException, ValueError, IndexError, KeyError, TypeError) as exc:
-        logger.warning("India Post lookup failed for %s: %s", label, exc)
+        logger.warning("India Post lookup failed operation=%s error=%s", label, type(exc).__name__)
         raise PincodeServiceUnavailable from exc
 
 
@@ -318,20 +318,20 @@ def _post_offices_from(record, label):
     if status == "error" and not record.get("PostOffice"):
         # The API's answer for something that isn't in the directory.
         return []
-    logger.warning("Unexpected India Post response for %s: %r", label, record)
+    logger.warning("Unexpected India Post response operation=%s", label)
     raise PincodeServiceUnavailable
 
 
 def _fetch_from_india_post(pincode):
     """Raw post-office list for a PIN ([] when it doesn't exist). Raises
     PincodeServiceUnavailable on any network/format problem."""
-    return _post_offices_from(_get_json(API_URL.format(pincode=pincode), pincode), pincode)
+    return _post_offices_from(_get_json(API_URL.format(pincode=pincode), "pincode"), "pincode")
 
 
 def _fetch_post_offices_by_name(name):
     """Post offices anywhere in India whose name contains `name` (India
     Post's own search semantics). Raises PincodeServiceUnavailable."""
-    return _post_offices_from(_get_json(POST_OFFICE_API_URL.format(name=quote(name)), name), name)
+    return _post_offices_from(_get_json(POST_OFFICE_API_URL.format(name=quote(name)), "post_office_search"), "post_office_search")
 
 
 def lookup_pincode(pincode):

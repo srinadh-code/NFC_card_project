@@ -266,6 +266,17 @@ class CustomerUpdateDeleteTests(_Base):
 
 
 class PublicTestimonialTests(_Base):
+    def test_equal_timestamps_keep_newest_first_with_and_without_limit(self):
+        old = make_testimonial(self.user, status=Status.APPROVED)
+        new = make_testimonial(self.other, status=Status.APPROVED)
+        Testimonial.objects.filter(pk__in=[old.pk, new.pk]).update(created_at=old.created_at)
+
+        response = self.client.get(reverse("testimonial-public-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([row["id"] for row in response.data["data"]], [new.pk, old.pk])
+        limited = self.client.get(reverse("testimonial-public-list"), {"limit": 1})
+        self.assertEqual([row["id"] for row in limited.data["data"]], [new.pk])
+
     def test_only_approved_and_active_newest_first(self):
         old = make_testimonial(self.user, status=Status.APPROVED, name="Old")
         make_testimonial(self.user, status=Status.APPROVED, is_active=False, name="Hidden")

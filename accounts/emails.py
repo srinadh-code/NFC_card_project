@@ -1,4 +1,5 @@
 import logging
+import re
 from urllib.parse import quote
 from html import escape
 
@@ -68,18 +69,59 @@ def send_order_confirmation_email(user, order):
             f"Your VR's GATEWAY order {order_number} is confirmed",
             html, text, f"purpose=order_confirmation order_id={order.pk}",
         )
-    except Exception:
-        logger.exception("email.order_confirmation.send_failed order_id=%s", order.pk)
+    except Exception as exc:
+        logger.error("email.order_confirmation.send_failed order_id=%s error=%s", order.pk, type(exc).__name__)
         return False
 
 
 BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 BREVO_TIMEOUT_SECONDS = 10
+BREVO_MESSAGE_ID_RE = re.compile(r"<[A-Za-z0-9._+-]{1,160}@[A-Za-z0-9.-]{1,100}>")
 BREVO_SAFE_ERROR_CODES = frozenset({
     "unauthorized", "invalid_parameter", "missing_parameter", "bad_request",
     "not_enough_credits", "permission_denied", "method_not_allowed",
     "duplicate_parameter", "document_not_found", "account_under_validation",
+    "recipient_blocked", "recipient_bounced", "recipient_unsubscribed",
 })
+PERMANENT_RECIPIENT_FAILURE_CODES = frozenset({
+    "recipient_blocked", "recipient_bounced", "recipient_unsubscribed",
+})
+
+
+class PermanentEmailDeliveryError(Exception):
+    """A provider-confirmed recipient rejection; retrying cannot repair it."""
+
+    def __init__(self, code):
+        self.code = code if code in PERMANENT_RECIPIENT_FAILURE_CODES else "recipient_blocked"
+        super().__init__(self.code)
+
+
+def _permanent_recipient_failure(detail):
+    if not isinstance(detail, dict):
+        return None
+    code = detail.get("code")
+    if isinstance(code, str) and code in PERMANENT_RECIPIENT_FAILURE_CODES:
+        return code
+    # Some recipient rejections use invalid_parameter with a reason. Inspect
+    # it only for classification; never copy free-form provider text to logs.
+    message = detail.get("message")
+    if code != "invalid_parameter" or not isinstance(message, str):
+        return None
+    message = message.lower()
+    # Account/API configuration and temporary deferrals are not permanent
+    # recipient suppression, even when the response contains "email blocked".
+    if any(word in message for word in (
+        "sender", "account", "api", "service", "temporar", "greylist", "graylist",
+        "defer", "retry", "try again", "rate limit", "throttl",
+    )) or not any(word in message for word in ("recipient", "email", "mailbox")):
+        return None
+    if re.search(r"hard[ _-]?bounc", message):
+        return "recipient_bounced"
+    if "unsubscrib" in message:
+        return "recipient_unsubscribed"
+    if any(word in message for word in ("blacklist", "blocklist", "blocked", "suppress")):
+        return "recipient_blocked"
+    return None
 
 
 def _frontend_link(path, token):
@@ -100,14 +142,17 @@ def _expires_text(minutes):
     return f"{minutes} minutes"
 
 
-def send_brevo_email(to_email, subject, html_content, text_content, log_context):
+def send_brevo_email(to_email, subject, html_content, text_content, log_context, *, raise_permanent=False):
     """
     The one place that talks to Brevo's transactional-email HTTP API — used
     instead of Django's EMAIL_BACKEND/SMTP because Render blocks outbound
     SMTP ports on free instances while HTTPS always works. Returns True only
-    if Brevo accepted the message (2xx); never raises. Reads nothing but
+    if Brevo accepted the message (2xx). Reads nothing but
     BREVO_API_KEY/BREVO_SENDER_EMAIL/BREVO_SENDER_NAME from settings, so
-    switching keys or providers is purely a configuration change.
+    switching keys or providers is purely a configuration change. HTTP
+    acceptance is not mailbox delivery. Retrying callers may opt into a
+    typed exception for permanent recipient failures; ordinary callers keep
+    the existing boolean contract.
 
     Logs only structural outcomes — the status and recognized error code —
     never the API key, the recipient's link/token, or the
@@ -121,6 +166,17 @@ def send_brevo_email(to_email, subject, html_content, text_content, log_context)
     if settings.BREVO_SENDER_NAME:
         sender["name"] = settings.BREVO_SENDER_NAME
 
+    payload = {
+        "sender": sender,
+        "to": [{"email": to_email}],
+        "subject": subject,
+        "htmlContent": html_content,
+        "textContent": text_content,
+    }
+    purpose = re.search(r"(?:^|\s)purpose=([a-z_]{1,40})(?:\s|$)", log_context)
+    if purpose:
+        payload["tags"] = [purpose.group(1)]
+
     try:
         response = requests.post(
             BREVO_API_URL,
@@ -129,13 +185,7 @@ def send_brevo_email(to_email, subject, html_content, text_content, log_context)
                 "Content-Type": "application/json",
                 "accept": "application/json",
             },
-            json={
-                "sender": sender,
-                "to": [{"email": to_email}],
-                "subject": subject,
-                "htmlContent": html_content,
-                "textContent": text_content,
-            },
+            json=payload,
             timeout=BREVO_TIMEOUT_SECONDS,
         )
     except requests.Timeout:
@@ -150,6 +200,7 @@ def send_brevo_email(to_email, subject, html_content, text_content, log_context)
             detail = response.json()
             code = detail.get("code") if isinstance(detail, dict) else None
         except ValueError:
+            detail = None
             code = None
         # A provider's free-form message (or unexpected code) can echo the
         # submitted email body, including its credential-bearing link.
@@ -160,9 +211,20 @@ def send_brevo_email(to_email, subject, html_content, text_content, log_context)
             response.status_code,
             safe_code,
         )
+        permanent = _permanent_recipient_failure(detail)
+        if raise_permanent and 400 <= response.status_code < 500 and response.status_code not in (408, 429) and permanent:
+            raise PermanentEmailDeliveryError(permanent)
         return False
 
-    logger.info("email.brevo.sent %s", log_context)
+    try:
+        detail = response.json()
+    except ValueError:
+        detail = None
+    message_id = detail.get("messageId") if isinstance(detail, dict) else None
+    # Only the provider's bounded message-id syntax is safe diagnostic data;
+    # malformed responses must never echo message bodies or credentials.
+    safe_message_id = message_id if isinstance(message_id, str) and BREVO_MESSAGE_ID_RE.fullmatch(message_id) else "unavailable"
+    logger.info("email.brevo.accepted %s status=%s message_id=%s", log_context, response.status_code, safe_message_id)
     return True
 
 

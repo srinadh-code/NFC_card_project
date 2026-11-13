@@ -1,4 +1,7 @@
+from collections.abc import Mapping
+
 from django.http import HttpResponse
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 from common.permissions import IsRecipientCustomer
@@ -15,7 +18,14 @@ class LeadSubmitThrottle(OtpRequestThrottle):
     scope = "lead_submit"
 
     def get_cache_key(self, request, view):
-        username = (request.data.get("username") or "").strip().lower()
+        if not isinstance(request.data, Mapping):
+            return None
+        try:
+            # Match submission coercion: numeric JSON slugs share the same budget.
+            value = SubmitLeadSerializer().fields["username"].run_validation(request.data.get("username"))
+        except ValidationError:
+            return None
+        username = value.strip().lower()
         if not username:
             return None
         return self.cache_format % {"scope": self.scope, "ident": username}

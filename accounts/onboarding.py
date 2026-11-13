@@ -31,6 +31,7 @@ from django.db import IntegrityError, connection, transaction
 from django.template.loader import render_to_string
 from django.utils import timezone
 
+from .emails import PermanentEmailDeliveryError
 from .models import CustomerOnboarding, EmailOTP, User
 
 logger = logging.getLogger("accounts.onboarding")
@@ -169,8 +170,7 @@ def _send_via_django(to_email, subject, html, text):
     connection_, from_email = _email_connection_and_sender()
     message = EmailMultiAlternatives(subject, text, from_email, [to_email], connection=connection_)
     message.attach_alternative(html, "text/html")
-    message.send(fail_silently=False)
-    return True
+    return message.send(fail_silently=False) > 0
 
 
 def send_email(to_email, subject, html, text, log_context):
@@ -178,12 +178,14 @@ def send_email(to_email, subject, html, text, log_context):
     Brevo is missing or rejects the message (e.g. an invalid API key) and
     SMTP is configured, SMTP is tried next; otherwise Django's mail path
     (console locally, locmem in tests). Returns True on success; raises on an
-    SMTP error. Never logs the body. send_brevo_email logs Brevo's own
+    SMTP error or permanent recipient rejection. A permanently blocked
+    recipient is never retried through SMTP. Never logs the body.
+    send_brevo_email logs Brevo's own
     rejection status and recognized error code for diagnosis."""
     from .emails import send_brevo_email
 
     if settings.BREVO_API_KEY:
-        if send_brevo_email(to_email, subject, html, text, log_context):
+        if send_brevo_email(to_email, subject, html, text, log_context, raise_permanent=True):
             return True
         if not smtp_configured():
             return False
@@ -247,6 +249,11 @@ def deliver_activation_email(onboarding_id, raw_token):
         try:
             ok = _send(user, ACTIVATION_SUBJECT, html, text)
             error_text = "" if ok else "Email provider rejected the message"
+        except PermanentEmailDeliveryError as exc:
+            error_text = exc.code
+            CustomerOnboarding.objects.filter(pk=onboarding.pk).update(email_attempts=onboarding.email_attempts + attempt)
+            logger.warning("onboarding.email_failed user_id=%s attempt=%s reason=%s", user.pk, attempt, error_text)
+            break
         except Exception as exc:  # noqa: BLE001 — recorded, never propagated
             ok, error_text = False, type(exc).__name__
         CustomerOnboarding.objects.filter(pk=onboarding.pk).update(email_attempts=onboarding.email_attempts + attempt)
@@ -373,6 +380,9 @@ def deliver_card_ready_email(recipient_id):
             try:
                 ok = send_email(user.email, CARD_READY_SUBJECT, html, text, f"purpose=card_ready user_id={user.pk}")
                 error_text = "" if ok else "Email provider rejected the message"
+            except PermanentEmailDeliveryError as exc:
+                error_text = exc.code
+                break
             except Exception as exc:  # noqa: BLE001 — recorded, never propagated
                 ok, error_text = False, type(exc).__name__
             if ok:
@@ -528,6 +538,9 @@ def deliver_purchaser_setup_email(user_id, raw_token):
             time.sleep(delay)
         try:
             delivered = send_email(user.email, context["subject"], html, text, f"purpose=purchaser_setup user_id={user.pk}")
+        except PermanentEmailDeliveryError as exc:
+            logger.warning("purchaser.setup.email_failed user_id=%s reason=%s", user.pk, exc.code)
+            return False
         except Exception as exc:
             delivered = False
             logger.warning("purchaser.setup.email_failed user_id=%s reason=%s", user.pk, type(exc).__name__)

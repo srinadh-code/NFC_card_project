@@ -181,7 +181,7 @@ def _get_json(url, params, label):
         response.raise_for_status()
         return response.json()
     except (requests.RequestException, ValueError) as exc:
-        logger.warning("Geocoding request failed for %s: %s", label, exc)
+        logger.warning("Geocoding request failed operation=%s error=%s", label, type(exc).__name__)
         raise GeocodingUnavailable from exc
 
 
@@ -196,7 +196,7 @@ def _fetch_reverse(lat, lng):
             return _get_json(
                 REVERSE_URL,
                 {"lat": lat, "lon": lng, "format": "jsonv2", "addressdetails": 1, "zoom": 18, "accept-language": "en"},
-                f"reverse {lat},{lng}",
+                "reverse",
             )
         finally:
             _last_reverse_call = time.monotonic()
@@ -213,9 +213,9 @@ def _fetch_search(query, bias):
     }
     if bias:
         params["lat"], params["lon"] = bias
-    data = _get_json(SEARCH_URL, params, f"search {query!r}")
+    data = _get_json(SEARCH_URL, params, "search")
     if not isinstance(data, dict) or not isinstance(data.get("features"), list):
-        logger.warning("Unexpected geocoding search response for %r: %r", query, data)
+        logger.warning("Unexpected geocoding search response")
         raise GeocodingUnavailable
     return data["features"]
 

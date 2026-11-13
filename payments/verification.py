@@ -46,10 +46,13 @@ def _digest(value):
 
 
 def normalize_destination(channel, destination):
-    destination = (destination or "").strip()
+    if not isinstance(destination, str):
+        raise VerificationError("Please enter a valid email address." if channel == CheckoutVerification.Channel.EMAIL
+                                else "Please enter a valid 10-digit mobile number.", code="invalid_destination")
+    destination = destination.strip()
     if channel == CheckoutVerification.Channel.EMAIL:
         destination = destination.lower()
-        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", destination):
+        if len(destination) > 254 or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", destination):
             raise VerificationError("Please enter a valid email address.", code="invalid_destination")
         return destination
     digits = re.sub(r"\D", "", destination)
@@ -68,6 +71,7 @@ DELIVERY_FAILED_MESSAGE = (
 def _deliver_email(email, code):
     import logging
 
+    from accounts.emails import PermanentEmailDeliveryError
     from accounts.onboarding import real_delivery_available, send_email
 
     if not real_delivery_available():
@@ -89,8 +93,11 @@ def _deliver_email(email, code):
             render_to_string("payments/emails/checkout_otp.txt", context),
             "purpose=checkout_otp",
         )
-    except Exception as exc:  # SMTP errors — logged by class only, never the code
-        logging.getLogger("payments.verification").error("checkout_otp.smtp_failed error=%s", type(exc).__name__)
+    except PermanentEmailDeliveryError as exc:
+        logging.getLogger("payments.verification").warning("checkout_otp.email_rejected reason=%s", exc.code)
+        ok = False
+    except Exception as exc:  # Transport failures — class only, never the code
+        logging.getLogger("payments.verification").error("checkout_otp.email_failed error=%s", type(exc).__name__)
         ok = False
     if not ok:
         raise VerificationError(DELIVERY_FAILED_MESSAGE, code="delivery_failed", status=502)

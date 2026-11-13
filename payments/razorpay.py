@@ -77,7 +77,12 @@ def create_order(amount_paise, *, receipt, notes=None, currency="INR"):
 
 
 def _matches(expected_hex, signature):
-    return bool(signature) and hmac.compare_digest(expected_hex, str(signature))
+    provided = str(signature or "")
+    # compare_digest rejects non-ASCII text with TypeError; a malformed
+    # public signature must fail verification rather than raise a 500.
+    if len(provided) != len(expected_hex) or not provided.isascii():
+        return False
+    return hmac.compare_digest(expected_hex, provided)
 
 
 def verify_payment_signature(razorpay_order_id, razorpay_payment_id, signature):

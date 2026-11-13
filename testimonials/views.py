@@ -65,7 +65,7 @@ class PublicTestimonialListAPIView(APIView):
     def get(self, request):
         qs = Testimonial.objects.filter(
             status=Testimonial.Status.APPROVED, is_active=True
-        ).order_by("-created_at")
+        ).order_by("-created_at", "-pk")
 
         limit = request.query_params.get("limit")
         if limit:

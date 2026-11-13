@@ -1,3 +1,5 @@
+from collections.abc import Mapping
+
 from django.db import transaction
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -66,7 +68,11 @@ class OwnedByProfileMixin:
         serializer.save(profile=profile)
 
     def _reorder(self, request):
+        if not isinstance(request.data, Mapping):
+            return error("`order` must be a list of integer ids.", status=400)
         ids = request.data.get("order", [])
+        if not isinstance(ids, list) or any(type(item_id) is not int for item_id in ids):
+            return error("`order` must be a list of integer ids.", status=400)
         owned_ids = set(self.get_queryset().values_list("id", flat=True))
         for index, item_id in enumerate(ids):
             if item_id in owned_ids:
@@ -114,7 +120,7 @@ class CustomFieldViewSet(OwnedByProfileMixin, viewsets.ModelViewSet):
 
         Body: {"fields": [{"id"?: int, "label": str, "value": str}, ...]}
         """
-        items = request.data.get("fields")
+        items = request.data.get("fields") if isinstance(request.data, Mapping) else None
         if not isinstance(items, list):
             return error("Expected a list of fields.", errors={"fields": ["Expected a list of fields."]})
         serializer = CustomFieldBulkItemSerializer(data=items, many=True)
