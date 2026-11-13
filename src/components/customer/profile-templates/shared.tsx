@@ -2,6 +2,7 @@ import { Briefcase, FileText, Link2, Newspaper, ShoppingBag, type LucideIcon } f
 import { SOCIAL_BRAND } from "@/components/customer/brand-icons"
 import type { Profile } from "@/types"
 import { getPublicCustomFields } from "@/lib/custom-fields"
+export { buildVCard, downloadVCard } from "@/lib/vcard"
 
 /** Every profile-card template renders from this same shape — real profile
  * data only, never placeholder content (unlike the /shop marketing mockups,
@@ -18,36 +19,6 @@ export interface TemplateProps {
 
 export function digitsOnly(phone: string) {
   return phone.replace(/[^0-9]/g, "")
-}
-
-export function buildVCard(profile: Profile, includeContact: boolean) {
-  const lines = [
-    "BEGIN:VCARD",
-    "VERSION:3.0",
-    `FN:${profile.fullName}`,
-    `ORG:${profile.company}`,
-    `TITLE:${profile.designation}`,
-  ]
-  if (includeContact) {
-    if (profile.phone) lines.push(`TEL;TYPE=CELL:${profile.phone}`)
-    if (profile.email) lines.push(`EMAIL:${profile.email}`)
-  }
-  if (profile.address) lines.push(`ADR;TYPE=WORK:;;${profile.address}`)
-  if (profile.website) lines.push(`URL:${profile.website}`)
-  lines.push("END:VCARD")
-  return lines.join("\n")
-}
-
-export function downloadVCard(profile: Profile, includeContact: boolean) {
-  const blob = new Blob([buildVCard(profile, includeContact)], { type: "text/vcard" })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement("a")
-  a.href = url
-  a.download = `${profile.username}.vcf`
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
 }
 
 /** Presentational heuristic only — custom links have no stored "type", so the

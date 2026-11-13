@@ -707,6 +707,7 @@ export default function Checkout() {
       />
 
       <AddressFormDialog
+        checkoutLocation
         open={formOpen}
         onOpenChange={setFormOpen}
         address={editingAddress}

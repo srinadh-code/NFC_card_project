@@ -42,19 +42,6 @@ export function ProtectedRoute({
 
   const authorized = hasValidSession(user, role)
 
-  if (import.meta.env.DEV) {
-    // Temporary, dev-only — traces exactly why a route guard let someone
-    // through or bounced them, per the auth audit that introduced this file.
-    // eslint-disable-next-line no-console
-    console.debug("[ProtectedRoute]", {
-      path: location.pathname,
-      requiredRole: role,
-      hydrated,
-      cachedUserRole: user?.role ?? null,
-      authorized,
-    })
-  }
-
   if (!hydrated) {
     return (
       <div className="flex min-h-screen items-center justify-center">

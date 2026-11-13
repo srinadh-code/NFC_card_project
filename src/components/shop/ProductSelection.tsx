@@ -39,6 +39,7 @@ export function ProductSelection({ products, currency = "INR", onSelect }: Produ
               className="flex aspect-[16/10] items-center justify-center overflow-hidden bg-gradient-to-br from-secondary to-accent"
             >
               <ProductImage
+                reveal
                 url={image?.image_url}
                 alt={image?.alt_text || product.name}
                 width={900}

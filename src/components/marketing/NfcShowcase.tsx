@@ -1,5 +1,6 @@
 import { Nfc } from "lucide-react"
 import { resolveIcon } from "@/lib/icon-map"
+import { AnimatedImage } from "@/components/marketing/AnimatedImage"
 
 interface NfcShowcasePoint {
   icon: string
@@ -24,7 +25,7 @@ export default function NfcShowcase({ badge, heading, description, points, image
           <div className="absolute size-72 rounded-full bg-gradient-to-br from-primary/10 via-primary/10 to-[var(--public-accent)]/10 blur-3xl" />
 
           {imageUrl ? (
-            <img
+            <AnimatedImage
               src={imageUrl}
               alt="VR's GATEWAY — how it works"
               className="hero-image-soft-edges relative z-10 max-h-[460px] w-full max-w-sm object-contain"

@@ -20,6 +20,7 @@ import { NfcCardFace } from "@/components/marketing/NfcCardShowcase"
 import DashboardMockup from "@/components/marketing/DashboardMockup"
 import ProfilePhonePreview from "@/components/marketing/ProfilePhonePreview"
 import { Reveal } from "@/components/marketing/Reveal"
+import { AnimatedImage } from "@/components/marketing/AnimatedImage"
 import { resolveIcon } from "@/lib/icon-map"
 import { publicWebsiteApi } from "@/lib/contentApi"
 import { usePublicTestimonials } from "@/hooks/useTestimonials"
@@ -140,12 +141,12 @@ export default function Features() {
             <div className="pointer-events-none absolute size-96 rounded-full bg-gradient-to-br from-primary/20 via-[var(--public-bright)]/15 to-transparent blur-3xl" />
 
             {page?.hero_image_url ? (
-              <div className="relative z-10 w-full max-w-lg animate-hero-enter sm:max-w-xl lg:max-w-[42rem]">
+              <div className="relative z-10 w-full max-w-lg sm:max-w-xl lg:max-w-[42rem]">
                 <div
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-[6%] rounded-full bg-gradient-to-br from-[var(--brand-2)]/50 via-[var(--public-bright)]/30 to-transparent blur-3xl animate-hero-glow"
                 />
-                <img
+                <AnimatedImage
                   src={page.hero_image_url}
                   alt=""
                   className="hero-image-soft-edges relative w-full object-contain animate-hero-float"
@@ -335,25 +336,27 @@ export default function Features() {
                   )}
                 </Reveal>
 
-                <Reveal variant="scale" delayMs={100}>
-                  <div className="relative">
-                    {data.analytics.dashboard_image_url ? (
-                      <img
+                {data.analytics.dashboard_image_url ? (
+                  <div>
+                    <div className="relative">
+                      <AnimatedImage
                         src={data.analytics.dashboard_image_url}
                         alt=""
                         className="w-full rounded-2xl object-contain shadow-2xl"
                       />
-                    ) : (
-                      <>
-                        <DashboardMockup />
-                        <ProfilePhonePreview className="absolute -bottom-10 -right-6 hidden rotate-3 animate-float-slow sm:block" />
-                        <p className="absolute -bottom-14 right-32 hidden max-w-[110px] -rotate-2 text-right font-serif text-xs italic text-muted-foreground lg:block">
-                          Your profile, your rules.
-                        </p>
-                      </>
-                    )}
+                    </div>
                   </div>
-                </Reveal>
+                ) : (
+                  <Reveal variant="scale" delayMs={100}>
+                    <div className="relative">
+                      <DashboardMockup />
+                      <ProfilePhonePreview className="absolute -bottom-10 -right-6 hidden rotate-3 animate-float-slow sm:block" />
+                      <p className="absolute -bottom-14 right-32 hidden max-w-[110px] -rotate-2 text-right font-serif text-xs italic text-muted-foreground lg:block">
+                        Your profile, your rules.
+                      </p>
+                    </div>
+                  </Reveal>
+                )}
               </div>
             </div>
           </div>
@@ -376,25 +379,25 @@ export default function Features() {
                 </h2>
                 <p className="mt-4 text-muted-foreground">{data.showcase.description}</p>
               </Reveal>
-              <Reveal variant="scale" delayMs={100}>
+              <div>
                 <div className="relative flex items-center justify-center py-6">
                   <div className="pointer-events-none absolute size-72 rounded-full bg-gradient-to-br from-primary/15 via-[var(--public-bright)]/15 to-[var(--public-soft)]/10 blur-3xl" />
                   {data.showcase.main_image_url && (
-                    <img
+                    <AnimatedImage
                       src={data.showcase.main_image_url}
                       alt=""
                       className="relative z-10 w-full max-w-sm rounded-[24px] object-contain shadow-2xl"
                     />
                   )}
                   {data.showcase.card_image_url && (
-                    <img
+                    <AnimatedImage
                       src={data.showcase.card_image_url}
                       alt=""
                       className="absolute bottom-0 right-0 z-20 w-32 rotate-6 rounded-2xl object-contain shadow-xl sm:w-40"
                     />
                   )}
                 </div>
-              </Reveal>
+              </div>
             </div>
           </div>
         </section>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { CheckCircle2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -59,10 +59,35 @@ export function OtpVerifier({
   const [busy, setBusy] = useState<"send" | "verify" | null>(null)
   const [message, setMessage] = useState<{ tone: "error" | "info"; text: string } | null>(null)
   const [emailTouched, setEmailTouched] = useState(false)
+  const inFlight = useRef(false)
+  const mounted = useRef(false)
+  const requestVersion = useRef(0)
   const id = `otp-${channel.toLowerCase()}`
   const isSms = channel === "SMS"
   const destination = isSms ? value.replace(/\D/g, "") : value.trim()
+  const requestIdentity = JSON.stringify([channel, isSms ? destination : destination.toLowerCase(), sessionRef])
+  const currentIdentity = useRef(requestIdentity)
+  currentIdentity.current = requestIdentity
   const emailError = strictEmailValidation && !isSms && emailTouched ? checkoutEmailError(destination) : null
+
+  useEffect(() => {
+    mounted.current = true
+    requestVersion.current += 1
+    inFlight.current = false
+    setBusy(null)
+    setSent(false)
+    setCode("")
+    setExpiresIn(0)
+    setMessage(null)
+    return () => {
+      mounted.current = false
+      requestVersion.current += 1
+    }
+  }, [requestIdentity])
+
+  function isCurrentRequest(version: number, identity: string) {
+    return mounted.current && version === requestVersion.current && identity === currentIdentity.current
+  }
 
   useEffect(() => {
     if (cooldown <= 0 && expiresIn <= 0) return
@@ -80,6 +105,7 @@ export function OtpVerifier({
   }
 
   async function send() {
+    if (!mounted.current || disabled || busy !== null || inFlight.current || cooldown > 0) return
     const invalid = validDestination()
     if (invalid) {
       if (strictEmailValidation && !isSms) {
@@ -90,10 +116,14 @@ export function OtpVerifier({
       setMessage({ tone: "error", text: invalid })
       return
     }
+    const version = ++requestVersion.current
+    const identity = requestIdentity
+    inFlight.current = true
     setBusy("send")
     setMessage(null)
     try {
       const result = await paymentsApi.sendOtp(channel, destination, sessionRef)
+      if (!isCurrentRequest(version, identity)) return
       // Only now — the backend confirmed the code was sent — does the
       // code box appear.
       setSent(true)
@@ -107,27 +137,46 @@ export function OtpVerifier({
           : "We've emailed you a 6-digit code. It expires in 5 minutes.",
       })
     } catch (err) {
-      if (err instanceof ApiError && typeof err.errors?.retry_after === "number") setCooldown(err.errors.retry_after)
+      if (!isCurrentRequest(version, identity)) return
+      if (err instanceof ApiError) {
+        const retryAfter = Math.max(
+          err.retryAfterSeconds ?? 0,
+          typeof err.errors?.retry_after === "number" ? err.errors.retry_after : 0,
+        )
+        if (Number.isFinite(retryAfter) && retryAfter > 0) setCooldown(Math.ceil(retryAfter))
+      }
       setMessage({ tone: "error", text: err instanceof ApiError ? err.message : "We couldn't send the code. Please try again." })
     } finally {
-      setBusy(null)
+      if (isCurrentRequest(version, identity)) {
+        inFlight.current = false
+        setBusy(null)
+      }
     }
   }
 
   async function verify() {
+    if (!mounted.current || disabled || busy !== null || inFlight.current || !sent || expiresIn <= 0) return
     if (!/^\d{6}$/.test(code)) {
       setMessage({ tone: "error", text: "Enter the 6-digit code." })
       return
     }
+    const version = ++requestVersion.current
+    const identity = requestIdentity
+    inFlight.current = true
     setBusy("verify")
     setMessage(null)
     try {
       const result = await paymentsApi.verifyOtp(channel, destination, code, sessionRef)
+      if (!isCurrentRequest(version, identity)) return
       onVerified(result.verification_token, destination)
     } catch (err) {
+      if (!isCurrentRequest(version, identity)) return
       setMessage({ tone: "error", text: err instanceof ApiError ? err.message : "We couldn't check the code. Please try again." })
     } finally {
-      setBusy(null)
+      if (isCurrentRequest(version, identity)) {
+        inFlight.current = false
+        setBusy(null)
+      }
     }
   }
 
@@ -226,7 +275,7 @@ export function OtpVerifier({
           <Button
             type="button"
             className="shrink-0"
-            disabled={busy !== null || code.length !== 6 || expiresIn === 0}
+            disabled={disabled || busy !== null || code.length !== 6 || expiresIn === 0}
             onClick={verify}
           >
             {busy === "verify" ? <Loader2 className="animate-spin" /> : null}

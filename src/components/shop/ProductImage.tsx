@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { NfcCardFace } from "@/components/marketing/NfcCardShowcase"
+import { AnimatedImage } from "@/components/marketing/AnimatedImage"
 import { cloudinaryUrl } from "@/lib/order-card-pricing"
 import type { OrderCardTone } from "@/types/content"
 
@@ -14,6 +15,7 @@ export function ProductImage({
   className,
   mockupClassName = "h-40 w-64 -rotate-3",
   loading,
+  reveal = false,
 }: {
   url?: string
   alt: string
@@ -22,6 +24,7 @@ export function ProductImage({
   className?: string
   mockupClassName?: string
   loading?: "lazy" | "eager"
+  reveal?: boolean
 }) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null)
   if (!url || failedUrl === url) {
@@ -31,5 +34,5 @@ export function ProductImage({
       </div>
     )
   }
-  return <img src={cloudinaryUrl(url, width)} alt={alt} loading={loading} className={className} onError={() => setFailedUrl(url)} />
+  return <AnimatedImage reveal={reveal} src={cloudinaryUrl(url, width)} alt={alt} loading={loading} className={className} onError={() => setFailedUrl(url)} />
 }

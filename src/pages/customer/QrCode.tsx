@@ -14,6 +14,7 @@ import { useEnsuredProfile } from "@/hooks/use-ensured-profile"
 import { downloadQrPng, downloadQrSvg, downloadQrPdf, shareOrCopyLink } from "@/components/customer/qr-utils"
 import { qrApi, ordersApi } from "@/lib/api"
 import { customerOrderKeys } from "@/lib/customer-order-queries"
+import { populateQrPrintDocument } from "@/lib/qr-print"
 import { NEXORA_CARD_TYPES } from "@/data/constants"
 
 // The Google Review Card is a separate purchasable product (see /shop), not
@@ -38,17 +39,7 @@ function printQr(dataUrl: string, title: string) {
     document.body.removeChild(iframe)
     return
   }
-  doc.open()
-  doc.write(`
-    <html>
-      <head><title>${title}</title></head>
-      <body style="margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;">
-        <img src="${dataUrl}" style="width:320px;height:320px;" />
-        <p style="margin-top:16px;font-size:14px;color:#334155;">${title}</p>
-      </body>
-    </html>
-  `)
-  doc.close()
+  populateQrPrintDocument(doc, dataUrl, title)
   iframe.contentWindow?.focus()
   iframe.contentWindow?.print()
   setTimeout(() => document.body.removeChild(iframe), 1000)

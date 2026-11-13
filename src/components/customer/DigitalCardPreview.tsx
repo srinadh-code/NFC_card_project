@@ -22,6 +22,7 @@ import { SOCIAL_BRAND } from "@/components/customer/brand-icons"
 import { cn } from "@/lib/utils"
 import type { Profile } from "@/types"
 import { getPublicCustomFields } from "@/lib/custom-fields"
+import { downloadVCard } from "@/lib/vcard"
 import { AdditionalInfoSection } from "./profile-templates/AdditionalInfoSection"
 
 interface DigitalCardPreviewProps {
@@ -36,36 +37,6 @@ interface DigitalCardPreviewProps {
 
 function digitsOnly(phone: string) {
   return phone.replace(/[^0-9]/g, "")
-}
-
-function buildVCard(profile: Profile, includeContact: boolean) {
-  const lines = [
-    "BEGIN:VCARD",
-    "VERSION:3.0",
-    `FN:${profile.fullName}`,
-    `ORG:${profile.company}`,
-    `TITLE:${profile.designation}`,
-  ]
-  if (includeContact) {
-    if (profile.phone) lines.push(`TEL;TYPE=CELL:${profile.phone}`)
-    if (profile.email) lines.push(`EMAIL:${profile.email}`)
-  }
-  if (profile.address) lines.push(`ADR;TYPE=WORK:;;${profile.address}`)
-  if (profile.website) lines.push(`URL:${profile.website}`)
-  lines.push("END:VCARD")
-  return lines.join("\n")
-}
-
-function downloadVCard(profile: Profile, includeContact: boolean) {
-  const blob = new Blob([buildVCard(profile, includeContact)], { type: "text/vcard" })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement("a")
-  a.href = url
-  a.download = `${profile.username}.vcf`
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
 }
 
 /** Presentational heuristic only — custom links have no stored "type", so the

@@ -73,9 +73,24 @@ export function ForgotPasswordDialog({
   const [otpExpiresAt, setOtpExpiresAt] = useState<string | null>(null)
   const [remainingSeconds, setRemainingSeconds] = useState(0)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const requestVersion = useRef(0)
+  const requestPending = useRef(false)
+  const openRef = useRef(open)
+  openRef.current = open
   const otpExpired = otpExpiresAt !== null && remainingSeconds <= 0
 
+  function invalidateRequest() {
+    requestVersion.current += 1
+    requestPending.current = false
+    setSubmitting(false)
+  }
+
+  function isCurrentRequest(version: number) {
+    return version === requestVersion.current && openRef.current
+  }
+
   function reset() {
+    invalidateRequest()
     setStep(1)
     setEmail("")
     setOtp("")
@@ -94,10 +109,15 @@ export function ForgotPasswordDialog({
 
   useEffect(() => {
     return () => {
+      requestVersion.current += 1
       if (cooldownRef.current) clearInterval(cooldownRef.current)
       if (countdownRef.current) clearInterval(countdownRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (!open) reset()
+  }, [open])
 
   // Restarts the mm:ss countdown from a fresh backend expires_at — called
   // after both the initial send and every resend, since a resend supersedes
@@ -131,48 +151,66 @@ export function ForgotPasswordDialog({
 
   async function handleRequestCode(e: React.FormEvent) {
     e.preventDefault()
-    if (!email.trim()) return
+    if (!open || requestPending.current || submitting || !email.trim()) return
+    const version = ++requestVersion.current
+    requestPending.current = true
     setSubmitting(true)
     try {
       const { expires_at } = await authApi.forgotPassword({ email: email.trim() })
+      if (!isCurrentRequest(version)) return
       toast.success("If an account exists for this email, an OTP has been sent to it.")
       setStep(2)
       startOtpCountdown(expires_at)
       startResendCooldown()
-    } catch {
-      toast.error("Something went wrong. Please try again.")
+    } catch (err) {
+      if (!isCurrentRequest(version)) return
+      toast.error(err instanceof ApiError ? err.message : "Something went wrong. Please try again.")
     } finally {
-      setSubmitting(false)
+      if (version === requestVersion.current) {
+        requestPending.current = false
+        setSubmitting(false)
+      }
     }
   }
 
   async function handleResend() {
-    if (resendCooldown > 0 || submitting) return
+    if (!open || requestPending.current || resendCooldown > 0 || submitting) return
+    const version = ++requestVersion.current
+    requestPending.current = true
     setSubmitting(true)
     try {
       const result = await authApi.resendOtp({ email: email.trim(), purpose: "RESET" })
+      if (!isCurrentRequest(version)) return
       toast.success("A new code has been sent.")
       setOtp("")
       setOtpError(null)
       if (result?.expires_at) startOtpCountdown(result.expires_at)
       startResendCooldown()
     } catch (err) {
+      if (!isCurrentRequest(version)) return
       toast.error(err instanceof ApiError ? err.message : "Couldn't resend the code. Please try again.")
     } finally {
-      setSubmitting(false)
+      if (version === requestVersion.current) {
+        requestPending.current = false
+        setSubmitting(false)
+      }
     }
   }
 
   async function handleVerifyOtp(e: React.FormEvent) {
     e.preventDefault()
-    if (otp.length !== 6 || otpExpired) return
+    if (!open || requestPending.current || submitting || otp.length !== 6 || otpExpired) return
+    const version = ++requestVersion.current
+    requestPending.current = true
     setOtpError(null)
     setSubmitting(true)
     try {
       const { reset_token } = await authApi.verifyResetOtp({ email: email.trim(), otp })
+      if (!isCurrentRequest(version)) return
       setResetToken(reset_token)
       setStep(3)
     } catch (err) {
+      if (!isCurrentRequest(version)) return
       // Shown directly under the OTP field, not as a toast. The backend's
       // own message is used verbatim (VerifyResetOtpView.GENERIC_ERROR
       // deliberately covers wrong/expired/already-used with one message,
@@ -181,13 +219,16 @@ export function ForgotPasswordDialog({
       // which would risk telling the user the wrong thing.
       setOtpError(err instanceof ApiError ? err.message : "Invalid or expired code. Please check the code and try again.")
     } finally {
-      setSubmitting(false)
+      if (version === requestVersion.current) {
+        requestPending.current = false
+        setSubmitting(false)
+      }
     }
   }
 
   async function handleReset(e: React.FormEvent) {
     e.preventDefault()
-    if (!newPassword || !confirmPassword) return
+    if (!open || requestPending.current || submitting || !newPassword || !confirmPassword) return
 
     // Password-field validation is shown inline under the relevant field,
     // not as a toast — the same shared policy Create Account uses (see
@@ -204,6 +245,8 @@ export function ForgotPasswordDialog({
       return
     }
 
+    const version = ++requestVersion.current
+    requestPending.current = true
     setSubmitting(true)
     try {
       await authApi.resetPassword({
@@ -211,10 +254,12 @@ export function ForgotPasswordDialog({
         new_password: newPassword,
         confirm_password: confirmPassword,
       })
+      if (!isCurrentRequest(version)) return
       toast.success("Password reset. You can now log in.")
       onOpenChange(false)
       reset()
     } catch (err) {
+      if (!isCurrentRequest(version)) return
       // Backend validation errors are mapped to the field they belong to
       // (e.g. a rule the frontend's copy of the policy didn't catch) and
       // shown inline, same as a client-side failure — only a genuinely
@@ -230,7 +275,10 @@ export function ForgotPasswordDialog({
         toast.error(err instanceof ApiError ? err.message : "Couldn't reset your password. Please request a new code.")
       }
     } finally {
-      setSubmitting(false)
+      if (version === requestVersion.current) {
+        requestPending.current = false
+        setSubmitting(false)
+      }
     }
   }
 
@@ -260,7 +308,7 @@ export function ForgotPasswordDialog({
                 id="forgot-email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => { invalidateRequest(); setEmail(e.target.value) }}
                 required
               />
             </div>

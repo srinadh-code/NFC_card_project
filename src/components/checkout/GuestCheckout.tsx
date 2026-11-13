@@ -128,6 +128,8 @@ export function GuestCheckout() {
   const [address, setAddress] = useState<AddressFields>(EMPTY_ADDRESS)
   const [detectingLocation, setDetectingLocation] = useState(false)
   const [locationError, setLocationError] = useState<string | null>(null)
+  const locationRequestRef = useRef(0)
+  const manuallyEditedAddressFields = useRef(new Set<keyof AddressFields>())
   const deliveryDetailsRef = useRef<HTMLElement | null>(null)
   const purchaserDetailsRef = useRef<HTMLElement | null>(null)
   const recipientDetailsRef = useRef<HTMLDivElement | null>(null)
@@ -150,6 +152,11 @@ export function GuestCheckout() {
   const [confirming, setConfirming] = useState(false)
   const [dummyError, setDummyError] = useState<string | null>(null)
 
+  useEffect(() => {
+    // Ignore a pending lookup after leaving checkout.
+    return () => { locationRequestRef.current += 1 }
+  }, [])
+
   const emailReady = isFresh(verifiedEmail)
   const pinOk = validatePincode(address.pincode) === null
   const pinLookup = useQuery({
@@ -165,25 +172,31 @@ export function GuestCheckout() {
   }
 
   function setField<K extends keyof AddressFields>(key: K, value: string) {
+    manuallyEditedAddressFields.current.add(key)
     setAddress((a) => ({ ...a, [key]: value }))
     setErrors((e) => ({ ...e, [key]: undefined }))
     markDetailsChanged()
   }
 
   async function detectCurrentLocation() {
+    if (detectingLocation || paying) return
     setLocationError(null)
     if (!navigator.geolocation) {
       setLocationError("Your browser doesn't support location access. Please enter your address manually.")
       return
     }
 
+    const requestId = ++locationRequestRef.current
+    const existingFields = (Object.keys(address) as (keyof AddressFields)[]).filter((key) => address[key].trim())
     setDetectingLocation(true)
     try {
       const detected = await detectAddressFromCurrentLocation(
         navigator.geolocation,
         customerAddressApi.reverseGeocode,
       )
-      setAddress((current) => mergeDetectedAddress(current, detected))
+      if (requestId !== locationRequestRef.current) return
+      const protectedFields = new Set([...existingFields, ...manuallyEditedAddressFields.current])
+      setAddress((current) => mergeDetectedAddress(current, detected, protectedFields))
       setErrors((current) => {
         const next = { ...current }
         for (const field of [
@@ -196,12 +209,14 @@ export function GuestCheckout() {
           "state",
           "pincode",
         ] as const) {
-          if (detected[field]?.trim()) next[field] = undefined
+          if (detected[field]?.trim() && !protectedFields.has(field)) next[field] = undefined
         }
         return next
       })
       markDetailsChanged()
+      toast.success("Available address details filled. Please check them and add your house or flat number.")
     } catch (error) {
+      if (requestId !== locationRequestRef.current) return
       setLocationError(
         error instanceof CurrentLocationError
           ? error.message
@@ -210,7 +225,7 @@ export function GuestCheckout() {
             : "We couldn't look up your location. Please try again, or enter your address manually.",
       )
     } finally {
-      setDetectingLocation(false)
+      if (requestId === locationRequestRef.current) setDetectingLocation(false)
     }
   }
 
@@ -387,6 +402,8 @@ export function GuestCheckout() {
       }
     }
 
+    locationRequestRef.current += 1
+    setDetectingLocation(false)
     setPaying(true)
     try {
       if (useDummy) {
@@ -591,7 +608,7 @@ export function GuestCheckout() {
             <h2 id="details-heading" className="text-lg font-semibold text-foreground">
               Purchaser and delivery details
             </h2>
-            <Button type="button" variant="outline" onClick={detectCurrentLocation} disabled={detectingLocation}>
+            <Button type="button" variant="outline" onClick={detectCurrentLocation} disabled={detectingLocation || paying}>
               {detectingLocation
                 ? <Loader2 className="animate-spin" aria-hidden="true" />
                 : <LocateFixed aria-hidden="true" />}

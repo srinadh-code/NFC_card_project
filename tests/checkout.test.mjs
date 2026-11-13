@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { clampQty, validCardQuantity, resizeRecipients, validateRecipients } from "../src/lib/checkout-recipients.ts"
-import { CurrentLocationError, detectAddressFromCurrentLocation, mergeDetectedAddress } from "../src/lib/checkout-location.ts"
+import { CurrentLocationError, getCurrentCoordinates, detectAddressFromCurrentLocation, mergeDetectedAddress } from "../src/lib/checkout-location.ts"
 
 const recipient = (index = 1) => ({ full_name: `Recipient ${index}`, email: `person${index}@example.com`, phone: "+44 20 7946 0958" })
 
@@ -77,6 +77,17 @@ const detectedAddress = {
   display_name: "12, Abids Road, Hyderabad",
 }
 
+function position(overrides = {}) {
+  return {
+    coords: { latitude: detectedAddress.latitude, longitude: detectedAddress.longitude, accuracy: 20, ...overrides },
+    timestamp: Date.now(),
+  }
+}
+
+function emptyAddress() {
+  return { address_line1: "", address_line2: "", landmark: "", locality: "", city: "", district: "", state: "", pincode: "" }
+}
+
 function fakeGeolocation(result) {
   return {
     getCurrentPosition(success, failure, options) {
@@ -87,9 +98,7 @@ function fakeGeolocation(result) {
 }
 
 test("granted location permission reverse-geocodes coordinates into address fields", async () => {
-  const geolocation = fakeGeolocation((success) => success({
-    coords: { latitude: detectedAddress.latitude, longitude: detectedAddress.longitude },
-  }))
+  const geolocation = fakeGeolocation((success) => success(position()))
   let receivedCoordinates
   const reverseGeocode = async (latitude, longitude) => {
     receivedCoordinates = [latitude, longitude]
@@ -100,7 +109,53 @@ test("granted location permission reverse-geocodes coordinates into address fiel
 
   assert.deepEqual(result, detectedAddress)
   assert.deepEqual(receivedCoordinates, [detectedAddress.latitude, detectedAddress.longitude])
-  assert.deepEqual(geolocation.options, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 })
+  assert.deepEqual(geolocation.options, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 })
+})
+
+test("valid coordinate and precision boundaries remain accepted", async () => {
+  for (const [latitude, longitude, accuracy] of [[90, 180, 100], [-90, -180, 0]]) {
+    const geolocation = fakeGeolocation((success) => success(position({ latitude, longitude, accuracy })))
+    assert.deepEqual(await getCurrentCoordinates(geolocation), { latitude, longitude })
+  }
+})
+
+test("approximate location is rejected before reverse geocoding", async () => {
+  for (const accuracy of [101, 5000, 200000]) {
+    let reverseCalls = 0
+    const geolocation = fakeGeolocation((success) => success(position({ accuracy })))
+    await assert.rejects(detectAddressFromCurrentLocation(geolocation, async () => {
+      reverseCalls++
+      return detectedAddress
+    }), (error) => error instanceof CurrentLocationError && /approximate/i.test(error.message))
+    assert.equal(reverseCalls, 0)
+  }
+})
+
+test("missing or invalid accuracy offers manual entry without reverse geocoding", async () => {
+  for (const accuracy of [undefined, null, -1, Number.NaN, Infinity, "20"]) {
+    let reverseCalls = 0
+    const geolocation = fakeGeolocation((success) => success(position({ accuracy })))
+    await assert.rejects(detectAddressFromCurrentLocation(geolocation, async () => {
+      reverseCalls++
+      return detectedAddress
+    }), (error) => error instanceof CurrentLocationError && /manually/i.test(error.message))
+    assert.equal(reverseCalls, 0)
+  }
+})
+
+test("invalid latitude or longitude never reaches reverse geocoding", async () => {
+  for (const overrides of [
+    { latitude: Number.NaN }, { latitude: Infinity }, { latitude: 91 }, { latitude: -91 },
+    { longitude: Number.NaN }, { longitude: -Infinity }, { longitude: 181 }, { longitude: -181 },
+  ]) {
+    let reverseCalls = 0
+    const geolocation = fakeGeolocation((success) => success(position(overrides)))
+    await assert.rejects(detectAddressFromCurrentLocation(geolocation, async () => {
+      reverseCalls++
+      return detectedAddress
+    }), (error) => error instanceof CurrentLocationError)
+    assert.equal(reverseCalls, 0)
+  }
 })
 
 test("denied, unavailable, and timed-out location requests report distinct errors", async () => {
@@ -124,19 +179,8 @@ test("denied, unavailable, and timed-out location requests report distinct error
 })
 
 test("reverse-geocoding failures are surfaced without changing entered address values", async () => {
-  const geolocation = fakeGeolocation((success) => success({
-    coords: { latitude: detectedAddress.latitude, longitude: detectedAddress.longitude },
-  }))
-  const manuallyEntered = {
-    address_line1: "Manual House 5",
-    address_line2: "",
-    landmark: "",
-    locality: "",
-    city: "",
-    district: "",
-    state: "",
-    pincode: "",
-  }
+  const geolocation = fakeGeolocation((success) => success(position()))
+  const manuallyEntered = { ...emptyAddress(), address_line1: "Manual House 5" }
 
   await assert.rejects(
     detectAddressFromCurrentLocation(geolocation, async () => { throw new Error("reverse service unavailable") }),
@@ -145,17 +189,19 @@ test("reverse-geocoding failures are surfaced without changing entered address v
   assert.equal(manuallyEntered.address_line1, "Manual House 5")
 })
 
-test("detected values fill available fields while preserving fields without reliable results and later edits", () => {
-  const initial = {
-    address_line1: "",
-    address_line2: "",
-    landmark: "",
-    locality: "",
-    city: "",
-    district: "",
-    state: "",
-    pincode: "",
+test("empty reverse-geocoding results require manual entry instead of reporting success", async () => {
+  for (const result of [null, {}, { ...detectedAddress, ...emptyAddress() },
+    { ...detectedAddress, ...Object.fromEntries(Object.keys(emptyAddress()).map((key) => [key, "  "])) }]) {
+    const geolocation = fakeGeolocation((success) => success(position()))
+    await assert.rejects(
+      detectAddressFromCurrentLocation(geolocation, async () => result),
+      (error) => error instanceof CurrentLocationError && /manually/i.test(error.message),
+    )
   }
+})
+
+test("detected values fill available fields while preserving fields without reliable results and later edits", () => {
+  const initial = emptyAddress()
   const detected = mergeDetectedAddress(initial, detectedAddress)
   const edited = { ...detected, address_line1: "Customer's edited house number" }
   const partialResult = mergeDetectedAddress(edited, { ...detectedAddress, address_line1: "", district: "" })
@@ -165,4 +211,28 @@ test("detected values fill available fields while preserving fields without reli
   assert.equal(partialResult.address_line1, "Customer's edited house number")
   assert.equal(partialResult.district, "Hyderabad")
   assert.equal(partialResult.state, "Telangana")
+})
+
+test("detection fills blanks without replacing current manually entered address details", () => {
+  const current = { ...emptyAddress(), address_line1: "House 7, my street", city: "My chosen city", pincode: "500084" }
+  const before = { ...current }
+  const merged = mergeDetectedAddress(current, detectedAddress)
+  assert.equal(merged.address_line1, current.address_line1)
+  assert.equal(merged.city, current.city)
+  assert.equal(merged.pincode, current.pincode)
+  assert.equal(merged.state, detectedAddress.state)
+  assert.equal(merged.locality, detectedAddress.locality)
+  assert.deepEqual(current, before)
+})
+
+test("fields edited or intentionally cleared during detection stay protected", () => {
+  const current = { ...emptyAddress(), city: "A newly edited city" }
+  const protectedFields = new Set(["address_line1", "address_line2", "pincode", "city"])
+  const merged = mergeDetectedAddress(current, detectedAddress, protectedFields)
+  assert.equal(merged.address_line1, "")
+  assert.equal(merged.address_line2, "")
+  assert.equal(merged.pincode, "")
+  assert.equal(merged.city, current.city)
+  assert.equal(merged.district, detectedAddress.district)
+  assert.equal(merged.state, detectedAddress.state)
 })

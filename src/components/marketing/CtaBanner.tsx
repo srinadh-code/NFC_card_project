@@ -2,6 +2,7 @@
 import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { AnimatedImage } from "@/components/marketing/AnimatedImage"
 
 interface CtaBannerProps {
   title: string
@@ -32,7 +33,7 @@ export default function CtaBanner({
   return (
     <section className={cn("relative overflow-hidden bg-gradient-brand px-4 py-16 sm:py-20", className)}>
       {backgroundImageUrl && !imageFailed && (
-        <img
+        <AnimatedImage
           src={backgroundImageUrl}
           alt=""
           aria-hidden="true"

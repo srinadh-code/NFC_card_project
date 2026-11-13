@@ -6,7 +6,6 @@ import type { AdminUser, CustomerUser } from "@/types"
 import {
   ApiError,
   type ApiUser,
-  type AuthPayload,
   type SessionArea,
   authApi,
   clearTokens,
@@ -62,12 +61,6 @@ function createSessionStore(area: SessionArea, persistName: string) {
         bootstrap: async () => {
           const version = getSessionVersion(area)
           const hasToken = Boolean(getAccessToken(area))
-          if (import.meta.env.DEV) {
-            // Temporary, dev-only — see ProtectedRoute.tsx for the matching
-            // route-guard-decision log this pairs with.
-            // eslint-disable-next-line no-console
-            console.debug(`[auth-store:${area}] bootstrap start`, { hasToken })
-          }
           if (!hasToken) {
             // No token — whatever `user` is currently persisted (e.g. left
             // over from a prior session where only the token keys got
@@ -81,18 +74,10 @@ function createSessionStore(area: SessionArea, persistName: string) {
           try {
             const user = await authApi.me(area)
             if (getSessionVersion(area) !== version) return
-            if (import.meta.env.DEV) {
-              // eslint-disable-next-line no-console
-              console.debug(`[auth-store:${area}] bootstrap resolved`, { role: user.role })
-            }
             get().setUser(user)
             set({ hydrated: true })
           } catch {
             if (getSessionVersion(area) !== version) return
-            if (import.meta.env.DEV) {
-              // eslint-disable-next-line no-console
-              console.debug(`[auth-store:${area}] bootstrap failed — clearing session`)
-            }
             clearTokens(area)
             get().setUser(null)
             set({ hydrated: true })
@@ -242,16 +227,6 @@ async function performLogin(email: string, password: string, expectedRole: "ADMI
     const payload = await authApi.login({ email: email.trim().toLowerCase(), password })
     if (getSessionVersion(area) !== version) throw new SessionChangedError()
     if (payload.user.role !== expectedRole) {
-      if (import.meta.env.DEV) {
-        // Temporary, dev-only — pairs with ProtectedRoute.tsx's and
-        // auth-store.ts's bootstrap() logs for tracing auth decisions.
-        // eslint-disable-next-line no-console
-        console.debug("[auth-store] performLogin role mismatch", {
-          expectedRole,
-          actualRole: payload.user.role,
-          userId: payload.user.id,
-        })
-      }
       // Deliberately generic: naming the actual account type here would let
       // an attacker use this form to probe which role a given email/password
       // pair belongs to. Keep this identical to a genuine wrong-password

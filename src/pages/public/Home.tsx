@@ -13,6 +13,7 @@ import CtaBanner from "@/components/marketing/CtaBanner"
 import NfcShowcase from "@/components/marketing/NfcShowcase"
 import TestimonialCard from "@/components/marketing/TestimonialCard"
 import TrustedCompanies from "@/components/marketing/TrustedCompanies"
+import { AnimatedImage } from "@/components/marketing/AnimatedImage"
 import { cardClass } from "@/components/marketing/PremiumCard"
 import { cn } from "@/lib/utils"
 import { resolveIcon } from "@/lib/icon-map"
@@ -160,7 +161,7 @@ export default function Home() {
 
             {/* NFC card image, tilted behind the phone — admin-managed, no fallback graphic */}
             {hero?.nfc_card_image_url && (
-              <img
+              <AnimatedImage
                 src={hero.nfc_card_image_url}
                 alt="VR's GATEWAY NFC card"
                 className="absolute right-0 top-1/2 z-0 w-64 max-h-[380px] -translate-y-1/2 translate-x-12 rotate-6 animate-float-slower object-contain drop-shadow-2xl sm:w-80 sm:max-h-[420px] lg:w-96 lg:translate-x-16"
@@ -169,7 +170,7 @@ export default function Home() {
 
             {/* Phone mockup image — admin-managed */}
             {hero?.phone_image_url ? (
-              <img
+              <AnimatedImage
                 src={hero.phone_image_url}
                 alt="VR's GATEWAY digital profile preview"
                 className="hero-image-soft-edges relative z-10 w-full max-w-[560px] max-h-[560px] object-contain sm:max-h-[620px] lg:max-w-none xl:max-w-[760px]"
@@ -327,7 +328,7 @@ export default function Home() {
               <div className="absolute size-72 rounded-full bg-gradient-to-br from-primary/10 via-[var(--public-bright)]/10 to-[var(--public-soft)]/10 blur-3xl" />
               {/* Admin-managed via Website Content → Home → Our Story Image,
                   falls back to the bundled illustration when unset. */}
-              <img
+              <AnimatedImage
                 src={data?.our_story?.image_url || heroImg}
                 alt="VR's GATEWAY story"
                 className="hero-image-soft-edges relative z-10 w-full max-w-sm"

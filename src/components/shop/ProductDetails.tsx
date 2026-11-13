@@ -3,6 +3,7 @@ import { CheckCircle2, ChevronLeft, ChevronRight, Loader2, Minus, Palette, Plus,
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ProductImage } from "@/components/shop/ProductImage"
+import { AnimatedImage } from "@/components/marketing/AnimatedImage"
 import { cardClass, gradientClass } from "@/components/marketing/PremiumCard"
 import { resolveIcon } from "@/lib/icon-map"
 import { formatCurrency } from "@/lib/mock-api"
@@ -88,7 +89,7 @@ export function ProductDetails({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <div className="lg:col-span-5">
-          <Gallery product={product} />
+          <Gallery product={product} reveal={!preview} />
         </div>
 
         <div className="space-y-5 lg:col-span-4">
@@ -278,7 +279,8 @@ export function ProductDetails({
                 </div>
               </div>
               {product.customisation_image_url && (
-                <img
+                <AnimatedImage
+                  reveal={!preview}
                   src={cloudinaryUrl(product.customisation_image_url, 600)}
                   alt=""
                   loading="lazy"
@@ -332,7 +334,7 @@ export function ProductDetails({
   )
 }
 
-function Gallery({ product }: { product: OrderCardProduct }) {
+function Gallery({ product, reveal }: { product: OrderCardProduct; reveal: boolean }) {
   const images = galleryOf(product)
   const [index, setIndex] = useState(0)
   const current = images[Math.min(index, images.length - 1)]
@@ -342,6 +344,7 @@ function Gallery({ product }: { product: OrderCardProduct }) {
     <div className="space-y-3">
       <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-[24px] border border-border bg-gradient-to-br from-secondary to-accent">
         <ProductImage
+          reveal={reveal}
           url={current?.image_url}
           alt={current?.alt_text || product.name}
           width={1000}

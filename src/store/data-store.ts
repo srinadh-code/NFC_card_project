@@ -6,7 +6,6 @@ import type {
   NfcCard,
   Order,
   OrderStatus,
-  PaymentStatus,
   Profile,
   SocialLink,
   SupportTicket,

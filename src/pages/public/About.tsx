@@ -5,10 +5,10 @@ import PageHeader from "@/components/marketing/PageHeader"
 import NfcCardShowcase from "@/components/marketing/NfcCardShowcase"
 import MissionShowcase from "@/components/marketing/MissionShowcase"
 import StatsShowcaseCard from "@/components/marketing/StatsShowcaseCard"
-import { cardClass } from "@/components/marketing/PremiumCard"
 import { Skeleton } from "@/components/ui/skeleton"
 import { resolveIcon } from "@/lib/icon-map"
 import { publicWebsiteApi } from "@/lib/contentApi"
+import { useImageReveal } from "@/hooks/use-image-reveal"
 
 /** Admin uploads are stored as full-size originals (often multi-MB PNGs);
  * ask Cloudinary for a resized, auto-format/quality version instead. Other
@@ -32,6 +32,8 @@ export default function About() {
   const markFailed = (url: string) => setFailedImages((prev) => [...prev, url])
   const storyImageUrl = usableImage(data?.page.story_image_url)
   const builtImageUrl = usableImage(data?.built_from_experience?.image_url)
+  const storyImageRef = useImageReveal<HTMLDivElement>(storyImageUrl, !isLoading)
+  const builtImageRef = useImageReveal<HTMLDivElement>(builtImageUrl, !isLoading)
 
   if (isError) {
     return (
@@ -113,7 +115,7 @@ export default function About() {
             {isLoading ? (
               <Skeleton className="mx-auto aspect-[4/3] w-full max-w-md rounded-[32px] sm:max-w-lg" />
             ) : storyImageUrl ? (
-              <div className="relative mx-auto aspect-[4/3] w-full max-w-md overflow-hidden rounded-[32px] shadow-[0_20px_60px_rgba(15,23,42,0.12)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.5)] sm:max-w-lg">
+              <div ref={storyImageRef} className="relative mx-auto aspect-[4/3] w-full max-w-md overflow-hidden rounded-[32px] shadow-[0_20px_60px_rgba(15,23,42,0.12)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.5)] sm:max-w-lg">
                 <img
                   src={optimizedImage(storyImageUrl, 1200)}
                   alt="VR's GATEWAY — our story"
@@ -207,7 +209,7 @@ export default function About() {
         </section>
       )}
 
-      {/* Built From Experience + Values */}
+      {/* Built From Experience */}
       <section className="bg-secondary py-10 sm:py-12 lg:py-14">
         <div className="container-page">
           {isLoading ? (
@@ -240,7 +242,7 @@ export default function About() {
               <div className="relative flex items-center justify-center lg:sticky lg:top-28 lg:justify-end lg:self-start">
                 <div className="absolute size-64 rounded-full bg-gradient-to-br from-primary/10 via-[var(--public-bright)]/10 to-[var(--public-soft)]/10 blur-3xl" />
                 {builtImageUrl ? (
-                  <div className="relative z-10 aspect-[4/3] w-full max-w-xl overflow-hidden rounded-[24px] shadow-[0_20px_60px_rgba(15,23,42,0.12)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+                  <div ref={builtImageRef} className="relative z-10 aspect-[4/3] w-full max-w-xl overflow-hidden rounded-[24px] shadow-[0_20px_60px_rgba(15,23,42,0.12)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
                     <img
                       src={optimizedImage(builtImageUrl, 1200)}
                       alt="VR's GATEWAY story"
@@ -275,30 +277,6 @@ export default function About() {
               )}
             </div>
           </div>
-          {isLoading ? (
-            <div className="mt-10 grid grid-cols-1 gap-6 sm:mt-12 sm:grid-cols-2 lg:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-32 w-full" />
-              ))}
-            </div>
-          ) : (
-            data && data.values.length > 0 && (
-              <div className="mt-10 grid grid-cols-1 gap-6 sm:mt-12 sm:grid-cols-2 lg:grid-cols-4">
-                {data.values.map((v) => {
-                  const Icon = resolveIcon(v.icon)
-                  return (
-                    <div key={v.id} className={`${cardClass} p-6 text-center`}>
-                      <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-gradient-brand-br text-white shadow-md">
-                        <Icon className="size-6" />
-                      </div>
-                      <h3 className="mt-4 text-lg font-semibold text-foreground">{v.title}</h3>
-                      <p className="mt-2 text-sm leading-relaxed text-muted-foreground sm:text-base">{v.description}</p>
-                    </div>
-                  )
-                })}
-              </div>
-            )
-          )}
         </div>
       </section>
     </div>

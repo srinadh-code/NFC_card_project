@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react"
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { CheckCircle2, Loader2, MapPin } from "lucide-react"
@@ -167,12 +167,14 @@ export function AddressFormDialog({
   onOpenChange,
   address,
   onSaved,
+  checkoutLocation = false,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   /** Present -> editing this address. Absent -> creating a new one. */
   address?: CustomerAddress | null
   onSaved: (address: CustomerAddress) => void
+  checkoutLocation?: boolean
 }) {
   const [form, setForm] = useState<AddressForm>(EMPTY_FORM)
   const [touched, setTouched] = useState<Partial<Record<FieldKey, boolean>>>({})
@@ -190,6 +192,7 @@ export function AddressFormDialog({
   const [coords, setCoords] = useState<MapPoint | null>(null)
   const [mapFilled, setMapFilled] = useState<Partial<Record<MapField, string>>>({})
   const [mapConflicts, setMapConflicts] = useState<Partial<Record<MapField, string>>>({})
+  const manuallyEditedMapFields = useRef(new Set<MapField>())
 
   useEffect(() => {
     if (open) {
@@ -202,6 +205,7 @@ export function AddressFormDialog({
       setMapOpen(false)
       setMapFilled({})
       setMapConflicts({})
+      manuallyEditedMapFields.current.clear()
       setSetDefault(address?.isDefault ?? false)
       setTouched({})
       setSubmitAttempted(false)
@@ -244,11 +248,13 @@ export function AddressFormDialog({
     if (!pinLocation) return
     setForm((f) => ({
       ...f,
-      state: f.state || pinLocation.state,
+      state: f.state || (checkoutLocation && manuallyEditedMapFields.current.has("state") ? f.state : pinLocation.state),
       district:
-        f.district || (pinLocation.current_districts.length === 1 ? pinLocation.current_districts[0] : f.district),
+        f.district || (checkoutLocation && manuallyEditedMapFields.current.has("district")
+          ? f.district
+          : pinLocation.current_districts.length === 1 ? pinLocation.current_districts[0] : f.district),
     }))
-  }, [pinLocation])
+  }, [pinLocation, checkoutLocation])
 
   const errors = useMemo(() => computeErrors(form), [form])
   const isValid = Object.keys(errors).length === 0
@@ -259,6 +265,7 @@ export function AddressFormDialog({
   const pinVerified = Boolean(pinLocation) && !pinStateMismatch && !pinServerError
 
   function update<K extends FieldKey>(key: K, value: AddressForm[K]) {
+    if (checkoutLocation && (MAP_FIELDS as readonly string[]).includes(key)) manuallyEditedMapFields.current.add(key as MapField)
     setForm((f) => ({ ...f, [key]: value }))
     if ((VERIFIED_FIELDS as readonly string[]).includes(key)) {
       setServerErrors({})
@@ -277,14 +284,18 @@ export function AddressFormDialog({
   // being cleared when the new spot has nothing for it, so details from a
   // previous pin don't linger. Anything the customer typed themselves is
   // kept, and offered as "use map details instead" if it differs.
+  // Public checkout also keeps known values when detection is incomplete
+  // and respects fields the customer deliberately cleared.
   function applyDetected(detected: DetectedAddress) {
-    const values = fromDetected(detected)
+    const values = fromDetected(checkoutLocation ? { ...detected, state: detected.state ?? "" } : detected)
     const next = { ...form }
-    const filled: Partial<Record<MapField, string>> = {}
+    const filled: Partial<Record<MapField, string>> = checkoutLocation ? { ...mapFilled } : {}
     const conflicts: Partial<Record<MapField, string>> = {}
     for (const key of MAP_FIELDS) {
+      if (checkoutLocation && !values[key]?.trim()) continue
       const current = form[key].trim()
-      const ownedByMap = !current || (mapFilled[key] !== undefined && current === mapFilled[key])
+      const ownedByMap = !(checkoutLocation && manuallyEditedMapFields.current.has(key))
+        && (!current || (mapFilled[key] !== undefined && current === mapFilled[key]))
       if (ownedByMap) {
         next[key] = values[key]
         if (values[key]) filled[key] = values[key]
@@ -300,6 +311,9 @@ export function AddressFormDialog({
   }
 
   function applyMapConflicts() {
+    if (checkoutLocation) {
+      for (const key of Object.keys(mapConflicts) as MapField[]) manuallyEditedMapFields.current.delete(key)
+    }
     setForm((f) => ({ ...f, ...mapConflicts }))
     setMapFilled((m) => ({ ...m, ...mapConflicts }))
     setMapConflicts({})
@@ -476,7 +490,7 @@ export function AddressFormDialog({
                     </div>
                   }
                 >
-                  <AddressMapPicker value={coords} onDetected={applyDetected} />
+                  <AddressMapPicker value={coords} onDetected={applyDetected} checkoutLocation={checkoutLocation} />
                 </Suspense>
               </div>
             )}

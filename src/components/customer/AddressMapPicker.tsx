@@ -6,6 +6,7 @@ import { CheckCircle2, Loader2, LocateFixed, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ApiError, customerAddressApi, type DetectedAddress, type PlaceSearchResult } from "@/lib/api"
+import { assertDetectedAddressDetails, CurrentLocationError, getCurrentCoordinates } from "@/lib/checkout-location"
 
 export interface MapPoint {
   lat: number
@@ -54,10 +55,12 @@ function geolocationMessage(err: GeolocationPositionError): string {
 export default function AddressMapPicker({
   value,
   onDetected,
+  checkoutLocation = false,
 }: {
   /** The current pin (e.g. an address saved earlier with a map location). */
   value: MapPoint | null
   onDetected: (address: DetectedAddress) => void
+  checkoutLocation?: boolean
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
@@ -92,6 +95,7 @@ export default function AddressMapPicker({
       .reverseGeocode(point.lat, point.lng)
       .then((detected) => {
         if (requestId !== requestRef.current) return
+        if (checkoutLocation) assertDetectedAddressDetails(detected)
         setStatus({ kind: "detected" })
         onDetectedRef.current(detected)
       })
@@ -100,7 +104,9 @@ export default function AddressMapPicker({
         setStatus({
           kind: "error",
           message:
-            err instanceof ApiError && err.status !== 503 && err.status < 500
+            checkoutLocation && err instanceof CurrentLocationError
+              ? err.message
+              : err instanceof ApiError && err.status !== 503 && err.status < 500
               ? err.message
               : "We couldn't look up this location right now. Please try again, or enter the address manually.",
         })
@@ -109,6 +115,10 @@ export default function AddressMapPicker({
 
   function createMarker(latLng: L.LatLng) {
     const marker = L.marker(latLng, { icon: PIN_ICON, draggable: true, keyboard: true, title: "Delivery location" })
+    if (checkoutLocation) marker.on("dragstart", () => {
+      requestRef.current += 1
+      setStatus({ kind: "idle" })
+    })
     marker.on("dragend", () => {
       const { lat, lng } = marker.getLatLng()
       placeRef.current({ lat, lng })
@@ -140,6 +150,7 @@ export default function AddressMapPicker({
     const observer = new ResizeObserver(() => map.invalidateSize())
     observer.observe(container)
     return () => {
+      if (checkoutLocation) requestRef.current += 1
       observer.disconnect()
       map.remove()
       mapRef.current = null
@@ -197,6 +208,27 @@ export default function AddressMapPicker({
       setStatus({ kind: "error", message: "Your browser doesn't support location access. Please search or tap the map." })
       return
     }
+    if (checkoutLocation) {
+      const map = mapRef.current
+      if (!map) return
+      const requestId = ++requestRef.current
+      setStatus({ kind: "locating" })
+      getCurrentCoordinates(navigator.geolocation)
+        .then((point) => {
+          if (requestId !== requestRef.current || mapRef.current !== map) return
+          placeRef.current({ lat: point.latitude, lng: point.longitude }, PIN_ZOOM)
+        })
+        .catch((err) => {
+          if (requestId !== requestRef.current || mapRef.current !== map) return
+          setStatus({
+            kind: "error",
+            message: err instanceof CurrentLocationError
+              ? err.message
+              : "We couldn't get your current location. Please search for it or enter your address manually.",
+          })
+        })
+      return
+    }
     setStatus({ kind: "locating" })
     navigator.geolocation.getCurrentPosition(
       (pos) => placeRef.current({ lat: pos.coords.latitude, lng: pos.coords.longitude }, PIN_ZOOM),
@@ -221,6 +253,10 @@ export default function AddressMapPicker({
             className="pl-9"
             value={query}
             onChange={(e) => {
+              if (checkoutLocation) {
+                requestRef.current += 1
+                setStatus({ kind: "idle" })
+              }
               setQuery(e.target.value)
               setListOpen(true)
               setActiveIndex(-1)
