@@ -161,6 +161,8 @@ export interface Company extends WithId {
   is_active: boolean
 }
 
+export type PublicCompany = Pick<Company, "id" | "name" | "display_order">
+
 export type StatisticPage = "home" | "about" | "features"
 
 export interface Statistic extends WithId {
@@ -404,7 +406,7 @@ export interface PublicHomePayload {
   bottom_bar: BottomBarItem[]
   how_it_feels: (HowItFeels & { points: HowItFeelsPoint[] }) | null
   our_story: HomeOurStory | null
-  companies: Company[]
+  companies: PublicCompany[]
   statistics: Statistic[]
   values: Value[]
   faqs_preview: Faq[]

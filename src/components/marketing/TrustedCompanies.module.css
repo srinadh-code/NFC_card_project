@@ -1,0 +1,119 @@
+.companies {
+  position: relative;
+  margin-block-start: 1.5rem;
+  min-block-size: 3rem;
+}
+
+.viewport {
+  overflow: hidden;
+  min-inline-size: 0;
+  block-size: 3rem;
+  mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+}
+
+.viewport:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+}
+
+.track {
+  display: flex;
+  inline-size: max-content;
+  animation: trusted-companies-scroll var(--marquee-duration, 60s) linear infinite;
+  will-change: transform;
+}
+
+.group {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: clamp(2.5rem, 5vw, 4rem);
+  padding-inline-end: clamp(2.5rem, 5vw, 4rem);
+  block-size: 3rem;
+}
+
+.company {
+  flex: 0 0 auto;
+  min-inline-size: max(7.5rem, 120px);
+  color: var(--muted-foreground);
+  font-size: clamp(1rem, 1.5vw, 1.25rem);
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+  white-space: nowrap;
+  opacity: 0.76;
+}
+
+.viewport:hover .track,
+.viewport:focus-within .track {
+  animation-play-state: paused;
+}
+
+.accessibleList {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.staticList {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem 2.5rem;
+  min-block-size: 3rem;
+}
+
+.staticList .company {
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+@keyframes trusted-companies-scroll {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewport {
+    display: none;
+  }
+
+  .track {
+    animation: none;
+    transform: none;
+    will-change: auto;
+  }
+
+  .accessibleList {
+    position: static;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem 2.5rem;
+    inline-size: auto;
+    block-size: auto;
+    min-block-size: 3rem;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+  }
+
+  .accessibleList .company {
+    max-inline-size: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+}

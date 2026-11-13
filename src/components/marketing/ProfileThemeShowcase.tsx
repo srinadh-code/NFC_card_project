@@ -24,7 +24,7 @@ const BRAND_MARK = (
 
 function PhoneFrame({ bg, children }: { bg: string; children: React.ReactNode }) {
   return (
-    <div className="relative mx-auto w-full max-w-[220px] rounded-[28px] border-[6px] border-[#0B0F1A] bg-[#0B0F1A] shadow-xl">
+    <div className="original-theme relative mx-auto w-full max-w-[220px] rounded-[28px] border-[6px] border-[#0B0F1A] bg-[#0B0F1A] text-foreground shadow-xl">
       <div className={cn("relative flex h-[340px] flex-col overflow-hidden rounded-[22px]", bg)}>
         {children}
       </div>
@@ -528,7 +528,7 @@ export default function ProfileThemeShowcase({ themes, selectedId, onSelect, pen
                 "relative flex h-full w-full flex-col items-center p-6 text-center",
                 // Whole-card pop on hover (image, name, tagline, border and
                 // shadow move as one) — same for every card, selectable or not.
-                "transform-gpu transition-[translate,scale,box-shadow]! duration-300! ease-out! hover:z-10 hover:-translate-y-1.5 hover:scale-[1.02] hover:shadow-[0_24px_48px_rgba(79,70,229,0.18)] dark:hover:shadow-[0_24px_48px_rgba(139,92,246,0.4)]",
+                "transform-gpu transition-[translate,scale,box-shadow]! duration-300! ease-out! hover:z-10 hover:-translate-y-1.5 hover:scale-[1.02] hover:shadow-[0_24px_48px_rgba(var(--brand-shadow-rgb,79,70,229),0.18)] dark:hover:shadow-[0_24px_48px_rgba(var(--brand-shadow-rgb,139,92,246),0.4)]",
                 "motion-reduce:translate-y-0! motion-reduce:scale-100! motion-reduce:transition-none!",
                 "cursor-pointer",
                 isSelected && "border-primary ring-2 ring-primary/50",

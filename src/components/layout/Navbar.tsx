@@ -31,16 +31,18 @@ function Logo() {
   const { settings } = usePublicSettings()
   return (
     <Link to="/" className="flex items-center gap-2.5">
-      <BrandMark
-        className="size-11 shrink-0 rounded-full"
-        fallback={
-          // Luxury coin emblem
-          <span className="relative flex size-11 shrink-0 items-center justify-center rounded-full bg-[#0B0B0F] ring-2 ring-[#D4AF37]/70">
-            <span className="absolute inset-[3px] rounded-full border border-[#D4AF37]/40" />
-            <span className="relative font-serif text-lg font-bold text-[#D4AF37]">N</span>
-          </span>
-        }
-      />
+      <span className="original-theme contents">
+        <BrandMark
+          className="size-11 shrink-0 rounded-full"
+          fallback={
+            // Luxury coin emblem
+            <span className="relative flex size-11 shrink-0 items-center justify-center rounded-full bg-[#0B0B0F] ring-2 ring-[#D4AF37]/70">
+              <span className="absolute inset-[3px] rounded-full border border-[#D4AF37]/40" />
+              <span className="relative font-serif text-lg font-bold text-[#D4AF37]">N</span>
+            </span>
+          }
+        />
+      </span>
       <span className="flex flex-col leading-none">
         <span className="text-lg font-bold tracking-tight text-foreground">{settings.site_name}</span>
         <span className="mt-1 text-[11px] font-medium text-muted-foreground">Digital Identity</span>
@@ -89,13 +91,13 @@ export default function Navbar() {
       <header
         className={cn(
           "glass-panel relative mx-auto max-w-[1440px] overflow-hidden rounded-[24px] transition-all duration-[350ms] ease-in-out",
-          scrolled ? "backdrop-blur-[16px] shadow-[0_14px_46px_rgba(124,58,237,0.12)] dark:shadow-[0_14px_46px_rgba(139,92,246,0.18)]" : "backdrop-blur-[12px] shadow-[0_10px_40px_rgba(124,58,237,0.08)] dark:shadow-[0_10px_40px_rgba(139,92,246,0.12)]",
+          scrolled ? "backdrop-blur-[16px] shadow-[0_14px_46px_rgba(var(--public-shadow-rgb),0.12)] dark:shadow-[0_14px_46px_rgba(var(--public-shadow-rgb),0.18)]" : "backdrop-blur-[12px] shadow-[0_10px_40px_rgba(var(--public-shadow-rgb),0.08)] dark:shadow-[0_10px_40px_rgba(var(--public-shadow-rgb),0.12)]",
         )}
       >
         {/* Ambient brand glow */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,rgba(124,58,237,0.08),transparent_70%)] dark:bg-[radial-gradient(circle_at_center,rgba(139,92,246,0.14),transparent_70%)]"
+          className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,rgba(var(--public-shadow-rgb),0.08),transparent_70%)] dark:bg-[radial-gradient(circle_at_center,rgba(var(--public-shadow-rgb),0.14),transparent_70%)]"
         />
 
         <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-5 sm:px-6 lg:px-10">
@@ -109,8 +111,8 @@ export default function Navbar() {
                 end={link.to === "/"}
                 className={({ isActive }) =>
                   cn(
-                    "group relative rounded-md px-4 py-2 text-sm font-medium text-muted-foreground transition-colors duration-300 hover:text-primary",
-                    isActive && "text-primary",
+                    "group relative rounded-md px-4 py-2 text-sm font-medium text-muted-foreground transition-colors duration-300 hover:text-[var(--public-accent-text)]",
+                    isActive && "text-[var(--public-accent-text)]",
                   )
                 }
               >
@@ -191,7 +193,7 @@ export default function Navbar() {
             <ThemeToggle />
             <Button
               variant="gradient"
-              className="rounded-full px-6 shadow-[0_8px_24px_rgba(124,58,237,0.28)] transition-all duration-300 hover:scale-[1.03] hover:shadow-[0_10px_32px_rgba(124,58,237,0.4)] dark:shadow-[0_8px_24px_rgba(139,92,246,0.35)] dark:hover:shadow-[0_10px_32px_rgba(139,92,246,0.5)]"
+              className="rounded-full px-6 shadow-[0_8px_24px_rgba(var(--public-shadow-rgb),0.28)] transition-all duration-300 hover:scale-[1.03] hover:shadow-[0_10px_32px_rgba(var(--public-shadow-rgb),0.4)] dark:shadow-[0_8px_24px_rgba(var(--public-shadow-rgb),0.35)] dark:hover:shadow-[0_10px_32px_rgba(var(--public-shadow-rgb),0.5)]"
               onClick={() => navigate("/orders")}
             >
               My Orders

@@ -101,7 +101,7 @@ export function ProductDetails({
             </div>
             {product.short_description && <p className="mt-2 text-muted-foreground">{product.short_description}</p>}
             <div className="mt-3 flex flex-wrap items-baseline gap-2">
-              <p className={cn("bg-gradient-to-r bg-clip-text text-3xl font-bold text-transparent", gradientClass)}>
+              <p className="text-gradient-brand text-3xl font-bold">
                 {money(unitPrice)}
               </p>
               <span className="text-sm text-muted-foreground">/ card</span>
@@ -215,7 +215,7 @@ export function ProductDetails({
             </Button>
             <Button
               size="lg"
-              className="rounded-xl bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-[0_10px_30px_rgba(79,70,229,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_15px_35px_rgba(79,70,229,0.45)]"
+              className="rounded-xl bg-gradient-to-r from-[var(--public-navy,#4F46E5)] via-[var(--public-navy-mid,#7C3AED)] to-[var(--public-accent,#EC4899)] text-white shadow-[0_10px_30px_rgba(var(--public-shadow-rgb,79,70,229),0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_15px_35px_rgba(var(--public-shadow-rgb,79,70,229),0.45)]"
               disabled={preview || busy}
               onClick={() => onBuyNow?.(qty)}
             >

@@ -32,7 +32,7 @@ function Sparkline({ points, color }: { points: number[]; color: string }) {
   )
 }
 
-export function StatWidget({ icon: Icon, label, value, deltaPct, iconBg, points, sparkColor = "#4F46E5", className }: StatWidgetProps) {
+export function StatWidget({ icon: Icon, label, value, deltaPct, iconBg, points, sparkColor = "var(--public-accent-text)", className }: StatWidgetProps) {
   return (
     <div
       className={cn(

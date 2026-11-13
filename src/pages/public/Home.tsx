@@ -12,11 +12,15 @@ import FeatureCard from "@/components/marketing/FeatureCard"
 import CtaBanner from "@/components/marketing/CtaBanner"
 import NfcShowcase from "@/components/marketing/NfcShowcase"
 import TestimonialCard from "@/components/marketing/TestimonialCard"
+import TrustedCompanies from "@/components/marketing/TrustedCompanies"
 import { cardClass } from "@/components/marketing/PremiumCard"
 import { cn } from "@/lib/utils"
 import { resolveIcon } from "@/lib/icon-map"
 import { publicWebsiteApi } from "@/lib/contentApi"
 import { usePublicTestimonials } from "@/hooks/useTestimonials"
+import { useStatCounters } from "@/hooks/use-stat-counters"
+import { TypewriterCursor, TypewriterText } from "@/components/marketing/TypewriterText"
+import { useTypewriter } from "@/hooks/use-typewriter"
 
 function ErrorMessage() {
   return (
@@ -34,6 +38,7 @@ export default function Home() {
     queryKey: ["content", "public-home"],
     queryFn: publicWebsiteApi.getHome,
   })
+  const statisticsRef = useStatCounters(data?.statistics)
   const { data: features } = useQuery({
     queryKey: ["content", "public-features"],
     queryFn: publicWebsiteApi.getFeatures,
@@ -44,6 +49,9 @@ export default function Home() {
   const customerPhotos = (testimonials ?? []).filter((t) => t.profile_image).slice(0, 3)
 
   const hero = data?.hero ?? null
+  const headingRef = useTypewriter<HTMLHeadingElement>({
+    content: JSON.stringify([hero?.heading_line1, hero?.heading_line2]),
+  })
   // Secondary button: a configured link always wins (in-app route via the
   // router, full URL via a normal page load). With no link it opens the demo
   // popup, labelled "Watch Demo" whenever an admin-uploaded video exists.
@@ -84,10 +92,11 @@ export default function Home() {
                     {hero.badge}
                   </span>
                 )}
-                <h1 className="mt-5 text-4xl font-bold leading-tight tracking-tight text-foreground sm:text-5xl md:text-6xl">
-                  {hero?.heading_line1}
+                <h1 ref={headingRef} className="relative mt-5 text-4xl font-bold leading-tight tracking-tight text-foreground sm:text-5xl md:text-6xl">
+                  <TypewriterText text={hero?.heading_line1 ?? ""} />
                   <br />
-                  <span className="text-gradient-brand">{hero?.heading_line2}</span>
+                  <span className="text-gradient-brand"><TypewriterText text={hero?.heading_line2 ?? ""} /></span>
+                  <TypewriterCursor />
                 </h1>
                 <p className="mt-6 max-w-lg text-lg text-muted-foreground">{hero?.description}</p>
               </>
@@ -147,7 +156,7 @@ export default function Home() {
               </p>
             </Link>
 
-            <div className="absolute size-80 rounded-full bg-gradient-to-br from-[#4F46E5]/25 via-[#7C3AED]/25 to-[#EC4899]/25 blur-3xl sm:size-96" />
+            <div className="absolute size-80 rounded-full bg-gradient-to-br from-primary/20 via-[var(--public-bright)]/20 to-[var(--public-soft)]/25 blur-3xl sm:size-96" />
 
             {/* NFC card image, tilted behind the phone — admin-managed, no fallback graphic */}
             {hero?.nfc_card_image_url && (
@@ -269,34 +278,11 @@ export default function Home() {
         <section className="border-y border-border bg-secondary py-8">
           <div className="container-page">
             <Skeleton className="mx-auto h-4 w-48" />
+            <Skeleton className="mt-6 h-12 w-full" />
           </div>
         </section>
       ) : (
-        data && data.companies.length > 0 && (
-          <section className="border-y border-border bg-secondary py-8">
-            <div className="container-page">
-              <p className="text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                Trusted by professionals at
-              </p>
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
-                {data.companies.map((brand) =>
-                  brand.logo_url ? (
-                    <img
-                      key={brand.id}
-                      src={brand.logo_url}
-                      alt={brand.name}
-                      className="h-6 w-auto object-contain opacity-60"
-                    />
-                  ) : (
-                    <span key={brand.id} className="text-xl font-bold text-muted-foreground/50">
-                      {brand.name}
-                    </span>
-                  ),
-                )}
-              </div>
-            </div>
-          </section>
-        )
+        data && <TrustedCompanies companies={data.companies} />
       )}
 
       {/* Stats */}
@@ -311,7 +297,7 @@ export default function Home() {
       ) : (
         data && data.statistics.length > 0 && (
           <section className="bg-background px-4 py-12">
-            <div className="mx-auto grid max-w-5xl grid-cols-2 gap-8 sm:grid-cols-4">
+            <div ref={statisticsRef} className="mx-auto grid max-w-5xl grid-cols-2 gap-8 sm:grid-cols-4">
               {data.statistics.map((s) => (
                 <StatCounter key={s.id} value={s.value} label={s.label} />
               ))}
@@ -338,7 +324,7 @@ export default function Home() {
               </p>
             </div>
             <div className="relative flex items-center justify-center">
-              <div className="absolute size-72 rounded-full bg-gradient-to-br from-[#4F46E5]/10 via-[#7C3AED]/10 to-[#EC4899]/10 blur-3xl" />
+              <div className="absolute size-72 rounded-full bg-gradient-to-br from-primary/10 via-[var(--public-bright)]/10 to-[var(--public-soft)]/10 blur-3xl" />
               {/* Admin-managed via Website Content → Home → Our Story Image,
                   falls back to the bundled illustration when unset. */}
               <img
@@ -361,7 +347,7 @@ export default function Home() {
                   const Icon = resolveIcon(v.icon)
                   return (
                     <div key={v.id} className={`${cardClass} p-6 text-center`}>
-                      <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-md">
+                      <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-gradient-brand-br text-white shadow-md">
                         <Icon className="size-6" />
                       </div>
                       <h3 className="mt-3 font-semibold text-foreground">{v.title}</h3>
@@ -484,9 +470,9 @@ export default function Home() {
         <section className="bg-secondary px-4 py-14 sm:py-16">
           <div className="mx-auto max-w-4xl">
             <div className="relative overflow-hidden rounded-[24px] border border-border bg-card p-10 text-center shadow-[0_10px_30px_rgba(0,0,0,0.06)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)] sm:p-12">
-              <div className="pointer-events-none absolute -left-16 -top-16 size-56 rounded-full bg-[#4F46E5]/10 blur-3xl" />
-              <div className="pointer-events-none absolute -bottom-16 -right-16 size-56 rounded-full bg-[#EC4899]/10 blur-3xl" />
-              <div className="relative mx-auto flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-[0_4px_14px_rgba(79,70,229,0.4)]">
+              <div className="pointer-events-none absolute -left-16 -top-16 size-56 rounded-full bg-primary/10 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-16 -right-16 size-56 rounded-full bg-[var(--public-bright)]/10 blur-3xl" />
+              <div className="relative mx-auto flex size-14 items-center justify-center rounded-2xl bg-gradient-brand-br text-white shadow-[0_4px_14px_rgba(var(--public-shadow-rgb),0.4)]">
                 <MessageCircle className="size-7" />
               </div>
               <h2 className="relative mt-5 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
@@ -495,7 +481,7 @@ export default function Home() {
               <p className="relative mx-auto mt-3 max-w-lg text-muted-foreground">{data.cta.description}</p>
               <Button
                 size="lg"
-                className="relative mt-6 rounded-xl bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-[0_10px_30px_rgba(79,70,229,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_15px_35px_rgba(79,70,229,0.45)]"
+                className="relative mt-6 rounded-xl bg-gradient-brand text-white shadow-[0_10px_30px_rgba(var(--public-shadow-rgb),0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_15px_35px_rgba(var(--public-shadow-rgb),0.45)]"
                 onClick={() => navigate(data.cta?.button_link || "/contact")}
               >
                 {data.cta.button_text}

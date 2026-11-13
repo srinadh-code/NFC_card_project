@@ -11,7 +11,7 @@ export default function TestimonialCard({ testimonial }: TestimonialCardProps) {
   const subtitle = [testimonial.designation, testimonial.company].filter(Boolean).join(" @ ")
 
   return (
-    <PremiumCard className="flex h-full flex-col p-6">
+    <PremiumCard className="flex h-full flex-col p-6 hover:shadow-[0_20px_40px_rgba(var(--public-shadow-rgb),0.15)] dark:hover:shadow-[0_20px_40px_rgba(var(--public-shadow-rgb),0.4)]">
       <div className="flex items-center gap-1" role="img" aria-label={`${testimonial.rating} out of 5 stars`}>
         {Array.from({ length: 5 }).map((_, i) => (
           <Star
@@ -19,7 +19,7 @@ export default function TestimonialCard({ testimonial }: TestimonialCardProps) {
             aria-hidden="true"
             className={
               i < testimonial.rating
-                ? "size-4 fill-[#EC4899] text-[#EC4899]"
+                ? "size-4 fill-[var(--public-accent-text)] text-[var(--public-accent-text)]"
                 : "size-4 text-muted-foreground/25"
             }
           />

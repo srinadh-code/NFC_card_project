@@ -12,10 +12,15 @@ import {
   clearTokens,
   getAccessToken,
   getRefreshToken,
+  getSessionVersion,
+  getTokenUserId,
+  invalidateSession,
+  SessionChangedError,
   setTokens,
   setUnauthorizedHandler,
 } from "@/lib/api"
 import { useCartStore } from "@/store/cart-store"
+import { queryClient } from "@/lib/query-client"
 
 interface SessionState {
   user: ApiUser | null
@@ -40,11 +45,22 @@ interface SessionState {
 function createSessionStore(area: SessionArea, persistName: string) {
   return create<SessionState>()(
     persist(
-      (set) => ({
+      (set, get) => ({
         user: null,
         hydrated: false,
-        setUser: (user) => set({ user }),
+        setUser: (user) => {
+          const previous = get().user
+          if (previous?.id !== user?.id || previous?.role !== user?.role) {
+            queryClient.clear()
+            if (area === "customer" && previous) {
+              useCartStore.getState().clearCart()
+              useCheckoutVerificationStore.getState().clear()
+            }
+          }
+          set({ user })
+        },
         bootstrap: async () => {
+          const version = getSessionVersion(area)
           const hasToken = Boolean(getAccessToken(area))
           if (import.meta.env.DEV) {
             // Temporary, dev-only — see ProtectedRoute.tsx for the matching
@@ -58,23 +74,28 @@ function createSessionStore(area: SessionArea, persistName: string) {
             // cleared) is stale and must not be trusted. Clearing it here is
             // what makes every route guard's "is there a real session" check
             // correct instead of trusting cached UI state.
-            set({ user: null, hydrated: true })
+            get().setUser(null)
+            set({ hydrated: true })
             return
           }
           try {
             const user = await authApi.me(area)
+            if (getSessionVersion(area) !== version) return
             if (import.meta.env.DEV) {
               // eslint-disable-next-line no-console
               console.debug(`[auth-store:${area}] bootstrap resolved`, { role: user.role })
             }
-            set({ user, hydrated: true })
+            get().setUser(user)
+            set({ hydrated: true })
           } catch {
+            if (getSessionVersion(area) !== version) return
             if (import.meta.env.DEV) {
               // eslint-disable-next-line no-console
               console.debug(`[auth-store:${area}] bootstrap failed — clearing session`)
             }
             clearTokens(area)
-            set({ user: null, hydrated: true })
+            get().setUser(null)
+            set({ hydrated: true })
           }
         },
       }),
@@ -93,9 +114,34 @@ export const useCustomerSessionStore = createSessionStore("customer", "nexora-cu
 // until a manual logout or full page reload, even though every subsequent
 // request would 401.
 setUnauthorizedHandler((area) => {
+  queryClient.clear()
   const store = area === "admin" ? useAdminSessionStore : useCustomerSessionStore
   store.getState().setUser(null)
+  store.setState({ hydrated: true })
+  if (area === "customer") {
+    useCartStore.getState().clearCart()
+    useCheckoutVerificationStore.getState().clear()
+  }
 })
+
+// localStorage is shared by tabs; cached React Query results are not.
+// A same-account background refresh keeps the current checkout intact.
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("storage", (event) => {
+    const areas: SessionArea[] = ["admin", "customer"]
+    for (const area of areas) {
+      if (event.key !== null && event.key !== `nexora_${area}_access_token`) continue
+      const store = area === "admin" ? useAdminSessionStore : useCustomerSessionStore
+      const tokenUserId = getTokenUserId(area)
+      if (tokenUserId !== null && tokenUserId === String(store.getState().user?.id)) continue
+      invalidateSession(area)
+      queryClient.clear()
+      store.getState().setUser(null)
+      store.setState({ hydrated: false })
+      void store.getState().bootstrap()
+    }
+  })
+}
 
 /**
  * The single source of truth for "is this browser really authenticated as
@@ -164,7 +210,9 @@ function doLogout(area: SessionArea) {
   const refresh = getRefreshToken(area)
   if (refresh) authApi.logout(refresh, area).catch(() => {})
   clearTokens(area)
+  queryClient.clear()
   store.getState().setUser(null)
+  store.setState({ hydrated: true })
   if (area === "customer") {
     // The database cart (customer_management.customer_cart) — including
     // any applied promo code/offer, which lives on that same Cart row — is
@@ -189,8 +237,10 @@ type LoginResult =
 
 async function performLogin(email: string, password: string, expectedRole: "ADMIN" | "CUSTOMER"): Promise<LoginResult> {
   const area: SessionArea = expectedRole === "ADMIN" ? "admin" : "customer"
+  const version = getSessionVersion(area)
   try {
     const payload = await authApi.login({ email: email.trim().toLowerCase(), password })
+    if (getSessionVersion(area) !== version) throw new SessionChangedError()
     if (payload.user.role !== expectedRole) {
       if (import.meta.env.DEV) {
         // Temporary, dev-only — pairs with ProtectedRoute.tsx's and
@@ -211,9 +261,11 @@ async function performLogin(email: string, password: string, expectedRole: "ADMI
         error: "Invalid email or password.",
       }
     }
+    queryClient.clear()
     setTokens(payload.access, payload.refresh, area)
     const store = area === "admin" ? useAdminSessionStore : useCustomerSessionStore
     store.getState().setUser(payload.user)
+    store.setState({ hydrated: true })
     return { success: true }
   } catch (err) {
     if (err instanceof ApiError) {
@@ -235,17 +287,21 @@ async function performLogin(email: string, password: string, expectedRole: "ADMI
 // keeps working unchanged.
 async function performGoogleLogin(credential: string, expectedRole: "ADMIN" | "CUSTOMER"): Promise<LoginResult> {
   const area: SessionArea = expectedRole === "ADMIN" ? "admin" : "customer"
+  const version = getSessionVersion(area)
   try {
     const payload = await authApi.google({ credential })
+    if (getSessionVersion(area) !== version) throw new SessionChangedError()
     if (payload.user.role !== expectedRole) {
       return {
         success: false,
         error: "This Google account isn't registered as a customer.",
       }
     }
+    queryClient.clear()
     setTokens(payload.access, payload.refresh, area)
     const store = area === "admin" ? useAdminSessionStore : useCustomerSessionStore
     store.getState().setUser(payload.user)
+    store.setState({ hydrated: true })
     return { success: true }
   } catch (err) {
     if (err instanceof ApiError) {
@@ -265,12 +321,13 @@ interface CustomerAuthFacade {
 
 export function useCustomerAuthStore<T>(selector: (state: CustomerAuthFacade) => T): T {
   const user = useCustomerSessionStore((s) => s.user)
+  const hydrated = useCustomerSessionStore((s) => s.hydrated)
   // Memoized so the facade object is referentially stable across renders
   // when `user` hasn't changed — otherwise every selector call returns a
   // brand-new object and any consumer keying off the whole facade
   // (dependency arrays, etc.) would re-run every render.
   const facade = useMemo<CustomerAuthFacade>(() => {
-    const isCustomer = hasValidSession(user, "CUSTOMER")
+    const isCustomer = hydrated && hasValidSession(user, "CUSTOMER")
     return {
       customer: isCustomer ? toCustomerUser(user!) : null,
       login: (email, password) => performLogin(email, password, "CUSTOMER"),
@@ -278,7 +335,7 @@ export function useCustomerAuthStore<T>(selector: (state: CustomerAuthFacade) =>
       logout: () => doLogout("customer"),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user])
+  }, [user, hydrated])
   return selector(facade)
 }
 
@@ -290,14 +347,15 @@ interface AdminAuthFacade {
 
 export function useAdminAuthStore<T>(selector: (state: AdminAuthFacade) => T): T {
   const user = useAdminSessionStore((s) => s.user)
+  const hydrated = useAdminSessionStore((s) => s.hydrated)
   const facade = useMemo<AdminAuthFacade>(() => {
-    const isAdmin = hasValidSession(user, "ADMIN")
+    const isAdmin = hydrated && hasValidSession(user, "ADMIN")
     return {
       admin: isAdmin ? toAdminUser(user!) : null,
       login: (email, password) => performLogin(email, password, "ADMIN"),
       logout: () => doLogout("admin"),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user])
+  }, [user, hydrated])
   return selector(facade)
 }

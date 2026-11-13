@@ -25,11 +25,6 @@ import { publicWebsiteApi } from "@/lib/contentApi"
 import { usePublicTestimonials } from "@/hooks/useTestimonials"
 import { useStaggeredEntrance } from "@/hooks/use-staggered-entrance"
 
-
-// Fallback only for a card that has neither an admin-uploaded image nor a
-// saved gradient — keeps the grid from ever showing a blank icon badge.
-const FALLBACK_GRADIENT = "linear-gradient(135deg,#4F46E5,#7C3AED)"
-
 export default function Features() {
   const navigate = useNavigate()
   const { data: testimonials } = usePublicTestimonials()
@@ -70,12 +65,12 @@ export default function Features() {
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.35]"
           style={{
-            backgroundImage: "radial-gradient(circle, #C4B5FD 1px, transparent 1px)",
+            backgroundImage: "radial-gradient(circle, var(--public-dot) 1px, transparent 1px)",
             backgroundSize: "28px 28px",
             maskImage: "radial-gradient(ellipse 60% 60% at 70% 30%, black, transparent)",
           }}
         />
-        <div className="pointer-events-none absolute right-0 top-0 size-[32rem] rounded-full bg-gradient-to-br from-[#7C3AED]/20 to-[#EC4899]/10 blur-[100px]" />
+        <div className="pointer-events-none absolute right-0 top-0 size-[32rem] rounded-full bg-gradient-to-br from-primary/20 to-[var(--public-bright)]/10 blur-[100px]" />
 
         <div className="relative container-page grid items-center gap-16 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] xl:gap-10">
           <div>
@@ -142,13 +137,13 @@ export default function Features() {
 
           {/* Right: hero image if uploaded, else the built-in NFC card render + floating widgets */}
           <div className="relative flex items-center justify-center pb-6 pt-10 lg:py-0">
-            <div className="pointer-events-none absolute size-96 rounded-full bg-gradient-to-br from-[#7C3AED]/20 via-[#EC4899]/15 to-transparent blur-3xl" />
+            <div className="pointer-events-none absolute size-96 rounded-full bg-gradient-to-br from-primary/20 via-[var(--public-bright)]/15 to-transparent blur-3xl" />
 
             {page?.hero_image_url ? (
               <div className="relative z-10 w-full max-w-lg animate-hero-enter sm:max-w-xl lg:max-w-[42rem]">
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-[6%] rounded-full bg-gradient-to-br from-[#1E3A8A]/50 via-[#22C55E]/30 to-transparent blur-3xl animate-hero-glow"
+                  className="pointer-events-none absolute inset-[6%] rounded-full bg-gradient-to-br from-[var(--brand-2)]/50 via-[var(--public-bright)]/30 to-transparent blur-3xl animate-hero-glow"
                 />
                 <img
                   src={page.hero_image_url}
@@ -181,9 +176,9 @@ export default function Features() {
                   label="Total Taps"
                   value="12,458"
                   deltaPct="24.5%"
-                  iconBg="#4F46E5"
+                  iconBg="var(--brand-1)"
                   points={[4, 6, 5, 8, 7, 10, 9]}
-                  sparkColor="#4F46E5"
+                  sparkColor="var(--public-accent-text)"
                   className="absolute -right-4 top-8 hidden w-44 animate-float-slow sm:flex"
                 />
                 <StatWidget
@@ -191,9 +186,9 @@ export default function Features() {
                   label="Profile Views"
                   value="8,920"
                   deltaPct="18.6%"
-                  iconBg="#7C3AED"
+                  iconBg="var(--brand-2)"
                   points={[5, 5, 7, 6, 8, 9, 8]}
-                  sparkColor="#7C3AED"
+                  sparkColor="var(--public-accent-text)"
                   className="absolute -right-8 top-40 hidden w-44 animate-float-slower sm:flex"
                 />
                 <StatWidget
@@ -201,9 +196,9 @@ export default function Features() {
                   label="QR Scans"
                   value="3,538"
                   deltaPct="32.7%"
-                  iconBg="#EC4899"
+                  iconBg="var(--public-accent)"
                   points={[3, 4, 4, 6, 5, 7, 8]}
-                  sparkColor="#EC4899"
+                  sparkColor="var(--public-accent-text)"
                   className="absolute -left-6 bottom-6 hidden w-44 animate-float-slow sm:flex"
                 />
                 <StatWidget
@@ -211,9 +206,9 @@ export default function Features() {
                   label="Contacts Saved"
                   value="2,450"
                   deltaPct="21.4%"
-                  iconBg="#22C55E"
+                  iconBg="var(--brand-3)"
                   points={[2, 3, 3, 4, 5, 5, 6]}
-                  sparkColor="#22C55E"
+                  sparkColor="var(--public-accent-text)"
                   className="absolute -left-2 top-6 hidden w-44 animate-float-slower sm:flex"
                 />
               </>
@@ -275,8 +270,7 @@ export default function Features() {
                           />
                         ) : (
                           <span
-                            className="flex size-12 shrink-0 items-center justify-center rounded-xl text-white shadow-md"
-                            style={{ background: f.gradient || FALLBACK_GRADIENT }}
+                            className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-gradient-brand-br text-white shadow-md"
                           >
                             <Icon className="size-6" />
                           </span>
@@ -295,7 +289,7 @@ export default function Features() {
                           )}
                         </div>
                         {!(f.cta_text && f.cta_url) && (
-                          <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-all duration-300 group-hover:border-primary group-hover:bg-primary group-hover:text-white">
+                          <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-all duration-300 group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground">
                             <ArrowUpRight className="size-4" />
                           </span>
                         )}
@@ -315,7 +309,7 @@ export default function Features() {
           <div className="container-page">
             <div className="relative overflow-hidden rounded-[32px] border border-border bg-card p-8 shadow-[0_10px_30px_rgba(15,23,42,0.06)] dark:shadow-[0_20px_45px_rgba(0,0,0,0.5)] sm:p-14">
               <div className="pointer-events-none absolute -left-16 -top-16 size-72 rounded-full bg-primary/15 blur-3xl" />
-              <div className="pointer-events-none absolute -bottom-16 -right-16 size-72 rounded-full bg-[#EC4899]/15 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-16 -right-16 size-72 rounded-full bg-[var(--public-bright)]/15 blur-3xl" />
 
               <div className="relative grid items-center gap-12 lg:grid-cols-2">
                 <Reveal>
@@ -384,7 +378,7 @@ export default function Features() {
               </Reveal>
               <Reveal variant="scale" delayMs={100}>
                 <div className="relative flex items-center justify-center py-6">
-                  <div className="pointer-events-none absolute size-72 rounded-full bg-gradient-to-br from-[#4F46E5]/15 via-[#7C3AED]/15 to-[#EC4899]/10 blur-3xl" />
+                  <div className="pointer-events-none absolute size-72 rounded-full bg-gradient-to-br from-primary/15 via-[var(--public-bright)]/15 to-[var(--public-soft)]/10 blur-3xl" />
                   {data.showcase.main_image_url && (
                     <img
                       src={data.showcase.main_image_url}

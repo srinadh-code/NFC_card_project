@@ -26,10 +26,10 @@ const NAV_ITEMS = [
 ]
 
 const TILES = [
-  { icon: MousePointerClick, label: "Total Taps", value: "12,458", delta: "+24.5%", bg: "#4F46E5" },
-  { icon: Eye, label: "Profile Views", value: "8,920", delta: "+18.6%", bg: "#7C3AED" },
-  { icon: ScanLine, label: "QR Scans", value: "3,538", delta: "+32.7%", bg: "#EC4899" },
-  { icon: BookmarkCheck, label: "Contacts Saved", value: "2,450", delta: "+21.4%", bg: "#22C55E" },
+  { icon: MousePointerClick, label: "Total Taps", value: "12,458", delta: "+24.5%", bg: "var(--public-navy)" },
+  { icon: Eye, label: "Profile Views", value: "8,920", delta: "+18.6%", bg: "var(--public-navy-mid)" },
+  { icon: ScanLine, label: "QR Scans", value: "3,538", delta: "+32.7%", bg: "var(--public-accent)" },
+  { icon: BookmarkCheck, label: "Contacts Saved", value: "2,450", delta: "+21.4%", bg: "var(--public-accent)" },
 ]
 
 const LOCATIONS = [
@@ -56,12 +56,12 @@ function MiniChart() {
     <svg viewBox={`0 0 ${w} ${h}`} className="h-28 w-full" preserveAspectRatio="none" aria-hidden="true">
       <defs>
         <linearGradient id="dashChartFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#7C3AED" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="#7C3AED" stopOpacity="0" />
+          <stop offset="0%" stopColor="var(--public-accent)" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="var(--public-accent)" stopOpacity="0" />
         </linearGradient>
       </defs>
       <path d={areaPath} fill="url(#dashChartFill)" />
-      <path d={linePath} fill="none" stroke="#7C3AED" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={linePath} fill="none" stroke="var(--public-accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }

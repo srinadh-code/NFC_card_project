@@ -135,7 +135,7 @@ export default function CheckoutVerify() {
   return (
     <div className="mx-auto max-w-xl px-4 py-12 sm:py-16">
       <div className="rounded-2xl border bg-card p-6 shadow-sm sm:p-8">
-        <span className="flex size-12 items-center justify-center rounded-xl bg-[#2855C5]/10 text-[#2855C5]">
+        <span className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
           <ShieldCheck className="size-6" aria-hidden="true" />
         </span>
         <h1 className="mt-4 text-2xl font-bold tracking-tight text-foreground">Verify Your Contact</h1>
@@ -159,10 +159,10 @@ export default function CheckoutVerify() {
               onClick={() => setMethod(key)}
               className={cn(
                 "flex flex-col items-start gap-1 rounded-xl border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-                method === key ? "border-[#2855C5] bg-[#2855C5]/10 ring-1 ring-[#2855C5]" : "border-border hover:bg-muted/50",
+                method === key ? "border-primary bg-primary/10 ring-1 ring-primary" : "border-border hover:bg-muted/50",
               )}
             >
-              <Icon className={cn("size-5", method === key ? "text-[#2855C5]" : "text-muted-foreground")} aria-hidden="true" />
+              <Icon className={cn("size-5", method === key ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
               <span className="text-sm font-semibold text-foreground">{title}</span>
               <span className="text-xs text-muted-foreground">{hint}</span>
             </button>

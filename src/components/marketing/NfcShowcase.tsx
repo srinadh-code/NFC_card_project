@@ -21,7 +21,7 @@ export default function NfcShowcase({ badge, heading, description, points, image
         {/* Visual mockup — admin-managed image when set, else the code-built
             phone+card illustration below */}
         <div className="relative order-2 flex items-center justify-center lg:order-1">
-          <div className="absolute size-72 rounded-full bg-gradient-to-br from-[#4F46E5]/10 via-[#7C3AED]/10 to-[#EC4899]/10 blur-3xl" />
+          <div className="absolute size-72 rounded-full bg-gradient-to-br from-primary/10 via-primary/10 to-[var(--public-accent)]/10 blur-3xl" />
 
           {imageUrl ? (
             <img
@@ -34,7 +34,7 @@ export default function NfcShowcase({ badge, heading, description, points, image
               {/* Phone outline */}
               <div className="relative flex h-[420px] w-[220px] items-center justify-center rounded-[2.5rem] border-[6px] border-slate-900 bg-slate-900 shadow-2xl sm:h-[460px] sm:w-[230px]">
                 <span className="absolute left-1/2 top-2.5 h-1.5 w-16 -translate-x-1/2 rounded-full bg-slate-700" />
-                <div className="flex h-full w-full flex-col items-center justify-center gap-4 overflow-hidden rounded-[2rem] bg-gradient-to-b from-[#4F46E5] via-[#7C3AED] to-[#EC4899] p-6 text-center">
+                <div className="flex h-full w-full flex-col items-center justify-center gap-4 overflow-hidden rounded-[2rem] bg-gradient-brand-br p-6 text-center">
                   <Nfc className="size-10 text-white" />
                   <p className="text-sm font-medium text-white/90">
                     Hold a VR's GATEWAY card near this phone to share a profile
@@ -44,8 +44,8 @@ export default function NfcShowcase({ badge, heading, description, points, image
 
               {/* Card with tap ripple */}
               <div className="absolute -right-2 bottom-16 sm:-right-6">
-                <span className="absolute inset-0 -m-7 animate-ping rounded-full bg-[#EC4899]/40 [animation-duration:2s]" />
-                <span className="absolute inset-0 -m-3.5 animate-pulse rounded-full bg-[#4F46E5]/30" />
+                <span className="absolute inset-0 -m-7 animate-ping rounded-full bg-[var(--public-accent)]/40 [animation-duration:2s]" />
+                <span className="absolute inset-0 -m-3.5 animate-pulse rounded-full bg-primary/30" />
                 <div className="relative flex h-16 w-24 items-center justify-center rounded-xl bg-card shadow-xl ring-1 ring-black/5">
                   <Nfc className="size-6 text-primary" />
                 </div>
@@ -66,7 +66,7 @@ export default function NfcShowcase({ badge, heading, description, points, image
               const Icon = resolveIcon(p.icon)
               return (
                 <li key={p.text} className="flex items-start gap-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-md">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-brand-br text-white shadow-md">
                     <Icon className="size-4.5" />
                   </span>
                   <span className="pt-1.5 text-[15px] font-medium leading-6 text-foreground sm:text-base">{p.text}</span>

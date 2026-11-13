@@ -9,8 +9,8 @@ interface FeatureCardProps {
 
 export default function FeatureCard({ icon: Icon, title, description }: FeatureCardProps) {
   return (
-    <PremiumCard className="p-6">
-      <div className="flex size-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-[0_4px_14px_rgba(79,70,229,0.35)]">
+    <PremiumCard className="p-6 hover:shadow-[0_20px_40px_rgba(var(--public-shadow-rgb),0.15)] dark:hover:shadow-[0_20px_40px_rgba(var(--public-shadow-rgb),0.4)]">
+      <div className="flex size-12 items-center justify-center rounded-xl bg-gradient-brand-br text-white shadow-[0_4px_14px_rgba(var(--public-shadow-rgb),0.35)]">
         <Icon className="size-6" />
       </div>
       <h3 className="mt-4 text-lg font-semibold text-foreground">{title}</h3>

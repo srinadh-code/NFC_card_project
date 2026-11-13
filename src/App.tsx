@@ -83,6 +83,8 @@ const DEFAULT_FAVICON_HREF = "/favicon.svg"
 function App() {
   const bootstrapAdmin = useAdminSessionStore((s) => s.bootstrap)
   const bootstrapCustomer = useCustomerSessionStore((s) => s.bootstrap)
+  const checkoutCustomerId = useCustomerSessionStore((s) => s.user?.id)
+  const checkoutHydrated = useCustomerSessionStore((s) => s.hydrated)
   const { settings } = usePublicSettings()
 
   // Re-validates both portals' persisted sessions against the server once
@@ -119,7 +121,7 @@ function App() {
           {/* Open to guests: without a customer session Checkout shows the
               OTP-verified guest checkout (the account is created after a
               verified payment); signed-in customers get their usual one. */}
-          <Route path="/checkout" element={<Checkout />} />
+          <Route path="/checkout" element={checkoutHydrated ? <Checkout key={checkoutCustomerId ?? "guest"} /> : null} />
           {/* Mandatory guest OTP verification before checkout (no registration). */}
           <Route path="/checkout/verify" element={<CheckoutVerify />} />
           <Route path="/order-success" element={<OrderSuccess />} />

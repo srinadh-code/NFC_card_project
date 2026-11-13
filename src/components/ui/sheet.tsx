@@ -4,6 +4,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { XIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { usePublicThemeClass } from "@/lib/theme-scope"
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
@@ -69,12 +70,18 @@ function SheetContent({
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> &
   VariantProps<typeof sheetVariants>) {
+  const publicThemeClass = usePublicThemeClass()
   return (
     <SheetPortal>
       <SheetOverlay />
       <SheetPrimitive.Content
         data-slot="sheet-content"
-        className={cn(sheetVariants({ side }), className)}
+        className={cn(
+          publicThemeClass,
+          publicThemeClass && "text-foreground",
+          sheetVariants({ side }),
+          className,
+        )}
         {...props}
       >
         {children}

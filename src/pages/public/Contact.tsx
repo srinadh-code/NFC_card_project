@@ -128,7 +128,7 @@ export default function Contact() {
               type="submit"
               size="lg"
               disabled={mutation.isPending}
-              className="w-full rounded-xl bg-gradient-brand text-white shadow-[0_4px_14px_rgba(139,92,246,0.4)] transition-all duration-200 hover:shadow-[0_6px_20px_rgba(139,92,246,0.55)] hover:brightness-110"
+              className="w-full rounded-xl bg-gradient-brand text-white shadow-[0_4px_14px_rgba(var(--public-shadow-rgb),0.4)] transition-all duration-200 hover:shadow-[0_6px_20px_rgba(var(--public-shadow-rgb),0.55)] hover:brightness-110"
             >
               {mutation.isPending ? "Sending..." : "Send Message"}
             </Button>

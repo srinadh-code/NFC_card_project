@@ -4,25 +4,25 @@ import { cn } from "@/lib/utils"
 export type NfcCardTone = "front" | "back" | "gold" | "custom"
 
 const TONE_TRIM: Record<NfcCardTone, string> = {
-  front: "bg-gradient-brand shadow-[0_25px_60px_rgba(124,58,237,0.45)]",
-  back: "bg-gradient-to-br from-[#2563EB]/70 to-[#7C3AED]/70",
+  front: "bg-gradient-brand shadow-[0_25px_60px_rgba(var(--public-shadow-rgb,124,58,237),0.45)]",
+  back: "bg-gradient-to-br from-[var(--public-navy,#2563EB)]/70 to-[var(--public-accent,#7C3AED)]/70",
   gold: "bg-gradient-to-br from-[#F59E0B] via-[#FBBF24] to-[#F59E0B] shadow-[0_25px_60px_rgba(245,158,11,0.4)]",
   // Shifting multi-hue trim signals "customizable" (color/logo/design all
   // configurable), distinct from the fixed brand-gradient/gold finishes.
-  custom: "bg-gradient-to-br from-[#2563EB] via-[#7C3AED] to-[#EC4899] shadow-[0_25px_60px_rgba(236,72,153,0.4)]",
+  custom: "bg-gradient-to-br from-[var(--public-navy,#2563EB)] via-[var(--public-navy-mid,#7C3AED)] to-[var(--public-accent,#EC4899)] shadow-[0_25px_60px_rgba(var(--public-shadow-rgb,236,72,153),0.4)]",
 }
 
 const TONE_BADGE: Record<NfcCardTone, string> = {
   front: "bg-gradient-brand shadow-glow-primary",
   back: "bg-gradient-brand shadow-glow-primary",
   gold: "bg-gradient-to-br from-[#F59E0B] to-[#FBBF24] shadow-[0_4px_14px_rgba(245,158,11,0.4)]",
-  custom: "bg-gradient-to-br from-[#2563EB] via-[#7C3AED] to-[#EC4899] shadow-[0_4px_14px_rgba(124,58,237,0.4)]",
+  custom: "bg-gradient-to-br from-[var(--public-navy,#2563EB)] via-[var(--public-navy-mid,#7C3AED)] to-[var(--public-accent,#EC4899)] shadow-[0_4px_14px_rgba(var(--public-shadow-rgb,124,58,237),0.4)]",
 }
 
 export function NfcCardFace({ tone }: { tone: NfcCardTone }) {
   return (
     <div className={cn("relative h-full w-full overflow-hidden rounded-[22px] p-[1.5px]", TONE_TRIM[tone])}>
-      <div className="relative h-full w-full overflow-hidden rounded-[20.5px] bg-gradient-to-br from-[#0B0F1A] via-[#12142B] to-[#1A1030] p-5 text-white">
+      <div className="relative h-full w-full overflow-hidden rounded-[20.5px] bg-gradient-to-br from-[var(--public-navy,#0B0F1A)] via-[var(--public-navy-mid,#12142B)] to-[var(--public-navy,#1A1030)] p-5 text-white">
         {/* brushed-metal texture */}
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.05]"
@@ -67,9 +67,9 @@ export function NfcCardFace({ tone }: { tone: NfcCardTone }) {
  */
 export default function NfcCardShowcase() {
   return (
-    <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-[#0B0F1A] via-[#12142B] to-[#1A0F2E] p-10 shadow-2xl sm:p-14">
-      <div className="pointer-events-none absolute left-1/4 top-1/5 size-72 rounded-full bg-[#7C3AED]/30 blur-[100px]" />
-      <div className="pointer-events-none absolute bottom-1/5 right-1/4 size-72 rounded-full bg-[#2563EB]/30 blur-[100px]" />
+    <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-[var(--public-navy)] via-[var(--public-navy-mid)] to-[var(--public-navy)] p-10 shadow-2xl sm:p-14">
+      <div className="pointer-events-none absolute left-1/4 top-1/5 size-72 rounded-full bg-[var(--public-accent)]/30 blur-[100px]" />
+      <div className="pointer-events-none absolute bottom-1/5 right-1/4 size-72 rounded-full bg-[var(--public-bright)]/30 blur-[100px]" />
 
       <div className="relative mx-auto h-[220px] w-full max-w-sm sm:h-[260px]">
         {/* Back card — depth */}

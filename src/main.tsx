@@ -1,22 +1,13 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import './index.css'
 import App from './App.tsx'
 import { Toaster } from '@/components/ui/sonner'
 import '@/store/theme-store'
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-      staleTime: 30_000,
-    },
-  },
-})
+import { queryClient } from '@/lib/query-client'
 
 // Public Client ID only — safe to ship in the frontend bundle (the Client
 // Secret never leaves the backend). Left blank, GoogleOAuthProvider simply

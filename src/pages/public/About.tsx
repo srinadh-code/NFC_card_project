@@ -189,13 +189,11 @@ export default function About() {
                 return (
                   <div
                     key={f.id}
-                    className="card-hover rounded-[24px] border border-[#8B5CF6]/20 bg-card p-6 shadow-[0_10px_30px_rgba(15,23,42,0.05)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
+                    className="card-hover rounded-[24px] border border-primary/20 bg-card p-6 shadow-[0_10px_30px_rgba(15,23,42,0.05)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
                   >
-                    {/* gradient is optional in the admin — fall back to the brand
-                        gradient so the white icon never sits on a blank tile. */}
+                    {/* Keep public icon tiles aligned with the website brand. */}
                     <span
-                      className="flex size-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-md"
-                      style={f.gradient ? { background: f.gradient } : undefined}
+                      className="flex size-12 items-center justify-center rounded-xl bg-gradient-brand-br text-white shadow-md"
                     >
                       <Icon className="size-6" />
                     </span>
@@ -240,7 +238,7 @@ export default function About() {
                 than the image, so the text column's self-center centers it. */}
             {(isLoading || builtImageUrl) && (
               <div className="relative flex items-center justify-center lg:sticky lg:top-28 lg:justify-end lg:self-start">
-                <div className="absolute size-64 rounded-full bg-gradient-to-br from-[#4F46E5]/10 via-[#7C3AED]/10 to-[#EC4899]/10 blur-3xl" />
+                <div className="absolute size-64 rounded-full bg-gradient-to-br from-primary/10 via-[var(--public-bright)]/10 to-[var(--public-soft)]/10 blur-3xl" />
                 {builtImageUrl ? (
                   <div className="relative z-10 aspect-[4/3] w-full max-w-xl overflow-hidden rounded-[24px] shadow-[0_20px_60px_rgba(15,23,42,0.12)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
                     <img
@@ -290,7 +288,7 @@ export default function About() {
                   const Icon = resolveIcon(v.icon)
                   return (
                     <div key={v.id} className={`${cardClass} p-6 text-center`}>
-                      <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#EC4899] text-white shadow-md">
+                      <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-gradient-brand-br text-white shadow-md">
                         <Icon className="size-6" />
                       </div>
                       <h3 className="mt-4 text-lg font-semibold text-foreground">{v.title}</h3>

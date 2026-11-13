@@ -8,7 +8,7 @@ const ACTIONS = ["Save Contact", "Share Profile", "Visit Website"]
 export default function ProfilePhonePreview({ className }: { className?: string }) {
   return (
     <div
-      className={`relative flex h-[300px] w-[170px] items-center justify-center rounded-[2.25rem] border-[6px] border-[#0F172A] bg-[#0F172A] shadow-2xl ${className ?? ""}`}
+      className={`original-theme relative flex h-[300px] w-[170px] items-center justify-center rounded-[2.25rem] border-[6px] border-[#0F172A] bg-[#0F172A] shadow-2xl ${className ?? ""}`}
     >
       <span className="absolute left-1/2 top-2 h-1.5 w-12 -translate-x-1/2 rounded-full bg-white/20" />
       <div className="flex h-full w-full flex-col items-center gap-2.5 overflow-hidden rounded-[1.85rem] bg-gradient-brand-br px-4 pb-4 pt-8 text-center">

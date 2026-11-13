@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./public-theme.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -274,7 +275,7 @@ body {
 
 /* Brand gradient utilities, used across the marketing site + dashboards */
 .text-gradient-brand {
-  background-image: var(--gradient-brand);
+  background-image: var(--public-text-gradient, var(--gradient-brand));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -286,16 +287,16 @@ body {
   background-image: var(--gradient-brand-br);
 }
 .shadow-glow-primary {
-  box-shadow: 0 10px 30px rgba(79, 70, 229, 0.32);
+  box-shadow: 0 10px 30px rgba(var(--brand-glow-rgb, 79, 70, 229), 0.32);
 }
 .shadow-glow-primary-lg {
-  box-shadow: 0 20px 45px rgba(79, 70, 229, 0.4);
+  box-shadow: 0 20px 45px rgba(var(--brand-glow-rgb, 79, 70, 229), 0.4);
 }
 .dark .shadow-glow-primary {
-  box-shadow: 0 10px 30px rgba(139, 92, 246, 0.35);
+  box-shadow: 0 10px 30px rgba(var(--brand-glow-rgb, 139, 92, 246), 0.35);
 }
 .dark .shadow-glow-primary-lg {
-  box-shadow: 0 20px 45px rgba(139, 92, 246, 0.45);
+  box-shadow: 0 20px 45px rgba(var(--brand-glow-rgb, 139, 92, 246), 0.45);
 }
 .card-hover {
   transition: transform 0.3s ease, box-shadow 0.3s ease;
@@ -305,7 +306,7 @@ body {
   box-shadow: 0 24px 48px rgba(15, 23, 42, 0.12);
 }
 .dark .card-hover:hover {
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(139, 92, 246, 0.12);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(var(--brand-shadow-rgb, 139, 92, 246), 0.12);
 }
 /* Reusable glassmorphism surface (navbar, floating panels). Swaps tint via
    the --glass-bg/--glass-border tokens redefined per theme in :root/.dark. */

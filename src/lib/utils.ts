@@ -14,6 +14,16 @@ export function cn(...inputs: ClassValue[]) {
 export function sanitizeRedirect(path: string | null | undefined, fallback: string): string {
   if (!path) return fallback
   if (!path.startsWith("/") || path.startsWith("//")) return fallback
+  // Browsers normalize backslashes and strip URL control characters.
+  // A path such as "/\n/other-host" would otherwise become an external URL.
+  // eslint-disable-next-line no-control-regex
+  if (/[\\\u0000-\u001f\u007f]/.test(path)) return fallback
+  try {
+    const base = "https://redirect.invalid"
+    if (new URL(path, base).origin !== base) return fallback
+  } catch {
+    return fallback
+  }
   return path
 }
 

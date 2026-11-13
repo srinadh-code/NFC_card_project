@@ -33,6 +33,7 @@ import type {
   OrderCardTrustBadge,
   PaymentSettings,
   ProfileTemplatePreview,
+  PublicCompany,
   PublicAboutPayload,
   PublicFeaturesPagePayload,
   PublicGeneralSettings,
@@ -389,7 +390,7 @@ export const publicWebsiteApi = {
   getHowItWorks: () => request<HowItWorksStep[]>(`${PUBLIC}/how-it-works/`, { auth: false }),
   getFaqs: () => request<Faq[]>(`${PUBLIC}/faqs/`, { auth: false }),
   getValues: () => request<Value[]>(`${PUBLIC}/values/`, { auth: false }),
-  getCompanies: () => request<Company[]>(`${PUBLIC}/companies/`, { auth: false }),
+  getCompanies: () => request<PublicCompany[]>(`${PUBLIC}/companies/`, { auth: false }),
   getStatistics: (page?: StatisticPage) => request<Statistic[]>(`${PUBLIC}/statistics/${buildQuery({ page })}`, { auth: false }),
   submitContactMessage: (body: { name: string; email: string; subject: string; message: string }) =>
     request<null>(`${PUBLIC}/contact/`, { method: "POST", body, auth: false }),

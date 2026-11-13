@@ -1,0 +1,18 @@
+.cursor {
+  display: none;
+  position: absolute;
+  width: 2px;
+  background: var(--public-accent-text, currentColor);
+  pointer-events: none;
+  opacity: var(--typewriter-caret-opacity, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .character {
+    visibility: visible !important;
+  }
+
+  .cursor {
+    display: none !important;
+  }
+}

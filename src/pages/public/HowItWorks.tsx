@@ -6,15 +6,14 @@ import { resolveIcon } from "@/lib/icon-map"
 import { publicWebsiteApi } from "@/lib/contentApi"
 import { useStaggeredEntrance } from "@/hooks/use-staggered-entrance"
 
-// The backend `HowItWorksStep` model has no from/to gradient-stop fields.
-// Keep the same fixed 5-color palette the page used to hardcode, cycling by
-// position, so the visual design is unchanged for the seeded 5 steps.
+// The backend `HowItWorksStep` model has no gradient-stop fields; cycle
+// through the public navy and green brand tokens for the step cards.
 const GRADIENT_PALETTE = [
-  { from: "#4F46E5", to: "#6366F1" },
-  { from: "#2563EB", to: "#06B6D4" },
-  { from: "#7C3AED", to: "#EC4899" },
-  { from: "#F59E0B", to: "#F97316" },
-  { from: "#22C55E", to: "#06B6D4" },
+  { from: "var(--brand-1)", to: "var(--brand-2)" },
+  { from: "var(--brand-2)", to: "var(--public-accent)" },
+  { from: "var(--brand-1)", to: "var(--public-accent)" },
+  { from: "var(--public-accent)", to: "var(--brand-2)" },
+  { from: "var(--brand-2)", to: "var(--brand-1)" },
 ]
 
 export default function HowItWorks() {
@@ -60,7 +59,7 @@ export default function HowItWorks() {
             steps &&
             steps.length > 0 && (
               <div ref={stepsRef} className="relative grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
-                <div className="pointer-events-none absolute inset-x-0 top-14 hidden h-0.5 bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#22C55E] opacity-20 lg:block" />
+                <div className="pointer-events-none absolute inset-x-0 top-14 hidden h-0.5 bg-gradient-brand opacity-20 lg:block" />
                 {steps.map((step, i) => {
                   const Icon = resolveIcon(step.icon)
                   const { from, to } = GRADIENT_PALETTE[i % GRADIENT_PALETTE.length]

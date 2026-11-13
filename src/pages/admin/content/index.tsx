@@ -33,7 +33,7 @@ export default function AdminWebsiteContent() {
           <TabsTrigger value="how-it-works">How It Works</TabsTrigger>
           <TabsTrigger value="faqs">FAQs</TabsTrigger>
           <TabsTrigger value="testimonials">Testimonials</TabsTrigger>
-          <TabsTrigger value="companies">Companies</TabsTrigger>
+          <TabsTrigger value="companies">Trusted Companies</TabsTrigger>
           <TabsTrigger value="statistics">Statistics</TabsTrigger>
           <TabsTrigger value="values">Values</TabsTrigger>
           <TabsTrigger value="contact-messages">Contact Messages</TabsTrigger>

@@ -34,6 +34,48 @@ export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || "ht
 // every admin endpoint — the moment a customer logged in from another tab).
 export type SessionArea = "admin" | "customer"
 
+const sessionVersions: Record<SessionArea, number> = { admin: 0, customer: 0 }
+const observedIdentities: Partial<Record<SessionArea, string | null>> = {}
+
+// This unverified subject is only a cache/race guard. Server-side JWT
+// verification and permissions remain the source of authorization.
+export function getTokenUserId(area: SessionArea): string | null {
+  try {
+    const encoded = getAccessToken(area)?.split(".")[1]
+    if (!encoded) return null
+    const payload = JSON.parse(atob(encoded.replace(/-/g, "+").replace(/_/g, "/"))) as { user_id?: string | number }
+    return payload.user_id == null ? null : String(payload.user_id)
+  } catch {
+    return null
+  }
+}
+
+export function getSessionVersion(area: SessionArea): number {
+  const identity = getTokenUserId(area) ?? getAccessToken(area)
+  // Storage events can arrive after a network response. Detect another
+  // tab's account change before accepting that response as well.
+  if (Object.hasOwn(observedIdentities, area) && observedIdentities[area] !== identity) sessionVersions[area] += 1
+  observedIdentities[area] = identity
+  return sessionVersions[area]
+}
+
+// Also called for another tab's storage changes. Refreshing the same
+// session does not advance this version; signing in or out does.
+export function invalidateSession(area: SessionArea) {
+  sessionVersions[area] += 1
+  delete observedIdentities[area]
+}
+
+export class SessionChangedError extends Error {
+  constructor() {
+    super("Your session changed. Please try again.")
+  }
+}
+
+function assertSession(area: SessionArea, version: number) {
+  if (getSessionVersion(area) !== version) throw new SessionChangedError()
+}
+
 function currentArea(): SessionArea {
   return window.location.pathname.startsWith("/admin") ? "admin" : "customer"
 }
@@ -49,10 +91,15 @@ export function getRefreshToken(area: SessionArea = currentArea()): string | nul
   return localStorage.getItem(tokenKey(area, "refresh"))
 }
 export function setTokens(access: string, refresh: string, area: SessionArea = currentArea()) {
+  invalidateSession(area)
+  writeTokens(access, refresh, area)
+}
+function writeTokens(access: string, refresh: string, area: SessionArea) {
   localStorage.setItem(tokenKey(area, "access"), access)
   localStorage.setItem(tokenKey(area, "refresh"), refresh)
 }
 export function clearTokens(area: SessionArea = currentArea()) {
+  invalidateSession(area)
   localStorage.removeItem(tokenKey(area, "access"))
   localStorage.removeItem(tokenKey(area, "refresh"))
 }
@@ -116,30 +163,44 @@ interface Envelope<T> {
 
 // Keyed per area — an admin-tab refresh and a customer-tab refresh must
 // never share (or block on) the same in-flight promise.
-const refreshInFlight: Partial<Record<SessionArea, Promise<boolean>>> = {}
+const refreshInFlight: Partial<Record<SessionArea, { version: number; promise: Promise<boolean> }>> = {}
 
-async function refreshAccessToken(area: SessionArea): Promise<boolean> {
-  if (refreshInFlight[area]) return refreshInFlight[area]!
-  refreshInFlight[area] = (async () => {
-    const refresh = getRefreshToken(area)
-    if (!refresh) return false
+async function refreshAccessToken(area: SessionArea, version: number): Promise<boolean> {
+  assertSession(area, version)
+  const pending = refreshInFlight[area]
+  if (pending?.version === version) return pending.promise
+  const refresh = getRefreshToken(area)
+  if (!refresh) return false
+  const assertRefreshSession = () => {
+    assertSession(area, version)
+    if (getRefreshToken(area) !== refresh) {
+      invalidateSession(area)
+      throw new SessionChangedError()
+    }
+  }
+  const operation = { version, promise: Promise.resolve(false) }
+  operation.promise = (async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/auth/token/refresh/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh }),
       })
+      assertRefreshSession()
       if (!res.ok) return false
       const data = (await res.json()) as { access: string; refresh?: string }
-      setTokens(data.access, data.refresh ?? refresh, area)
+      assertRefreshSession()
+      writeTokens(data.access, data.refresh ?? refresh, area)
       return true
     } catch {
+      if (getSessionVersion(area) === version && getRefreshToken(area) !== refresh) invalidateSession(area)
       return false
     } finally {
-      refreshInFlight[area] = undefined
+      if (refreshInFlight[area] === operation) delete refreshInFlight[area]
     }
   })()
-  return refreshInFlight[area]!
+  refreshInFlight[area] = operation
+  return operation.promise
 }
 
 interface RequestOptions {
@@ -161,8 +222,10 @@ export class NetworkError extends Error {
   }
 }
 
-async function rawRequest<T>(path: string, options: RequestOptions = {}, retried = false): Promise<Envelope<T>> {
+async function rawRequest<T>(path: string, options: RequestOptions = {}, retried = false, version?: number): Promise<Envelope<T>> {
   const { method = "GET", body, auth = true, isFormData = false, area = currentArea() } = options
+  const requestVersion = version ?? getSessionVersion(area)
+  if (auth) assertSession(area, requestVersion)
 
   const headers: Record<string, string> = {}
   if (!isFormData) headers["Content-Type"] = "application/json"
@@ -179,16 +242,17 @@ async function rawRequest<T>(path: string, options: RequestOptions = {}, retried
       body: body === undefined ? undefined : isFormData ? (body as FormData) : JSON.stringify(body),
     })
   } catch {
+    if (auth) assertSession(area, requestVersion)
     throw new NetworkError()
   }
+  if (auth) assertSession(area, requestVersion)
 
   if (res.status === 401 && auth) {
     if (!retried && getRefreshToken(area)) {
-      const refreshed = await refreshAccessToken(area)
-      if (refreshed) return rawRequest<T>(path, options, true)
+      const refreshed = await refreshAccessToken(area, requestVersion)
+      assertSession(area, requestVersion)
+      if (refreshed) return rawRequest<T>(path, { ...options, area }, true, requestVersion)
     }
-    clearTokens(area)
-    unauthorizedHandler?.(area)
   }
 
   let json: Envelope<T> | null = null
@@ -196,6 +260,11 @@ async function rawRequest<T>(path: string, options: RequestOptions = {}, retried
     json = (await res.json()) as Envelope<T>
   } catch {
     json = null
+  }
+  if (auth) assertSession(area, requestVersion)
+  if (res.status === 401 && auth) {
+    clearTokens(area)
+    unauthorizedHandler?.(area)
   }
 
   if (!res.ok || !json || json.success === false) {
@@ -241,9 +310,12 @@ export function uploadWithProgress<T>(
   formData: FormData,
   onProgress?: (percent: number) => void,
   retried = false,
+  session?: { area: SessionArea; version: number },
 ): Promise<T> {
-  const area = currentArea()
+  const area = session?.area ?? currentArea()
+  const version = session?.version ?? getSessionVersion(area)
   return new Promise<T>((resolve, reject) => {
+    assertSession(area, version)
     const xhr = new XMLHttpRequest()
     xhr.open("POST", `${API_BASE_URL}${path}`)
     const token = getAccessToken(area)
@@ -253,28 +325,35 @@ export function uploadWithProgress<T>(
     }
     xhr.onerror = () => reject(new NetworkError())
     xhr.onload = async () => {
-      if (xhr.status === 401) {
-        if (!retried && getRefreshToken(area) && (await refreshAccessToken(area))) {
-          onProgress?.(0)
-          uploadWithProgress<T>(path, formData, onProgress, true).then(resolve, reject)
+      try {
+        assertSession(area, version)
+        if (xhr.status === 401) {
+          if (!retried && getRefreshToken(area) && (await refreshAccessToken(area, version))) {
+            assertSession(area, version)
+            onProgress?.(0)
+            uploadWithProgress<T>(path, formData, onProgress, true, { area, version }).then(resolve, reject)
+            return
+          }
+          assertSession(area, version)
+          clearTokens(area)
+          unauthorizedHandler?.(area)
+        }
+        let json: Envelope<T> | null = null
+        try {
+          json = JSON.parse(xhr.responseText) as Envelope<T>
+        } catch {
+          json = null
+        }
+        if (xhr.status < 200 || xhr.status >= 300 || !json || json.success === false) {
+          const message =
+            json?.message || (xhr.status === 413 ? "The file is too large for the server to accept." : `Request failed (${xhr.status})`)
+          reject(new ApiError(message, xhr.status, json?.errors ?? {}))
           return
         }
-        clearTokens(area)
-        unauthorizedHandler?.(area)
+        resolve(json.data as T)
+      } catch (error) {
+        reject(error)
       }
-      let json: Envelope<T> | null = null
-      try {
-        json = JSON.parse(xhr.responseText) as Envelope<T>
-      } catch {
-        json = null
-      }
-      if (xhr.status < 200 || xhr.status >= 300 || !json || json.success === false) {
-        const message =
-          json?.message || (xhr.status === 413 ? "The file is too large for the server to accept." : `Request failed (${xhr.status})`)
-        reject(new ApiError(message, xhr.status, json?.errors ?? {}))
-        return
-      }
-      resolve(json.data as T)
     }
     xhr.send(formData)
   })

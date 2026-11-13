@@ -4,8 +4,13 @@
 
 function escapeCsvValue(value: unknown): string {
   if (value === null || value === undefined) return ""
-  const str = String(value)
-  if (/[",\n]/.test(str)) {
+  let str = String(value)
+  // Spreadsheet apps interpret these prefixes as formulas even in quoted
+  // CSV cells. Preserve numeric values, but treat untrusted strings as text.
+  if (typeof value === "string" && (/^[\s]*[=+\-@]/.test(str) || /^[\t\r\n]/.test(str))) {
+    str = `'${str}`
+  }
+  if (/[",\r\n]/.test(str)) {
     return `"${str.replace(/"/g, '""')}"`
   }
   return str
@@ -15,7 +20,7 @@ export function toCsv(rows: Record<string, unknown>[]): string {
   if (rows.length === 0) return ""
   const headers = Object.keys(rows[0])
   const lines = [
-    headers.join(","),
+    headers.map(escapeCsvValue).join(","),
     ...rows.map((row) => headers.map((h) => escapeCsvValue(row[h])).join(",")),
   ]
   return lines.join("\n")

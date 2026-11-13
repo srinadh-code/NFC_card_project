@@ -113,7 +113,7 @@ export function AnnouncementBanner() {
   if (announcements.length === 0 || !activeKey || dismissedKey === activeKey) return null
 
   return (
-    <div className="relative flex h-11 items-center overflow-hidden bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#EC4899]">
+    <div className="relative flex h-11 items-center overflow-hidden bg-gradient-brand">
       <div className="flex w-max animate-marquee">
         {/* Rendered twice back-to-back so the scroll from 0 to -50% loops
             with an invisible seam — see the .animate-marquee keyframes. */}
@@ -143,7 +143,7 @@ export function AnnouncementBanner() {
       </button>
       {/* Fades the edge under the close button so scrolling text never
           looks like it's clipping mid-character right next to it. */}
-      <div className="pointer-events-none absolute right-0 top-0 h-full w-12 bg-gradient-to-l from-[#EC4899] to-transparent" />
+      <div className="pointer-events-none absolute right-0 top-0 h-full w-12 bg-gradient-to-l from-[var(--brand-3)] to-transparent" />
     </div>
   )
 }

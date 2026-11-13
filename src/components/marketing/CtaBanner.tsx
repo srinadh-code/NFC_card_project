@@ -47,7 +47,7 @@ export default function CtaBanner({
         <p className="mx-auto mt-3 max-w-xl text-white/85">{subtitle}</p>
         <Button
           size="lg"
-          className="mt-8 rounded-xl bg-white text-primary shadow-[0_10px_30px_rgba(0,0,0,0.15)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/90 hover:shadow-[0_15px_35px_rgba(0,0,0,0.2)]"
+          className="mt-8 rounded-xl bg-white text-[var(--public-navy,var(--primary))] shadow-[0_10px_30px_rgba(0,0,0,0.15)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/90 hover:shadow-[0_15px_35px_rgba(0,0,0,0.2)]"
           onClick={() => navigate(to)}
         >
           {buttonLabel}

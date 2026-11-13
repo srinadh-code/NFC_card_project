@@ -150,7 +150,7 @@ export default function Shop() {
     return (
       <div>
         <PageHeader title="" subtitle="" className="pb-8 pt-10 sm:pb-8 sm:pt-12 lg:pb-10 lg:pt-14" />
-        <section className="bg-[#F8FAFC] px-4 pb-10 pt-8 dark:bg-transparent sm:pb-12 sm:pt-10">
+        <section className="bg-background px-4 pb-10 pt-8 dark:bg-transparent sm:pb-12 sm:pt-10">
           <div className="mx-auto grid max-w-[1100px] grid-cols-1 gap-6 sm:grid-cols-2">
             <Skeleton className="h-96 w-full rounded-[24px]" />
             <Skeleton className="h-96 w-full rounded-[24px]" />
@@ -169,7 +169,7 @@ export default function Shop() {
             subtitle={data?.page.page_subtitle}
             className="pb-8 pt-10 sm:pb-8 sm:pt-12 lg:pb-10 lg:pt-14"
           />
-          <section className="bg-[#F8FAFC] px-4 pb-10 pt-8 dark:bg-transparent sm:pb-12 sm:pt-10">
+          <section className="bg-background px-4 pb-10 pt-8 dark:bg-transparent sm:pb-12 sm:pt-10">
             <div className="mx-auto max-w-[1100px]">
               {products.length === 0 ? (
                 <div className="flex flex-col items-center gap-3 py-16 text-center">
@@ -185,7 +185,7 @@ export default function Shop() {
         </>
       ) : (
         <>
-          <section className="bg-[#F8FAFC] px-4 py-8 dark:bg-transparent sm:py-10">
+          <section className="bg-background px-4 py-8 dark:bg-transparent sm:py-10">
             <div className="mx-auto max-w-[1320px]">
               <ProductDetails
                 key={selected.slug}
@@ -201,7 +201,7 @@ export default function Shop() {
                       <Button
                         type="button"
                         variant="ghost"
-                        className="bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 focus-visible:ring-blue-400/50 dark:bg-blue-500/15 dark:text-blue-300 dark:hover:bg-blue-500/25 dark:hover:text-blue-200"
+                        className="bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary focus-visible:ring-ring/50"
                         onClick={() => scrollTo(themesRef)}
                       >
                         View {availableThemes.length} Templates
@@ -239,7 +239,7 @@ export default function Shop() {
                   </h2>
                   <p className="mt-3 text-muted-foreground">{data?.page.theme_section_subtitle}</p>
 
-                  <span className="mt-5 inline-block rounded-full bg-[#4F46E5]/10 px-4 py-1.5 text-xs font-bold tracking-wider text-[#4F46E5]">
+                  <span className="mt-5 inline-block rounded-full bg-primary/10 px-4 py-1.5 text-xs font-bold tracking-wider text-primary">
                     {selected.slug.toUpperCase()} • {selected.template_count}{" "}
                     {selected.template_count === 1 ? "THEME" : "THEMES"} INCLUDED
                   </span>

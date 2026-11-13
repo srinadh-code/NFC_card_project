@@ -73,19 +73,21 @@ export default function Footer() {
   }
 
   return (
-    <footer className="bg-[#0B0F19]">
+    <footer className="bg-[var(--public-navy)]">
       <div className="container-page py-8 sm:py-10">
         <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-6 lg:gap-6">
           <div className="col-span-2 sm:col-span-3 lg:col-span-2">
             <Link to="/" className="flex items-center gap-2">
-              <BrandMark
-                className="size-8 rounded-lg"
-                fallback={
-                  <span className="flex size-8 items-center justify-center rounded-lg bg-gradient-brand-br text-white">
-                    <Nfc className="size-4" />
-                  </span>
-                }
-              />
+              <span className="original-theme contents">
+                <BrandMark
+                  className="size-8 rounded-lg"
+                  fallback={
+                    <span className="flex size-8 items-center justify-center rounded-lg bg-gradient-brand-br text-white">
+                      <Nfc className="size-4" />
+                    </span>
+                  }
+                />
+              </span>
               <span className="text-base font-bold tracking-tight text-white">{settings.site_name}</span>
             </Link>
             <p className="mt-2.5 max-w-xs text-sm text-[#9CA3AF]">
@@ -94,13 +96,13 @@ export default function Footer() {
             </p>
             <div className="mt-3 flex flex-col gap-1.5 text-sm text-slate-400">
               {mailtoHref && (
-                <a href={mailtoHref} className="flex items-center gap-2 transition-colors duration-200 hover:text-[#EC4899]">
+                <a href={mailtoHref} className="flex items-center gap-2 transition-colors duration-200 hover:text-[var(--public-bright)]">
                   <Mail className="size-3.5 shrink-0" />
                   {supportEmail}
                 </a>
               )}
               {telHref && (
-                <a href={telHref} className="flex items-center gap-2 transition-colors duration-200 hover:text-[#EC4899]">
+                <a href={telHref} className="flex items-center gap-2 transition-colors duration-200 hover:text-[var(--public-bright)]">
                   <Phone className="size-3.5 shrink-0" />
                   {supportPhone}
                 </a>
@@ -112,7 +114,7 @@ export default function Footer() {
                   key={label}
                   href="#"
                   aria-label={label}
-                  className="flex size-8 items-center justify-center rounded-full border border-white/15 text-[#9CA3AF] transition-all duration-200 hover:border-[#EC4899]/50 hover:bg-white/10 hover:text-white hover:shadow-[0_0_16px_rgba(236,72,153,0.35)]"
+                  className="flex size-8 items-center justify-center rounded-full border border-white/15 text-[#9CA3AF] transition-all duration-200 hover:border-[var(--public-bright)]/50 hover:bg-white/10 hover:text-white hover:shadow-[0_0_16px_rgba(var(--public-shadow-rgb),0.35)]"
                 >
                   <Icon className="size-3.5" />
                 </a>
@@ -125,7 +127,7 @@ export default function Footer() {
             <ul className="mt-2.5 space-y-1.5">
               {QUICK_LINKS.map((l) => (
                 <li key={l.label}>
-                  <Link to={l.to} className="text-sm text-[#9CA3AF] transition-colors duration-200 hover:text-[#EC4899]">
+                  <Link to={l.to} className="text-sm text-[#9CA3AF] transition-colors duration-200 hover:text-[var(--public-bright)]">
                     {l.label}
                   </Link>
                 </li>
@@ -138,7 +140,7 @@ export default function Footer() {
             <ul className="mt-2.5 space-y-1.5">
               {SHOP_LINKS.map((l) => (
                 <li key={l.label}>
-                  <Link to={l.to} className="text-sm text-[#9CA3AF] transition-colors duration-200 hover:text-[#EC4899]">
+                  <Link to={l.to} className="text-sm text-[#9CA3AF] transition-colors duration-200 hover:text-[var(--public-bright)]">
                     {l.label}
                   </Link>
                 </li>
@@ -151,7 +153,7 @@ export default function Footer() {
             <ul className="mt-2.5 space-y-1.5">
               {LEGAL_LINKS.map((l) => (
                 <li key={l.label}>
-                  <Link to={l.to} className="text-sm text-[#9CA3AF] transition-colors duration-200 hover:text-[#EC4899]">
+                  <Link to={l.to} className="text-sm text-[#9CA3AF] transition-colors duration-200 hover:text-[var(--public-bright)]">
                     {l.label}
                   </Link>
                 </li>
@@ -161,7 +163,7 @@ export default function Footer() {
             <ul className="mt-2.5 space-y-1.5">
               {SUPPORT_LINKS.map((l, i) => (
                 <li key={l.label + i}>
-                  <Link to={l.to} className="text-sm text-[#9CA3AF] transition-colors duration-200 hover:text-[#EC4899]">
+                  <Link to={l.to} className="text-sm text-[#9CA3AF] transition-colors duration-200 hover:text-[var(--public-bright)]">
                     {l.label}
                   </Link>
                 </li>
@@ -180,12 +182,12 @@ export default function Footer() {
                 placeholder="you@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="h-8 border-white/15 bg-white/5 text-sm text-white placeholder:text-[#6B7280] focus-visible:border-[#EC4899]/50 focus-visible:ring-[#EC4899]/30"
+                className="h-8 border-white/15 bg-white/5 text-sm text-white placeholder:text-[#9CA3AF] focus-visible:border-[var(--public-bright)]/50 focus-visible:ring-[var(--public-bright)]/30"
               />
               <Button
                 type="submit"
                 size="sm"
-                className="w-full rounded-xl bg-gradient-brand text-white shadow-[0_4px_14px_rgba(139,92,246,0.4)] transition-all duration-200 hover:shadow-[0_6px_20px_rgba(139,92,246,0.55)] hover:brightness-110"
+                className="w-full rounded-xl bg-gradient-brand text-white shadow-[0_4px_14px_rgba(var(--public-shadow-rgb),0.4)] transition-all duration-200 hover:shadow-[0_6px_20px_rgba(var(--public-shadow-rgb),0.55)] hover:brightness-110"
               >
                 Subscribe
               </Button>
@@ -196,7 +198,7 @@ export default function Footer() {
 
       <div className="border-t border-white/10">
         <div className="container-page flex flex-col items-center justify-between gap-2 py-3.5 sm:flex-row">
-          <p className="text-xs text-[#6B7280]">
+          <p className="text-xs text-[#9CA3AF]">
             © 2026 {settings.site_name}. All rights reserved.
           </p>
           <div className="flex items-center gap-2">

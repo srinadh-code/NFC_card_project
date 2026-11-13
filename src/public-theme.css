@@ -1,0 +1,161 @@
+/* Snapshot the existing mode-aware theme before public descendants override it. */
+:root {
+  --original-background: var(--background);
+  --original-background-secondary: var(--background-secondary);
+  --original-foreground: var(--foreground);
+  --original-card: var(--card);
+  --original-card-foreground: var(--card-foreground);
+  --original-popover: var(--popover);
+  --original-popover-foreground: var(--popover-foreground);
+  --original-primary: var(--primary);
+  --original-primary-foreground: var(--primary-foreground);
+  --original-secondary: var(--secondary);
+  --original-secondary-foreground: var(--secondary-foreground);
+  --original-muted: var(--muted);
+  --original-muted-foreground: var(--muted-foreground);
+  --original-accent: var(--accent);
+  --original-accent-foreground: var(--accent-foreground);
+  --original-border: var(--border);
+  --original-input: var(--input);
+  --original-ring: var(--ring);
+  --original-brand-1: var(--brand-1);
+  --original-brand-2: var(--brand-2);
+  --original-brand-3: var(--brand-3);
+  --original-accent-blue: var(--accent-blue);
+  --original-accent-violet: var(--accent-violet);
+  --original-accent-cyan: var(--accent-cyan);
+  --original-gradient-brand: var(--gradient-brand);
+  --original-gradient-brand-br: var(--gradient-brand-br);
+  --original-glass-bg: var(--glass-bg);
+  --original-glass-border: var(--glass-border);
+}
+
+/* Applied only by PublicLayout and its portaled UI, never to html or body. */
+.public-theme {
+  --public-navy: #0B1730;
+  --public-navy-mid: #142B46;
+  --public-accent: #007A50;
+  --public-accent-text: #007A50;
+  --public-bright: #18C98A;
+  --public-soft: #D8F5E7;
+  --public-dot: #9ACDB7;
+  --public-shadow-rgb: 0, 168, 107;
+  --brand-shadow-rgb: 0, 168, 107;
+  --brand-glow-rgb: 0, 168, 107;
+  --button-shadow-rgb: 0, 168, 107;
+  --gradient-foreground: #FFFFFF;
+  --background: #F5F9F8;
+  --background-secondary: #EDF5F1;
+  --foreground: #0B1730;
+  --card: #FFFFFF;
+  --card-foreground: #0B1730;
+  --popover: #FFFFFF;
+  --popover-foreground: #0B1730;
+  --primary: #0B1730;
+  --primary-foreground: #FFFFFF;
+  --secondary: #EDF5F1;
+  --secondary-foreground: #142B46;
+  --muted: #EDF5F1;
+  --muted-foreground: #4C6359;
+  --accent: #D8F5E7;
+  --accent-foreground: #007A50;
+  --border: #D0E3D9;
+  --input: #78968A;
+  --ring: #007A50;
+  --brand-1: #0B1730;
+  --brand-2: #142B46;
+  --brand-3: #00A86B;
+  --accent-blue: #142B46;
+  --accent-violet: #007A50;
+  --accent-cyan: #18C98A;
+  /* Darker emerald endpoint keeps small white CTA copy readable. */
+  --gradient-brand: linear-gradient(135deg, #0B1730 0%, #142B46 55%, #007A50 100%);
+  --gradient-brand-br: var(--gradient-brand);
+  --public-text-gradient: linear-gradient(135deg, #0B1730 0%, #007A50 100%);
+  --glass-bg: rgba(255, 255, 255, 0.95);
+  --glass-border: rgba(0, 122, 80, 0.15);
+}
+
+.dark .public-theme {
+  --background: #0B1730;
+  --background-secondary: #10243D;
+  --foreground: #F5F9F8;
+  --card: #142B46;
+  --card-foreground: #F5F9F8;
+  --popover: #142B46;
+  --popover-foreground: #F5F9F8;
+  --primary: #18C98A;
+  --primary-foreground: #0B1730;
+  --secondary: #10243D;
+  --secondary-foreground: #E4F5ED;
+  --muted: #10243D;
+  --muted-foreground: #B4CCC1;
+  --accent: #173C35;
+  --accent-foreground: #18C98A;
+  --border: #315345;
+  --input: #648E7D;
+  --ring: #18C98A;
+  --public-accent-text: #18C98A;
+  --public-dot: #315345;
+  --public-text-gradient: linear-gradient(135deg, #E4F5ED 0%, #18C98A 100%);
+  --glass-bg: rgba(11, 23, 48, 0.94);
+  --glass-border: rgba(24, 201, 138, 0.2);
+}
+
+/* Override the app's unlayered universal border rule for public form controls. */
+.public-theme :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]) {
+  border-color: var(--input);
+}
+
+.public-theme :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]):focus-visible {
+  border-color: var(--ring);
+}
+
+.public-theme :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"])[aria-invalid="true"] {
+  border-color: var(--destructive);
+}
+
+/* Preserve logos and digital template previews, including their dark palette. */
+.original-theme {
+  --background: var(--original-background);
+  --background-secondary: var(--original-background-secondary);
+  --foreground: var(--original-foreground);
+  --card: var(--original-card);
+  --card-foreground: var(--original-card-foreground);
+  --popover: var(--original-popover);
+  --popover-foreground: var(--original-popover-foreground);
+  --primary: var(--original-primary);
+  --primary-foreground: var(--original-primary-foreground);
+  --secondary: var(--original-secondary);
+  --secondary-foreground: var(--original-secondary-foreground);
+  --muted: var(--original-muted);
+  --muted-foreground: var(--original-muted-foreground);
+  --accent: var(--original-accent);
+  --accent-foreground: var(--original-accent-foreground);
+  --border: var(--original-border);
+  --input: var(--original-input);
+  --ring: var(--original-ring);
+  --brand-1: var(--original-brand-1);
+  --brand-2: var(--original-brand-2);
+  --brand-3: var(--original-brand-3);
+  --accent-blue: var(--original-accent-blue);
+  --accent-violet: var(--original-accent-violet);
+  --accent-cyan: var(--original-accent-cyan);
+  --gradient-brand: var(--original-gradient-brand);
+  --gradient-brand-br: var(--original-gradient-brand-br);
+  --glass-bg: var(--original-glass-bg);
+  --glass-border: var(--original-glass-border);
+  --public-navy: initial;
+  --public-navy-mid: initial;
+  --public-accent: initial;
+  --public-accent-text: initial;
+  --public-bright: initial;
+  --public-soft: initial;
+  --public-dot: initial;
+  --public-shadow-rgb: initial;
+  --brand-shadow-rgb: initial;
+  --brand-glow-rgb: initial;
+  --button-shadow-rgb: initial;
+  --gradient-foreground: initial;
+  --public-text-gradient: initial;
+}

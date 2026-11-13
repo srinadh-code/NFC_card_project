@@ -4,6 +4,7 @@ import Navbar from "@/components/layout/Navbar"
 import Footer from "@/components/layout/Footer"
 import { AnnouncementBanner } from "@/components/marketing/AnnouncementBanner"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
+import { PublicThemeContext } from "@/lib/theme-scope"
 
 export default function PublicLayout() {
   const { settings } = usePublicSettings()
@@ -15,13 +16,15 @@ export default function PublicLayout() {
   }, [settings.site_name])
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <AnnouncementBanner />
-      <Navbar />
-      <main className="flex-1">
-        <Outlet />
-      </main>
-      <Footer />
-    </div>
+    <PublicThemeContext.Provider value={true}>
+      <div className="public-theme flex min-h-screen flex-col bg-background text-foreground">
+        <AnnouncementBanner />
+        <Navbar />
+        <main className="flex-1">
+          <Outlet />
+        </main>
+        <Footer />
+      </div>
+    </PublicThemeContext.Provider>
   )
 }

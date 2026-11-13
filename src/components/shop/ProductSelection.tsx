@@ -25,7 +25,7 @@ export function ProductSelection({ products, currency = "INR", onSelect }: Produ
               <span
                 className={cn(
                   gradientClass,
-                  "absolute right-4 top-4 z-10 inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold text-white shadow-[0_8px_20px_rgba(124,58,237,0.4)]",
+                  "absolute right-4 top-4 z-10 inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold text-white shadow-[0_8px_20px_rgba(var(--public-shadow-rgb),0.4)]",
                 )}
               >
                 <Crown className="size-3.5" />
@@ -54,16 +54,16 @@ export function ProductSelection({ products, currency = "INR", onSelect }: Produ
               <div className="mt-auto flex items-center justify-between gap-3 pt-5">
                 <p className="text-sm text-muted-foreground">
                   From{" "}
-                  <span className={cn("bg-gradient-to-r bg-clip-text text-2xl font-bold text-transparent", gradientClass)}>
+                  <span className="text-gradient-brand text-2xl font-bold">
                     {formatCurrency(unitPriceFor(product, 1), currency)}
                   </span>
                 </p>
                 <Button
                   onClick={() => onSelect(product.slug)}
                   className={cn(
-                    "rounded-xl text-white",
+                    "rounded-xl text-primary-foreground",
                     product.popular
-                      ? "bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#EC4899] shadow-[0_10px_30px_rgba(79,70,229,0.35)]"
+                      ? "bg-gradient-brand text-white shadow-[0_10px_30px_rgba(var(--public-shadow-rgb),0.35)]"
                       : "",
                   )}
                 >

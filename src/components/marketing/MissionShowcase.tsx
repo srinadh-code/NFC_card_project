@@ -1,15 +1,18 @@
+import { TypewriterCursor, TypewriterText } from "@/components/marketing/TypewriterText"
+import { useTypewriter } from "@/hooks/use-typewriter"
+
 function TargetIllustration() {
   return (
     <div className="relative flex size-56 shrink-0 items-center justify-center sm:size-64">
       {/* decorative corner rings */}
-      <span className="absolute left-2 top-0 size-3 rounded-full border-2 border-[#EC4899]/40" />
-      <span className="absolute -right-1 top-1/3 size-2.5 rounded-full border-2 border-[#7C3AED]/40" />
-      <span className="absolute left-0 bottom-2 size-2.5 rounded-full border-2 border-[#7C3AED]/40" />
+      <span className="absolute left-2 top-0 size-3 rounded-full border-2 border-[var(--public-accent)]/40" />
+      <span className="absolute -right-1 top-1/3 size-2.5 rounded-full border-2 border-primary/40" />
+      <span className="absolute left-0 bottom-2 size-2.5 rounded-full border-2 border-primary/40" />
 
       {/* bullseye rings, largest to smallest, each centered via inset-0 + m-auto */}
-      <div className="absolute inset-0 m-auto size-56 rounded-full bg-gradient-to-br from-[#EEF2FF] to-[#FCE7F3] shadow-inner dark:from-card dark:to-card sm:size-64" />
-      <div className="absolute inset-0 m-auto size-44 rounded-full bg-gradient-to-br from-[#C4B5FD] to-[#F9A8D4] opacity-80 sm:size-48" />
-      <div className="absolute inset-0 m-auto size-28 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] shadow-lg sm:size-32" />
+      <div className="absolute inset-0 m-auto size-56 rounded-full bg-gradient-to-br from-primary/5 to-[var(--public-soft)] shadow-inner dark:from-card dark:to-card sm:size-64" />
+      <div className="absolute inset-0 m-auto size-44 rounded-full bg-gradient-to-br from-[var(--public-dot)] to-[var(--public-soft)] opacity-80 sm:size-48" />
+      <div className="absolute inset-0 m-auto size-28 rounded-full bg-gradient-brand-br shadow-lg sm:size-32" />
       <div className="absolute inset-0 m-auto size-14 rounded-full bg-card shadow-md sm:size-16" />
       <div className="absolute inset-0 m-auto size-6 rounded-full bg-gradient-brand shadow-glow-primary sm:size-7" />
 
@@ -34,6 +37,10 @@ interface MissionShowcaseProps {
 }
 
 export default function MissionShowcase({ badge, heading, description }: MissionShowcaseProps) {
+  const writingRef = useTypewriter<HTMLDivElement>({
+    content: JSON.stringify([badge, heading, description]),
+    trigger: "viewport",
+  })
   // No top padding: follows the About story section on the same background,
   // so its bottom padding already provides the gap.
   return (
@@ -41,26 +48,27 @@ export default function MissionShowcase({ badge, heading, description }: Mission
       <div
         className="pointer-events-none absolute inset-0 opacity-40"
         style={{
-          backgroundImage: "radial-gradient(circle, #C4B5FD 1px, transparent 1px)",
+          backgroundImage: "radial-gradient(circle, var(--public-dot) 1px, transparent 1px)",
           backgroundSize: "26px 26px",
           maskImage: "radial-gradient(ellipse 55% 55% at 85% 25%, black, transparent)",
         }}
       />
-      <div className="pointer-events-none absolute -left-20 top-10 size-72 rounded-full bg-[#7C3AED]/10 blur-3xl" />
-      <div className="pointer-events-none absolute -right-16 bottom-0 size-64 rounded-full bg-[#EC4899]/10 blur-3xl" />
+      <div className="pointer-events-none absolute -left-20 top-10 size-72 rounded-full bg-primary/10 blur-3xl" />
+      <div className="pointer-events-none absolute -right-16 bottom-0 size-64 rounded-full bg-[var(--public-accent)]/10 blur-3xl" />
 
       <div className="container-page relative">
-        <div className="rounded-[32px] bg-gradient-to-r from-[#6C4DFF] to-[#FF5DA8] p-[1.5px] shadow-[0_25px_70px_rgba(124,58,237,0.18)]">
+        <div className="rounded-[32px] bg-gradient-brand p-[1.5px] shadow-[0_25px_70px_rgba(var(--public-shadow-rgb),0.18)]">
           <div className="glass-panel rounded-[30.5px] px-6 py-8 sm:px-12 sm:py-10">
             <div className="flex flex-col items-center gap-8 lg:flex-row lg:justify-center lg:gap-12">
               <TargetIllustration />
 
-              <div className="max-w-2xl text-center lg:text-left">
+              <div ref={writingRef} className="relative max-w-2xl text-center lg:text-left">
                 <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold tracking-wide text-primary">
-                  {badge}
+                  <TypewriterText text={badge} maxDurationMs={250} />
                 </span>
-                <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">{heading}</h2>
-                <p className="mx-auto mt-4 max-w-xl text-muted-foreground sm:text-lg lg:mx-0">{description}</p>
+                <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl"><TypewriterText text={heading} maxDurationMs={1000} /></h2>
+                <p className="mx-auto mt-4 max-w-xl text-muted-foreground sm:text-lg lg:mx-0"><TypewriterText text={description} maxDurationMs={1600} /></p>
+                <TypewriterCursor />
               </div>
             </div>
           </div>
