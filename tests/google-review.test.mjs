@@ -29,7 +29,7 @@ before(async () => {
     name: "review-ui-test-boundaries", enforce: "pre",
     transform(code, id) {
       const path = id.replaceAll("\\", "/")
-      if (path.endsWith("/pages/customer/GoogleReview.tsx")) return code.replace("useEffect, useState,", "useEffect, useState as actualUseState,").replace("useMutation, useQueryClient", "useMutation as actualUseMutation, useQueryClient") + `\nconst useState = initial => actualUseState(globalThis.__googleReviewDraft && initial === globalThis.__googleReviewDraft.saved ? globalThis.__googleReviewDraft.draft : initial);\nconst useMutation = options => { const result = actualUseMutation(options); return globalThis.__googleReviewMutationError ? { ...result, isError: true, error: globalThis.__googleReviewMutationError } : result; };`
+      if (path.endsWith("/pages/customer/GoogleReview.tsx")) return code.replace("useEffect, useState,", "useEffect, useState as actualUseState,").replace("useMutation, useQueryClient", "useMutation as actualUseMutation, useQueryClient") + `\nconst useState = initial => { const draft = [globalThis.__googleReviewDraft, globalThis.__googleReviewBusinessDraft].find(value => value && initial === value.saved); return actualUseState(draft ? draft.draft : initial); };\nconst useMutation = options => { const result = actualUseMutation(options); globalThis.__googleReviewMutationOptions?.push(options); return globalThis.__googleReviewMutationError ? { ...result, isError: true, error: globalThis.__googleReviewMutationError } : globalThis.__googleReviewMutationSuccess ? { ...result, isSuccess: true } : result; };`
       if (path.endsWith("/CardFormDialog.tsx")) return code.replace('"@/components/ui/dialog"', '"virtual:review-card-dialog-test"')
       if (path.endsWith("/ReviewCardProgrammingLink.tsx")) return code.replace("import { useEffect, useState }", "import { useEffect as actualUseEffect, useState as actualUseState }") + `\nconst useState = initial => globalThis.__programmingHooks ? [initial, () => {}] : actualUseState(initial);\nconst useEffect = (...args) => globalThis.__programmingHooks ? globalThis.__programmingHooks.push(args[0]) : actualUseEffect(...args);`
       if (path.endsWith("/pages/customer/Settings.tsx")) return code.replace('"@/store/theme-store"', '"virtual:review-settings-theme-test"')
@@ -65,6 +65,9 @@ after(async () => {
   await vite?.close()
   delete globalThis.__googleReviewDraft
   delete globalThis.__googleReviewMutationError
+  delete globalThis.__googleReviewBusinessDraft
+  delete globalThis.__googleReviewMutationOptions
+  delete globalThis.__googleReviewMutationSuccess
   delete globalThis.__programmingHooks
   delete globalThis.__orderSuccessEffects
   sharedQueryClient?.clear()
@@ -80,7 +83,7 @@ function signIn(id = 7, roles = ["RECIPIENT"]) {
   auth.useCustomerSessionStore.setState({ user, hydrated: true })
   Object.assign(auth.useCustomerSessionStore.getInitialState(), { user, hydrated: true })
 }
-beforeEach(() => { signIn(); delete globalThis.__googleReviewDraft; delete globalThis.__googleReviewMutationError; delete globalThis.__orderSuccessEffects; sharedQueryClient.clear(); globalThis.fetch = () => { throw new Error("Unexpected real request") } })
+beforeEach(() => { signIn(); delete globalThis.__googleReviewDraft; delete globalThis.__googleReviewMutationError; delete globalThis.__googleReviewBusinessDraft; delete globalThis.__googleReviewMutationOptions; delete globalThis.__googleReviewMutationSuccess; delete globalThis.__orderSuccessEffects; sharedQueryClient.clear(); globalThis.fetch = () => { throw new Error("Unexpected real request") } })
 
 function render(component, data, key = "7") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: Infinity }, mutations: { gcTime: 0 } } })
@@ -106,7 +109,7 @@ test("mixed product units retain their product identity and allow one email in e
 test("review-only workspace shows real settings, pending physical assignment and measured opens", () => {
   const html = render(GoogleReview, workspace())
   assert.match(html, /Real Business/)
-  assert.match(html, /Google review URL/)
+  assert.match(html, /Google Maps business location URL/)
   assert.match(html, /physical card has not been assigned/)
   assert.match(html, /NFC taps/)
   assert.match(html, /QR scans/)
@@ -126,14 +129,15 @@ test("QR actions require a saved destination and actual assigned card public URL
   assert.match(active, />PNG</)
   assert.match(active, />SVG</)
   assert.match(active, />PDF</)
-  assert.match(active, /nfc\/REVIEW-UID\?source=qr/)
+  assert.match(active, /nfc\/REVIEW-UID/)
+  assert.doesNotMatch(active, /\?source=qr/)
   assert.doesNotMatch(active, /Activate card/)
   for (const status of ["BLOCKED", "LOST", "INACTIVE", "UNASSIGNED"]) assert.doesNotMatch(render(GoogleReview, workspace({ ...links, cards: [card({ status, programming_url: programming })] })), />PNG</)
   assert.doesNotMatch(render(GoogleReview, workspace({ ...links, configured: false, cards: [card({ status: "ACTIVE", programming_url: programming })] })), />PNG</)
 })
 
 test("review validation displays the backend field explanation beside the URL and preserves saved settings", () => {
-  const explanation = "Use your direct Google review link. A Google Maps business listing does not open the review form."
+  const explanation = "Enter a valid Google Maps business location or Google review link."
   globalThis.__googleReviewMutationError = new api.ApiError("Invalid input.", 400, { google_review_url: [explanation] })
   const html = render(GoogleReview, workspace())
   assert.ok(html.includes(explanation))
@@ -141,18 +145,20 @@ test("review validation displays the backend field explanation beside the URL an
   assert.match(html, /id="google-review-url-error"[^>]*role="alert"/)
   assert.doesNotMatch(html, />Invalid input\.</)
   assert.ok(html.includes(`href="${workspace().google_review_url}"`))
-  assert.match(html, /Ask for reviews/)
+  assert.match(html, /Google Maps → Share → Copy link/)
+  assert.doesNotMatch(html, /Use the direct review link|listing does not open the review form/)
 })
 
 test("QR and copy actions never use localhost, missing assignment URLs, or another card's workspace URL", () => {
   for (const programming of [null, "http://localhost:5173/nfc/REVIEW-UID", "https://127.0.0.1/nfc/REVIEW-UID"]) {
     const html = render(GoogleReview, workspace({ scan_url: "https://cards.example/nfc/OTHER", qr_url: "https://cards.example/nfc/OTHER?source=qr", cards: [card({ programming_url: programming, status: "ACTIVE" })] }))
-    assert.doesNotMatch(html, /Copy NFC URL|Download NFC QR|>PNG<|href="[^\"]*\/nfc\//)
+    assert.doesNotMatch(html, /Copy NFC URL|Download NFC QR|>PNG<|href="[^"]*\/nfc\//)
     assert.match(html, /public NFC link is unavailable/)
   }
   const programming = "https://cards.example/nfc/REVIEW-UID"
   const html = render(GoogleReview, workspace({ scan_url: "https://cards.example/nfc/OTHER", qr_url: "https://evil.example/", cards: [card({ programming_url: programming })] }))
-  assert.match(html, /https:\/\/cards\.example\/nfc\/REVIEW-UID\?source=qr/)
+  assert.match(html, /https:\/\/cards\.example\/nfc\/REVIEW-UID/)
+  assert.doesNotMatch(html, /\?source=qr/)
   assert.doesNotMatch(html, /evil\.example|\/nfc\/OTHER/)
 })
 
@@ -239,6 +245,72 @@ test("owner API saves through the existing authenticated endpoint and activation
   assert.match(calls[2].url, /\/nfc\/cards\/61\/activate-assigned\/$/)
 })
 
+test("saving and editing Maps business settings refreshes the saved destination while keeping the assigned NFC link", async (context) => {
+  const stable = "https://nfc-card-project-peach.vercel.app/nfc/rv_unguessable-public-card-token"
+  let current = workspace({ cards: [card({ programming_url: stable })], scan_url: stable, qr_url: stable })
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: Infinity }, mutations: { gcTime: 0 } } })
+  client.setQueryData(["google-review", "7"], current)
+  context.after(() => { client.clear(); delete globalThis.__googleReviewMutationOptions; delete globalThis.__googleReviewDraft; delete globalThis.__googleReviewBusinessDraft; delete globalThis.__googleReviewMutationSuccess })
+  const draw = () => renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(MemoryRouter, null, createElement(GoogleReview))))
+  const submitted = []
+  for (const [name, input, saved] of [
+    ["My Maps Business", "https://maps.app.goo.gl/verified-business", "https://www.google.com/maps/place/My+Maps+Business/"],
+    ["New Business Address", "https://www.google.com/maps/place/New+Business+Address/", "https://www.google.com/maps/place/New+Business+Address/"],
+  ]) {
+    globalThis.__googleReviewDraft = { saved: current.google_review_url, draft: ` ${input} ` }
+    globalThis.__googleReviewBusinessDraft = { saved: current.business_name, draft: ` ${name} ` }
+    globalThis.__googleReviewMutationOptions = []
+    draw()
+    const save = globalThis.__googleReviewMutationOptions[0]
+    globalThis.fetch = async (url, options) => {
+      assert.match(String(url), /\/customer\/google-review\/$/)
+      assert.equal(options.method, "PATCH")
+      assert.equal(options.headers.Authorization, "Bearer owner-7")
+      submitted.push(JSON.parse(options.body))
+      return Response.json({ success: true, data: { ...current, business_name: name, google_review_url: saved } })
+    }
+    const updated = await save.mutationFn()
+    save.onSuccess(updated)
+    current = updated
+    delete globalThis.__googleReviewDraft
+    delete globalThis.__googleReviewBusinessDraft
+    globalThis.__googleReviewMutationSuccess = true
+    const html = draw()
+    assert.ok(html.includes(`value="${name}"`))
+    assert.ok(html.includes(`href="${saved}"`))
+    assert.match(html, /Saved Google Maps destination/)
+    assert.match(html, /Your Google Review NFC Link/)
+    assert.ok(html.includes(`value="${stable}"`))
+    assert.match(html, /Business settings saved/)
+    assert.doesNotMatch(html, /\?source=qr/)
+    assert.equal(client.getQueryData(["google-review", "7"]).cards[0].programming_url, stable)
+  }
+  assert.deepEqual(submitted, [
+    { business_name: "My Maps Business", google_review_url: "https://maps.app.goo.gl/verified-business" },
+    { business_name: "New Business Address", google_review_url: "https://www.google.com/maps/place/New+Business+Address/" },
+  ])
+})
+
+test("customer and admin show the same read-only public NFC link with copy, open and exact-URL QR actions", () => {
+  const stable = "https://nfc-card-project-peach.vercel.app/nfc/rv_unguessable-public-card-token"
+  const customer = render(GoogleReview, workspace({ cards: [card({ programming_url: stable })], scan_url: stable, qr_url: stable }))
+  const admin = render(() => createElement(CardFormDialog, { open: true, onOpenChange() {}, onSubmit() {}, card: {
+    id: "61", uid: "REVIEW-UID", serialNumber: "SERIAL", cardType: "Review", color: "White", customerId: "7", customerName: "Owner", status: "Assigned", assignedOn: null, activatedOn: null, purchaseDate: "", programmingUrl: stable,
+  } }))
+  for (const html of [customer, admin]) {
+    assert.match(html, /Your Google Review NFC Link/)
+    assert.ok(html.includes(`value="${stable}"`))
+    assert.ok(html.includes(`href="${stable}"`))
+    assert.match(html, /Copy NFC URL/)
+    assert.match(html, /Open\/Test NFC URL/)
+    assert.match(html, /Download NFC QR/)
+    assert.doesNotMatch(html, /\?source=qr/)
+  }
+  const unassigned = render(GoogleReview, workspace({ google_review_url: "https://www.google.com/maps/place/Business/" }))
+  assert.match(unassigned, /NFC link and QR code will appear automatically after a physical Google Review card is assigned/)
+  assert.doesNotMatch(unassigned, /Your Google Review NFC Link|Copy NFC URL/)
+})
+
 test("public NFC resolution passes QR source and cancellation without leaking a logged-in bearer", async () => {
   const calls = []
   const controller = new AbortController()
@@ -259,9 +331,31 @@ test("public NFC allows canonical Google reviews and local digital profiles whil
   const mapsReview = "https://www.google.com/maps/place//data=!4m3!3m2!1s0x808f778c55555555:0xa4f25c571acded3f!12e1"
   assert.equal(safeNfcDestination(mapsReview, origin), mapsReview)
   assert.equal(safeNfcDestination(mapsReview + "?source=tracking", origin), mapsReview)
+  assert.equal(safeNfcDestination(mapsReview.replace("!12e1", "!9m1!1b1"), origin), mapsReview.replace("!12e1", "!9m1!1b1"))
   assert.equal(safeNfcDestination("https://search.google.com/local/writereview?placeid=ChIJTest&continue=https://evil.example", origin), "https://search.google.com/local/writereview?placeid=ChIJTest")
-  for (const value of [mapsReview.replace("!12e1", "!9m1!1b1"), mapsReview + "!1shttps://evil.example", mapsReview.replace("www.google.com", "www.google.com.evil.example"), "https://search.google.com/local/writereview?placeid=x&placeid=y", "https://search.google.com/local/writereview?placeid=%2F%2Fevil.example"]) assert.equal(safeNfcDestination(value, origin), null, value)
+  for (const value of [mapsReview + "!1shttps://evil.example", mapsReview.replace("www.google.com", "www.google.com.evil.example"), "https://search.google.com/local/writereview?placeid=x&placeid=y", "https://search.google.com/local/writereview?placeid=%2F%2Fevil.example"]) assert.equal(safeNfcDestination(value, origin), null, value)
   for (const value of ["javascript:alert(1)", "//evil.example/u/owner", "https://evil.example/", "https://search.google.com.evil.example/local/writereview?placeid=x", "https://search.google.com/url?q=https://evil.example", "http://search.google.com/local/writereview?placeid=x", "https://owner@search.google.com/local/writereview?placeid=x", "/\\evil.example", "/u/owner\n", "https://search.google.com/local/writereview"]) assert.equal(safeNfcDestination(value, origin), null, value)
+})
+
+test("public redirects accept Maps business destinations and reject unrelated or unsafe Maps URLs", () => {
+  const origin = "https://nfc-card-project-peach.vercel.app"
+  for (const value of [
+    "https://www.google.com/maps/place/Business+Name/",
+    "https://www.google.com/maps/place/Caf%C3%A9/@18.2,79.9,15z/data=!1s0x123:0x456?entry=tts",
+    "https://maps.google.com/?cid=123456789",
+    "https://www.google.com/maps/?ftid=0x123:0x456",
+    "https://www.google.com/maps/search/?api=1&query=Business&query_place_id=ChIJ_Test123",
+    "https://www.google.com/maps?q=place_id:ChIJ_Test123",
+  ]) assert.equal(safeNfcDestination(value, origin), value)
+  for (const value of [
+    "https://www.google.com/maps", "https://www.google.com/maps/place/", "https://maps.google.com/",
+    "https://www.google.com/maps/dir/?api=1&destination=Business", "https://www.google.com/maps/@18,79,10z",
+    "https://www.google.com/maps?cid=0", "https://www.google.com/maps?cid=123&cid=456",
+    "https://www.google.com/maps/place/Business/?url=https%3A%2F%2Fevil.example",
+    "https://www.google.com/maps/search/?query=https%3A%2F%2Fevil.example",
+    "https://www.google.com/maps/place/https%3A%2F%2Fevil.example/",
+    "https://maps.app.goo.gl/unexpanded",
+  ]) assert.equal(safeNfcDestination(value, origin), null, value)
 })
 
 test("paid-slot picker and inventory assignment preserve the purchased card type and recipient id", async () => {
@@ -285,7 +379,7 @@ test("saved destination stays clickable independently of an unsaved review URL d
   assert.ok(html.includes(`value="${draft}"`))
   assert.ok(html.includes(`href="${saved}"`))
   assert.ok(!html.includes(`href="${draft}"`))
-  assert.match(html, /Saved Google review destination/)
+  assert.match(html, /Saved Google Maps destination/)
   assert.match(html, /Copy destination/)
 })
 
@@ -294,7 +388,7 @@ test("unsafe legacy destinations are editable text without a clickable or copyab
     const html = render(GoogleReview, workspace({ google_review_url: value }))
     assert.ok(!html.includes(`href="${value}"`), value)
     assert.doesNotMatch(html, /Copy destination/)
-    assert.match(html, /Save a valid Google review link/)
+    assert.match(html, /Save a valid Google Maps business link/)
   }
 })
 
@@ -319,11 +413,13 @@ test("existing admin Review card details show programming instructions without c
   const details = (value) => render(() => createElement(CardFormDialog, { open: true, onOpenChange() {}, card: value, onSubmit() {} }))
   const html = details(base)
   assert.ok(html.includes(`href="${programming}"`))
-  assert.match(html, /NFC programming URL/)
+  assert.match(html, /Your Google Review NFC Link/)
+  assert.match(html, /readonly=""[^>]*value="https:\/\/cards\.example\/nfc\/REVIEW-UID"/i)
+  assert.match(html, /Open\/Test NFC URL/)
   assert.match(html, /Copy NFC URL/)
   assert.match(html, /Download NFC QR/)
-  assert.doesNotMatch(details({ ...base, cardType: "Custom" }), /NFC programming URL/)
-  assert.doesNotMatch(details({ ...base, customerId: null, status: "Unassigned" }), /NFC programming URL/)
+  assert.doesNotMatch(details({ ...base, cardType: "Custom" }), /Your Google Review NFC Link/)
+  assert.doesNotMatch(details({ ...base, customerId: null, status: "Unassigned" }), /Your Google Review NFC Link/)
 })
 
 test("historical duplicate cards never borrow another card's programming URL", () => {

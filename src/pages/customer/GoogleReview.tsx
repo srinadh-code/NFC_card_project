@@ -33,11 +33,11 @@ function GoogleReviewContent({ workspace }: { workspace: GoogleReviewWorkspace }
   const qrCard = ["ACTIVE", "ASSIGNED"].flatMap((status) => workspace.cards.filter((card) => card.status === status)).find((card) => safeProgrammingUrl(card.programming_url))
   const programmingUrl = qrCard ? safeProgrammingUrl(qrCard.programming_url) : null
   const ready = workspace.configured && Boolean(programmingUrl)
-  const qrUrl = ready ? `${programmingUrl}?source=qr` : null
+  const qrUrl = ready ? programmingUrl : null
   const qrImage = qrResult.url === qrUrl ? qrResult.image : ""
   const qrError = qrResult.url === qrUrl && qrResult.error
   const savedUrl = safeNfcDestination(workspace.google_review_url, window.location.origin)
-  const savedDestination = savedUrl && /^https:\/\/(?:search|www)\.google\.com\//.test(savedUrl) ? savedUrl : null
+  const savedDestination = savedUrl && /^https:\/\/(?:search|www|maps)\.google\.com\//.test(savedUrl) ? savedUrl : null
   useEffect(() => {
     let current = true
     if (qrUrl) void getQrPngDataUrl(qrUrl).then((image) => { if (current) setQrResult({ url: qrUrl, image, error: false }) }).catch(() => { if (current) setQrResult({ url: qrUrl, image: "", error: true }) })
@@ -50,7 +50,7 @@ function GoogleReviewContent({ workspace }: { workspace: GoogleReviewWorkspace }
       queryClient.setQueryData(googleReviewKey(customer?.id), updated)
       setBusinessName(updated.business_name)
       setReviewUrl(updated.google_review_url)
-      toast.success("Google Review settings saved.")
+      toast.success("Business settings saved.")
     },
     onError: (error) => toast.error(message(error)),
   })
@@ -105,21 +105,22 @@ function GoogleReviewContent({ workspace }: { workspace: GoogleReviewWorkspace }
   }
 
   return <div className="mx-auto max-w-5xl space-y-6">
-    <div><h1 className="flex items-center gap-2 text-2xl font-bold"><Star className="size-6 text-primary" />Google Review</h1><p className="mt-1 text-muted-foreground">Manage your business review link and NFC card in your existing account.</p></div>
+    <div><h1 className="flex items-center gap-2 text-2xl font-bold"><Star className="size-6 text-primary" />Google Review</h1><p className="mt-1 text-muted-foreground">Manage your Google Maps business destination and NFC card in your existing account.</p></div>
     <div className="grid gap-4 sm:grid-cols-3">
       {[["NFC taps", workspace.stats.taps], ["QR scans", workspace.stats.qr_scans], ["Total opens", workspace.stats.total]].map(([label, value]) => <Card key={label}><CardContent className="p-5"><p className="text-sm text-muted-foreground">{label}</p><p className="mt-2 text-2xl font-bold">{value}</p></CardContent></Card>)}
     </div>
     <p className="text-xs text-muted-foreground">These counts record opens of your review card link. They do not measure submitted Google reviews.</p>
     <div className="grid gap-6 lg:grid-cols-2">
-      <Card><CardHeader><CardTitle>Business settings</CardTitle><CardDescription>Use the direct review link from your Google Business Profile's Ask for reviews option. A regular Google Maps business listing does not open the review form. You can configure it before your physical card arrives.</CardDescription></CardHeader><CardContent>
+      <Card><CardHeader><CardTitle>Business settings</CardTitle><CardDescription>Paste your business location link from Google Maps → Share → Copy link, or a direct Google review link. Visitors can open your listing and select Write a review. You can configure it before your physical card arrives.</CardDescription></CardHeader><CardContent>
         <form onSubmit={(event: FormEvent) => { event.preventDefault(); if (!save.isPending) save.mutate() }} className="space-y-4">
           <div className="space-y-2"><Label htmlFor="review-business-name">Business name</Label><Input id="review-business-name" required maxLength={150} value={businessName} onChange={(event) => setBusinessName(event.target.value)} aria-invalid={!!businessNameError} aria-describedby={businessNameError ? "review-business-name-error" : undefined} />{businessNameError && <p id="review-business-name-error" role="alert" className="text-sm text-destructive">{businessNameError}</p>}</div>
-          <div className="space-y-2"><Label htmlFor="google-review-url">Google review URL</Label><Input id="google-review-url" required type="url" maxLength={2048} placeholder="https://g.page/r/your-business/review" value={reviewUrl} onChange={(event) => setReviewUrl(event.target.value)} aria-invalid={!!reviewUrlError} aria-describedby={reviewUrlError ? "google-review-url-error" : undefined} />{reviewUrlError && <p id="google-review-url-error" role="alert" className="text-sm text-destructive">{reviewUrlError}</p>}</div>
+          <div className="space-y-2"><Label htmlFor="google-review-url">Google Maps business location URL</Label><Input id="google-review-url" required type="url" maxLength={2048} placeholder="https://maps.app.goo.gl/your-business" value={reviewUrl} onChange={(event) => setReviewUrl(event.target.value)} aria-invalid={!!reviewUrlError} aria-describedby={reviewUrlError ? "google-review-url-error" : undefined} />{reviewUrlError && <p id="google-review-url-error" role="alert" className="text-sm text-destructive">{reviewUrlError}</p>}</div>
           {save.isError && !reviewUrlError && !businessNameError && <p role="alert" className="text-sm text-destructive">{message(save.error)}</p>}
           <Button type="submit" disabled={save.isPending}>{save.isPending ? "Saving…" : "Save settings"}</Button>
+          {save.isSuccess && <p role="status" className="text-sm text-success">Business settings saved. Your NFC link and QR code keep the same URL when you edit this destination.</p>}
         </form>
         <div className="mt-5 border-t pt-4">
-          {savedDestination ? <CopyLink url={savedDestination} label="Saved Google review destination" copyLabel="Copy destination" /> : <p className="text-sm text-muted-foreground">Save a valid Google review link to open or copy the saved destination.</p>}
+          {savedDestination ? <CopyLink url={savedDestination} label="Saved Google Maps destination" copyLabel="Copy destination" /> : <p className="text-sm text-muted-foreground">Save a valid Google Maps business link or direct review link to open or copy the saved destination.</p>}
         </div>
       </CardContent></Card>
       <Card><CardHeader><CardTitle>Review QR code</CardTitle><CardDescription>The same QR link keeps working when you update the destination.</CardDescription></CardHeader><CardContent className="space-y-4">
@@ -128,7 +129,7 @@ function GoogleReviewContent({ workspace }: { workspace: GoogleReviewWorkspace }
           <div className="flex justify-center rounded-xl border bg-white p-4">{qrImage ? <img src={qrImage} width={240} height={240} alt="Google Review QR code" /> : <p className="py-12 text-sm text-slate-600">{qrError ? "Couldn't generate the QR preview. Downloads remain available." : "Generating QR code…"}</p>}</div>
           <p className="break-all text-xs text-muted-foreground">{qrUrl}</p>
           <div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => exportQr("png")} disabled={busy}><Download />PNG</Button><Button size="sm" variant="outline" onClick={() => exportQr("svg")} disabled={busy}>SVG</Button><Button size="sm" variant="outline" onClick={() => exportQr("pdf")} disabled={busy}>PDF</Button><Button size="sm" variant="outline" onClick={print} disabled={!qrImage}><Printer />Print</Button><Button size="sm" variant="outline" onClick={copy}><Copy />Copy</Button><Button size="sm" variant="outline" onClick={share}><Share2 />Share</Button></div>
-        </> : <p className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">{!workspace.configured ? "Save your business name and Google review URL to configure your card." : workspace.cards.length === 0 ? "Your review QR code will be available after a physical card is assigned." : workspace.cards.some((card) => card.status === "ACTIVE" || card.status === "ASSIGNED") ? "The public NFC link is unavailable. Contact support before programming this card." : "Your review card is unavailable. Contact support to restore access."}</p>}
+        </> : <p className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">{!workspace.configured ? "Save your business name and Google Maps destination to configure your card." : workspace.cards.length === 0 ? "Your NFC link and QR code will appear automatically after a physical Google Review card is assigned." : workspace.cards.some((card) => card.status === "ACTIVE" || card.status === "ASSIGNED") ? "The public NFC link is unavailable. Contact support before programming this card." : "Your review card is unavailable. Contact support to restore access."}</p>}
       </CardContent></Card>
     </div>
     <Card><CardHeader><CardTitle>Google Review NFC cards</CardTitle></CardHeader><CardContent className="space-y-3">
