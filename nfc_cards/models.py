@@ -1,7 +1,33 @@
-from urllib.parse import quote
+import ipaddress
+import re
+from urllib.parse import quote, urlsplit
 
 from django.conf import settings
 from django.db import models
+
+
+def _programming_origin():
+    origin = getattr(settings, "PUBLIC_NFC_BASE_URL", "") or settings.FRONTEND_URL
+    if not isinstance(origin, str) or any(ord(char) <= 32 or ord(char) == 127 or char == "\\" for char in origin):
+        return None
+    try:
+        parsed = urlsplit(origin)
+        host = parsed.hostname or ""
+        if (
+            parsed.scheme != "https" or parsed.username is not None or parsed.password is not None
+            or parsed.port is not None or parsed.path not in ("", "/") or parsed.query or parsed.fragment
+            or parsed.netloc.lower() != host or len(host) > 253
+            or not re.fullmatch(r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}", host)
+            or any(host == suffix or host.endswith("." + suffix) for suffix in ("localhost", "local", "internal", "lan", "home", "invalid", "test"))
+        ):
+            return None
+        try:
+            ipaddress.ip_address(host)
+        except ValueError:
+            return f"https://{host}"
+    except ValueError:
+        pass
+    return None
 
 
 class NfcCard(models.Model):
@@ -59,7 +85,8 @@ class NfcCard(models.Model):
         """
         if self.card_type != self.CardType.REVIEW or self.user_id is None or self.status == self.Status.UNASSIGNED:
             return None
-        return f"{settings.FRONTEND_URL.rstrip('/')}/nfc/{quote(self.uid, safe='')}"
+        origin = _programming_origin()
+        return f"{origin}/nfc/{quote(self.uid, safe='')}" if origin else None
 
     @classmethod
     def generate_serial_number(cls):

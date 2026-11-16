@@ -5,7 +5,8 @@ Order of events:
 1. Payment succeeds (payments.services.fulfill) -> provision_customer().
    * New email: a CUSTOMER account is created *pending activation* — no
      usable password and `must_change_password` set. Only recipients get a
-     profile. Purchaser-only accounts get a separate setup link after commit.
+     profile. Purchasers get a separate setup link after commit, including
+     purchasers who are also recipients.
    * Existing email: the order is attached to that account; nothing about
      the account changes.
 2. An admin moves the order to Processing (admin_api.orders) ->
@@ -31,7 +32,7 @@ from django.db import IntegrityError, connection, transaction
 from django.template.loader import render_to_string
 from django.utils import timezone
 
-from .emails import PermanentEmailDeliveryError
+from .emails import PERMANENT_RECIPIENT_FAILURE_CODES, PermanentEmailDeliveryError
 from .models import CustomerOnboarding, EmailOTP, User
 
 logger = logging.getLogger("accounts.onboarding")
@@ -250,8 +251,28 @@ def deliver_activation_email(onboarding_id, raw_token, *, issued_at=None):
     current_rows = CustomerOnboarding.objects.filter(
         pk=onboarding.pk, credentials_issued_at=onboarding.credentials_issued_at,
     )
+    if issued_at is not None:
+        credential_id, _ = EmailOTP._split_token(raw_token)
+        # Purchaser recovery can replace a recipient link without changing
+        # this recipient audit row's timestamp. Its stale worker must not
+        # record acceptance/failure for the replacement credential.
+        current_rows = current_rows.filter(user__otps__pk=credential_id, user__otps__is_used=False)
     user = onboarding.user
-    if not user.must_change_password or not eligible_activation_recipients().filter(user=user).exists():
+    if not user.is_active or not user.must_change_password or not eligible_activation_recipients().filter(user=user).exists():
+        return False
+
+    def current_link_eligible():
+        if issued_at is None:
+            return True
+        return (
+            EmailOTP.check_activation_link(raw_token)[0] == EmailOTP.LINK_VALID
+            and eligible_activation_recipients().filter(
+                user=user, order_id=onboarding.source_order_id,
+                order__transactions__status="PAID",
+            ).exclude(order__status="CANCELLED").exists()
+        )
+
+    if not current_link_eligible():
         return False
     if (
         settings.DJANGO_ENV == "production"
@@ -282,6 +303,8 @@ def deliver_activation_email(onboarding_id, raw_token, *, issued_at=None):
             time.sleep(delay)
         if not current_rows.filter(user__must_change_password=True, user__is_active=True).exists():
             return False
+        if not current_link_eligible():
+            return False
         try:
             ok = _send(user, ACTIVATION_SUBJECT, html, text)
             error_text = "" if ok else "Email provider rejected the message"
@@ -294,9 +317,20 @@ def deliver_activation_email(onboarding_id, raw_token, *, issued_at=None):
             ok, error_text = False, type(exc).__name__
         current_rows.update(email_attempts=onboarding.email_attempts + attempt)
         if ok:
-            recorded = current_rows.update(
-                email_status=CustomerOnboarding.EmailStatus.SENT, email_sent_at=timezone.now(), email_last_error=""
-            )
+            from orders.models import OrderRecipient
+
+            accepted_at = timezone.now()
+            with transaction.atomic():
+                recorded = current_rows.update(
+                    email_status=CustomerOnboarding.EmailStatus.SENT, email_sent_at=accepted_at, email_last_error=""
+                )
+                if recorded:
+                    # This order's account-ready notice has been accepted.
+                    # Completing setup must not cause a repeat Processing save
+                    # to send a second, token-free notice for the same slots.
+                    OrderRecipient.objects.filter(order_id=onboarding.source_order_id, user=user).update(
+                        invitation_status=OrderRecipient.InvitationStatus.SENT, invitation_sent_at=accepted_at,
+                    )
             if not recorded:
                 return False
             logger.info("onboarding.email_sent user_id=%s attempt=%s", user.pk, attempt)
@@ -387,13 +421,18 @@ def _start_activation_for_user(user, *, order, sync=False):
     with transaction.atomic():
         # Re-read activation state under a lock: completing setup while an
         # admin starts Processing cannot issue a fresh link for an active user.
-        user = User.objects.select_for_update().get(pk=user.pk)
+        user = User.objects.select_for_update(no_key=True).get(pk=user.pk)
+        if not user.is_active or user.role != User.Role.CUSTOMER:
+            return "no_onboarding"
         if not user.must_change_password:
             return "active"
         onboarding, _ = CustomerOnboarding.objects.select_for_update().get_or_create(user=user)
         if onboarding.credentials_issued_at is not None:
-            return "already_sent"
-        if onboarding.source_order_id is None:
+            if onboarding.email_status != CustomerOnboarding.EmailStatus.FAILED:
+                return "already_sent"
+            if onboarding.email_last_error in PERMANENT_RECIPIENT_FAILURE_CODES:
+                return "failed"
+        if onboarding.source_order_id != order.pk:
             onboarding.source_order = order
             onboarding.save(update_fields=["source_order"])
         _issue_and_dispatch(onboarding, sync=sync)
@@ -572,7 +611,7 @@ def reissue_and_send(user, *, sync=False):
 
 
 def purchaser_setup_eligible(user):
-    """Only paid order owners without a recipient identity may use this purpose.
+    """Paid order owners needing setup, including owners who also receive cards.
 
     Recovery does not trust a historical email_verified flag: a fresh link
     delivered to the current inbox is the proof required to finish setup.
@@ -581,11 +620,6 @@ def purchaser_setup_eligible(user):
     from orders.models import Order
 
     if not user.is_active or user.role != User.Role.CUSTOMER or not user.must_change_password:
-        return False
-    # This also invalidates an outstanding purchaser link immediately when
-    # that buyer later becomes a recipient, without locking credential rows
-    # during recipient provisioning. Only the recipient path can then be used.
-    if user.order_recipients.exists() or user.nfc_cards.exists():
         return False
     return user.orders.filter(payment_status=Order.PaymentStatus.PAID).filter(
         Q(purchaser_email__iexact=user.email) | Q(purchaser_email=""),
@@ -605,8 +639,16 @@ def deliver_purchaser_setup_email(user_id, raw_token):
     user = User.objects.filter(pk=user_id).first()
     if user is None or not purchaser_setup_eligible(user):
         return False
-    outcome, _ = EmailOTP.check_activation_link(raw_token, purpose=EmailOTP.Purpose.PURCHASER)
+    outcome, otp = EmailOTP.check_activation_link(raw_token, purpose=EmailOTP.Purpose.PURCHASER)
     if outcome != EmailOTP.LINK_VALID:
+        return False
+    if otp.email_status == EmailOTP.EmailStatus.SENT:
+        return True
+    current_rows = EmailOTP.objects.filter(pk=otp.pk, is_used=False)
+
+    def failed(reason):
+        current_rows.update(email_status=EmailOTP.EmailStatus.FAILED, email_last_error=reason)
+        logger.warning("purchaser.setup.email_failed user_id=%s credential_id=%s reason=%s", user.pk, otp.pk, reason)
         return False
     # Console delivery would write the credential to logs. Unlike checkout
     # OTP development overrides, purchaser links must never use that backend.
@@ -616,10 +658,10 @@ def deliver_purchaser_setup_email(user_id, raw_token):
         and settings.EMAIL_BACKEND == "django.core.mail.backends.console.EmailBackend"
     ):
         logger.warning("purchaser.setup.delivery_unavailable user_id=%s", user.pk)
-        return False
+        return failed("delivery_unavailable")
     link = _frontend_link("/set-password", raw_token)
     if link is None:
-        return False
+        return failed("secure_link_unavailable")
     context = {
         "subject": "Set Up Your VR's Gateway Account",
         "heading": "Set up your purchaser account",
@@ -632,31 +674,33 @@ def deliver_purchaser_setup_email(user_id, raw_token):
         html = render_to_string("accounts/emails/purchaser_setup.html", context)
         text = render_to_string("accounts/emails/purchaser_setup.txt", context)
     except Exception as exc:
-        logger.warning("purchaser.setup.email_failed user_id=%s reason=%s", user.pk, type(exc).__name__)
-        return False
+        return failed(type(exc).__name__)
+    error_text = ""
     for attempt, delay in enumerate((0, *EMAIL_RETRY_DELAYS_SECONDS), start=1):
         if delay and not getattr(settings, "ONBOARDING_EMAIL_SYNC", False):
             time.sleep(delay)
         outcome, _ = EmailOTP.check_activation_link(raw_token, purpose=EmailOTP.Purpose.PURCHASER)
         if outcome != EmailOTP.LINK_VALID:
             return False
+        current_rows.update(email_attempts=otp.email_attempts + attempt)
         try:
             delivered = send_email(user.email, context["subject"], html, text, f"purpose=purchaser_setup user_id={user.pk}")
+            error_text = "" if delivered else "provider_rejected"
         except PermanentEmailDeliveryError as exc:
-            logger.warning("purchaser.setup.email_failed user_id=%s reason=%s", user.pk, exc.code)
-            return False
+            return failed(exc.code)
         except Exception as exc:
             delivered = False
-            logger.warning("purchaser.setup.email_failed user_id=%s reason=%s", user.pk, type(exc).__name__)
+            error_text = type(exc).__name__
+            logger.warning("purchaser.setup.email_failed user_id=%s reason=%s", user.pk, error_text)
         if delivered:
-            logger.info("purchaser.setup.email_sent user_id=%s attempt=%s", user.pk, attempt)
-            return True
-    logger.warning("purchaser.setup.email_failed user_id=%s", user.pk)
-    return False
+            recorded = current_rows.update(email_status=EmailOTP.EmailStatus.SENT, email_sent_at=timezone.now(), email_last_error="")
+            logger.info("purchaser.setup.email_accepted user_id=%s credential_id=%s attempt=%s", user.pk, otp.pk, attempt)
+            return bool(recorded)
+    return failed(error_text)
 
 
 def start_purchaser_setup(order, session, *, sync=False):
-    """Schedule the first buyer-only setup exactly once after a verified payment."""
+    """Schedule purchaser setup after verified payment; recover proven failures."""
     if (
         order.payment_status != order.PaymentStatus.PAID
         or session.status != session.Status.FULFILLED
@@ -668,7 +712,7 @@ def start_purchaser_setup(order, session, *, sync=False):
     return _issue_purchaser_setup(order.customer_id, reissue=False, sync=sync)
 
 
-def _issue_purchaser_setup(user_id, *, reissue, sync=False):
+def _issue_purchaser_setup(user_id, *, reissue, sync=False, failed_only=False):
     user = User.objects.filter(pk=user_id).first()
     if user is None or not purchaser_setup_eligible(user):
         return False
@@ -679,14 +723,41 @@ def _issue_purchaser_setup(user_id, *, reissue, sync=False):
         user = User.objects.select_for_update(no_key=True).filter(pk=user_id).first()
         if user is None or not purchaser_setup_eligible(user):
             return False
-        # A durable marker, independent of recipient onboarding's audit fields.
-        # Even expired/consumed rows stop automatic retries and later payments
-        # from sending another setup message. Recovery explicitly reissues.
-        if not reissue and user.otps.filter(purpose=EmailOTP.Purpose.PURCHASER).exists():
-            return False
+        if not reissue:
+            previous = user.otps.filter(purpose=EmailOTP.Purpose.PURCHASER).order_by("-pk").first()
+            if failed_only and (previous is None or previous.is_used):
+                return False
+            if previous is not None and (
+                previous.email_status != EmailOTP.EmailStatus.FAILED
+                or previous.email_last_error in PERMANENT_RECIPIENT_FAILURE_CODES
+            ):
+                logger.info("purchaser.setup.skipped user_id=%s reason=already_issued", user.pk)
+                return False
+            # An existing recipient setup email is already an account setup
+            # path. A new purchase must not silently invalidate that link.
+            if user.otps.filter(purpose=EmailOTP.Purpose.ACTIVATE, is_used=False, expires_at__gt=timezone.now()).exists():
+                return False
         raw_token = EmailOTP.issue_purchaser_setup_link(user)
-        _dispatch_after_commit(deliver_purchaser_setup_email, user.pk, raw_token, sync=sync)
+        credential_id, _ = EmailOTP._split_token(raw_token)
+        current_rows = EmailOTP.objects.filter(pk=credential_id, is_used=False)
+        current_rows.update(email_status=EmailOTP.EmailStatus.PENDING)
+
+        def failed(reason):
+            current_rows.filter(email_status=EmailOTP.EmailStatus.PENDING).update(
+                email_status=EmailOTP.EmailStatus.FAILED, email_last_error=reason,
+            )
+
+        def uncertain(_reason):
+            current_rows.filter(email_status=EmailOTP.EmailStatus.PENDING).update(email_last_error="dispatch_outcome_unknown")
+
+        _dispatch_after_commit(deliver_purchaser_setup_email, user.pk, raw_token, sync=sync,
+                               on_failure=failed, on_uncertain=uncertain)
     return True
+
+
+def retry_purchaser_setup(user, *, sync=False):
+    """Recover only a proven failed attempt, preserving queued/accepted links."""
+    return _issue_purchaser_setup(user.pk, reissue=False, sync=sync, failed_only=True)
 
 
 def request_purchaser_setup(email):

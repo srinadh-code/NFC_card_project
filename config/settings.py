@@ -237,6 +237,9 @@ ALLOW_CONSOLE_EMAIL_OTP = env_bool("ALLOW_CONSOLE_EMAIL_OTP", False)
 # frontend can actually be served from must be listed explicitly here.
 # Wildcards are deliberately never used in either list below.
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+# Optional fixed public site origin for physical Review cards. Local frontend
+# development must never cause localhost to be written to an NFC chip.
+PUBLIC_NFC_BASE_URL = os.environ.get("PUBLIC_NFC_BASE_URL", "https://nfc-card-project-peach.vercel.app")
 
 # Razorpay (payments/razorpay.py). Keys come from the environment — never
 # commit them. RAZORPAY_KEY_ID/SECRET fall back to Admin Settings > Payment

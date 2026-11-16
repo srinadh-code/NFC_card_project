@@ -7,6 +7,7 @@ an ordinary Maps share link is not proof that its destination is a review form.
 
 import http.client
 import ipaddress
+import logging
 import queue
 import re
 import socket
@@ -15,6 +16,8 @@ import threading
 from urllib.parse import parse_qs, urlencode, urljoin, urlsplit
 
 from django.core.exceptions import ValidationError
+
+logger = logging.getLogger("nfc_cards.review_urls")
 
 _SHORT_HOSTS = frozenset({"g.page", "maps.app.goo.gl"})
 _ALLOWED_HOSTS = _SHORT_HOSTS | {"search.google.com", "www.google.com", "maps.google.com"}
@@ -28,6 +31,30 @@ _MAX_REDIRECTS = 3
 _DNS_TIMEOUT_SECONDS = 2
 _ERROR = "Enter a Google Business Profile review link with a valid Place ID."
 _EXPANSION_ERROR = "The Google short link could not be verified. Copy your business's full Google review link and try again."
+_LISTING_ERROR = (
+    "This Google Maps link opens a place listing, not the Write a review form. "
+    "In your Google Business Profile, choose Read Reviews, then Get more reviews, and copy the review link."
+)
+
+
+def _is_maps_url(parsed):
+    return parsed.hostname in {"www.google.com", "maps.google.com"} and (
+        parsed.path == "/maps"
+        or parsed.path.startswith("/maps/")
+        or (parsed.hostname == "maps.google.com" and parsed.path == "/")
+    )
+
+
+def _expansion_error(reason, *, host, status=None):
+    # Never log submitted URLs, redirect locations, response bodies or queries.
+    # The caller's parsed hostname has already passed the exact allowlist.
+    logger.warning("google_review.short_link_failed reason=%s host=%s status=%s", reason, host, status)
+    return ValidationError(_EXPANSION_ERROR, code="google_review_unverified")
+
+
+def _listing_error(*, host, status=None):
+    logger.info("google_review.non_review_destination host=%s status=%s", host, status)
+    return ValidationError(_LISTING_ERROR, code="google_maps_listing")
 
 
 def _parsed_url(value):
@@ -69,9 +96,7 @@ def _canonical_review(parsed):
     place_ids = None
     if parsed.hostname == "search.google.com" and parsed.path.rstrip("/") == "/local/writereview":
         place_ids = query.get("placeid")
-    elif parsed.hostname in {"www.google.com", "maps.google.com"} and (
-        parsed.path == "/maps" or parsed.path.startswith("/maps/")
-    ):
+    elif _is_maps_url(parsed):
         # Google Maps URLs can identify a business explicitly; turn that
         # Place ID into a review-form link rather than persisting a map page.
         if "placeid" in query and "query_place_id" in query:
@@ -99,14 +124,16 @@ def _public_dns(host):
     try:
         result = answers.get(timeout=_DNS_TIMEOUT_SECONDS)
     except queue.Empty as exc:
-        raise ValidationError(_EXPANSION_ERROR) from exc
-    if isinstance(result, OSError) or not result:
-        raise ValidationError(_EXPANSION_ERROR)
+        raise _expansion_error("dns_timeout", host=host) from exc
+    if isinstance(result, OSError):
+        raise _expansion_error("dns_lookup_failed", host=host) from result
+    if not result:
+        raise _expansion_error("dns_no_addresses", host=host)
     try:
         if not all(ipaddress.ip_address(answer[4][0]).is_global for answer in result):
-            raise ValidationError(_EXPANSION_ERROR)
+            raise _expansion_error("dns_non_public", host=host)
     except (ValueError, IndexError, TypeError) as exc:
-        raise ValidationError(_EXPANSION_ERROR) from exc
+        raise _expansion_error("dns_invalid_address", host=host) from exc
     addresses = {answer[4][0] for answer in result}
     return min(addresses, key=lambda address: (ipaddress.ip_address(address).version, address))
 
@@ -148,7 +175,7 @@ def _request_redirect(parsed, address):
         finally:
             response.close()
     except (OSError, http.client.HTTPException, UnicodeError) as exc:
-        raise ValidationError(_EXPANSION_ERROR) from exc
+        raise _expansion_error(type(exc).__name__, host=parsed.hostname) from exc
     finally:
         connection.close()
 
@@ -164,27 +191,29 @@ def _expand_short_link(value):
         if canonical:
             return canonical
         if current in visited:
-            raise ValidationError(_EXPANSION_ERROR)
+            raise _expansion_error("redirect_loop", host=parsed.hostname)
         visited.add(current)
         if parsed.hostname in _SHORT_HOSTS:
             if not _SHORT_PATH.fullmatch(parsed.path):
                 raise ValidationError(_ERROR)
-        elif not (
-            parsed.hostname in {"www.google.com", "maps.google.com"}
-            and (parsed.path == "/maps" or parsed.path.startswith("/maps/"))
-        ):
+        elif not _is_maps_url(parsed):
             raise ValidationError(_ERROR)
         address = _public_dns(parsed.hostname)
         status, location = _request_redirect(parsed, address)
+        if status == 200 and _is_maps_url(parsed):
+            # A Maps place page (including a locality or read-reviews page)
+            # is not evidence of a reviewable business or a write-review form.
+            # Never reinterpret its opaque Maps identifier as a Places ID.
+            raise _listing_error(host=parsed.hostname, status=status)
         if status not in (301, 302, 303, 307, 308) or not location:
-            raise ValidationError(_EXPANSION_ERROR)
+            raise _expansion_error("missing_review_redirect", host=parsed.hostname, status=status)
         current = urljoin(current, location)
         # Validate the next hop even when this exhausts the limit.
         next_parsed = _parsed_url(current)
         canonical = _canonical_review(next_parsed)
         if canonical:
             return canonical
-    raise ValidationError(_EXPANSION_ERROR)
+    raise _expansion_error("redirect_limit", host=next_parsed.hostname)
 
 
 def validate_review_url(value, *, expand_short_links=False):
@@ -202,6 +231,8 @@ def validate_review_url(value, *, expand_short_links=False):
             return canonical
         if expand_short_links and parsed.hostname in _SHORT_HOSTS:
             return _expand_short_link(value.strip())
+        if _is_maps_url(parsed):
+            raise _listing_error(host=parsed.hostname)
     except ValueError as exc:
         raise ValidationError(_ERROR) from exc
     raise ValidationError(_ERROR)

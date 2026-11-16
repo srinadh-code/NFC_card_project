@@ -88,13 +88,16 @@ class GoogleReviewOnboardingTests(APITestCase):
             self.assertNotIn(PASSWORD, message.body)
         self.assertEqual(NfcCard.objects.count(), 0)
 
-    def test_self_purchase_has_one_recipient_account_and_no_competing_purchaser_setup(self):
+    def test_self_purchase_sends_immediate_purchaser_setup_then_processing_supersedes_pending_link(self):
         _, paid, order = self.buy(["review-buyer@example.com"])
-        self.assertEqual(paid.data["data"]["purchaser_setup"], "recipient")
-        self.assertEqual(self._setup_messages(), [])
+        self.assertEqual(paid.data["data"]["purchaser_setup"], "required")
+        self.assertEqual([message.to for message in self._setup_messages()], [["review-buyer@example.com"]])
+        purchaser_token = self._token()
+        self.assertEqual(self._check(purchaser_token).status_code, 200)
         self.assertEqual(self._recipient_messages(), [])
         self.assertEqual(order.recipients.get().user_id, order.customer_id)
         self.status(order)
+        self.assertNotEqual(self._check(purchaser_token).status_code, 200)
         messages = self._recipient_messages()
         self.assertEqual([message.to for message in messages], [["review-buyer@example.com"]])
         token = self._token(messages[0])
@@ -113,7 +116,7 @@ class GoogleReviewOnboardingTests(APITestCase):
     def test_self_and_others_receive_one_email_each_and_processing_replays_do_not_duplicate(self):
         emails = ["review-buyer@example.com", "review-one@example.com", "review-two@example.com"]
         _, _, order = self.buy(emails)
-        self.assertEqual(self._setup_messages(), [])
+        self.assertEqual([message.to for message in self._setup_messages()], [["review-buyer@example.com"]])
         self.status(order)
         self.assertCountEqual([message.to[0] for message in self._recipient_messages()], emails)
         token_count = EmailOTP.objects.filter(purpose=EmailOTP.Purpose.ACTIVATE).count()
@@ -122,7 +125,121 @@ class GoogleReviewOnboardingTests(APITestCase):
         self.status(order)
         self.assertEqual(len(self._recipient_messages()), 3)
         self.assertEqual(EmailOTP.objects.filter(purpose=EmailOTP.Purpose.ACTIVATE).count(), token_count)
-        self.assertFalse(EmailOTP.objects.filter(user=order.customer, purpose=EmailOTP.Purpose.PURCHASER).exists())
+        self.assertEqual(len(self._setup_messages()), 1)
+        self.assertTrue(EmailOTP.objects.get(user=order.customer, purpose=EmailOTP.Purpose.PURCHASER).is_used)
+
+    def test_self_purchaser_completes_setup_before_processing_and_keeps_password_with_review_access(self):
+        _, _, order = self.buy(["review-buyer@example.com"])
+        self.assertEqual(self._complete(self._token()).status_code, 200)
+        user = order.customer
+        user.refresh_from_db()
+        password_hash = user.password
+        login = self.client.post(reverse("auth-login"), {"email": user.email, "password": PASSWORD}, format="json")
+        self.assertEqual(login.status_code, 200, login.content)
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {login.data['data']['access']}"}
+        orders = self.client.get(reverse("my-orders"), **headers)
+        self.assertEqual([row["id"] for row in orders.data["data"]], [order.pk])
+
+        self.status(order)
+        self.assertEqual(self._recipient_messages(), [])
+        notices = self.ready_messages(user.email)
+        self.assertEqual(len(notices), 1)
+        self.assertIn("Google Review workspace", notices[0].body)
+        self.assertNotIn("token=", notices[0].body)
+        user.refresh_from_db()
+        self.assertEqual(user.password, password_hash)
+        workspace = self.client.get(reverse("customer-google-review"), **headers)
+        self.assertTrue(workspace.data["data"]["eligible"])
+        self.assertFalse(workspace.data["data"]["digital_access"])
+        saved = self.client.patch(reverse("customer-google-review"), {
+            "business_name": "Self Review Studio",
+            "google_review_url": "https://search.google.com/local/writereview?placeid=ChIJ_SelfReview",
+        }, format="json", **headers)
+        self.assertEqual(saved.status_code, 200, saved.content)
+        self.assertTrue(saved.data["data"]["configured"])
+        self.status(order)
+        self.assertEqual(len(self.ready_messages(user.email)), 1)
+
+    def test_mixed_product_order_sends_setup_to_buyer_and_correct_activation_to_each_actual_recipient(self):
+        buyer, digital, review = "mixed-buyer@example.com", "digital-recipient@example.com", "review-recipient@example.com"
+        payload = _guest_payload(email=buyer, qty=3)
+        payload["items"] = [
+            {"product_id": "PRD-NEXORA-CUSTOM", "qty": 2},
+            {"product_id": "PRD-NEXORA-GOOGLE-REVIEW", "qty": 1},
+        ]
+        payload["recipients"] = [
+            {**fixtures.recipient(buyer), "card_type": "CUSTOM", "product_id": "PRD-NEXORA-CUSTOM"},
+            {**fixtures.recipient(digital), "card_type": "CUSTOM", "product_id": "PRD-NEXORA-CUSTOM"},
+            {**fixtures.recipient(review), "card_type": "REVIEW", "product_id": "PRD-NEXORA-GOOGLE-REVIEW"},
+        ]
+        checkout = self._checkout(payload)
+        _, order = self._pay(checkout)
+        self.assertEqual([message.to for message in self._setup_messages()], [[buyer]])
+        self.assertEqual(self._recipient_messages(), [])
+        self.assertEqual(self._complete(self._token()).status_code, 200)
+        self.status(order)
+        self.assertEqual(len(self.ready_messages(buyer)), 1)
+        messages = {message.to[0]: message for message in self._recipient_messages()}
+        self.assertEqual(set(messages), {digital, review})
+        self.assertIn("digital business profile", messages[digital].body)
+        self.assertNotIn("Google Review workspace", messages[digital].body)
+        self.assertIn("Google Review workspace", messages[review].body)
+        self.assertNotIn("digital business profile", messages[review].body)
+        for email, message in messages.items():
+            self.assertEqual(self._complete(self._token(message), purpose="recipient").status_code, 200)
+            login = self.client.post(reverse("auth-login"), {"email": email, "password": PASSWORD}, format="json")
+            self.assertEqual(login.status_code, 200, login.content)
+            headers = {"HTTP_AUTHORIZATION": f"Bearer {login.data['data']['access']}"}
+            workspace = self.client.get(reverse("customer-google-review"), **headers).data["data"]
+            self.assertEqual((workspace["eligible"], workspace["digital_access"]), (email == review, email == digital))
+            self.assertEqual(self.client.get(reverse("my-orders"), **headers).data["data"], [])
+            self.assertEqual(self.client.get(reverse("my-order-detail", args=[order.pk]), **headers).status_code, 404)
+        self.status(order)
+        with self.captureOnCommitCallbacks(execute=True):
+            retried = self._verify(checkout, payment_id=f"pay_{self._order_seq}")
+        self.assertEqual(retried.status_code, 200, retried.content)
+        self.assertEqual(len(self._setup_messages()), 1)
+        self.assertEqual(len(self._recipient_messages()), 2)
+        self.assertEqual(len(self.ready_messages(buyer)), 1)
+        self.assertEqual(self.ready_messages(digital), [])
+        self.assertEqual(self.ready_messages(review), [])
+
+    def test_same_email_self_purchaser_with_both_products_gets_one_setup_and_one_processing_notice(self):
+        buyer = "dual-buyer@example.com"
+        payload = _guest_payload(email=buyer, qty=2)
+        payload["items"] = [
+            {"product_id": "PRD-NEXORA-CUSTOM", "qty": 1},
+            {"product_id": "PRD-NEXORA-GOOGLE-REVIEW", "qty": 1},
+        ]
+        payload["recipients"] = [
+            {**fixtures.recipient(buyer), "card_type": "CUSTOM", "product_id": "PRD-NEXORA-CUSTOM"},
+            {**fixtures.recipient(" DUAL-BUYER@EXAMPLE.COM "), "card_type": "REVIEW", "product_id": "PRD-NEXORA-GOOGLE-REVIEW"},
+        ]
+        _, order = self._pay(self._checkout(payload))
+        self.assertEqual([message.to for message in self._setup_messages()], [[buyer]])
+        self.assertEqual(self._complete(self._token()).status_code, 200)
+        self.assertEqual(order.recipients.count(), 2)
+        self.assertEqual(set(order.recipients.values_list("user_id", flat=True)), {order.customer_id})
+        self.status(order)
+        self.assertEqual(self._recipient_messages(), [])
+        notices = self.ready_messages(buyer)
+        self.assertEqual(len(notices), 1)
+        self.assertIn("Google Review", notices[0].body)
+        self.assertIn("digital", notices[0].body)
+        self.assertNotIn("token=", notices[0].body)
+        self.assertEqual(User.objects.filter(email__iexact=buyer).count(), 1)
+        login = self.client.post(reverse("auth-login"), {"email": buyer, "password": PASSWORD}, format="json")
+        self.assertEqual(login.status_code, 200, login.content)
+        self.assertEqual(login.data["data"]["user"]["roles"], ["PURCHASER", "RECIPIENT"])
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {login.data['data']['access']}"}
+        workspace = self.client.get(reverse("customer-google-review"), **headers).data["data"]
+        self.assertTrue(workspace["eligible"])
+        self.assertTrue(workspace["digital_access"])
+        self.assertEqual(self.client.get(reverse("profile-me"), **headers).status_code, 200)
+        self.assertEqual([row["id"] for row in self.client.get(reverse("my-orders"), **headers).data["data"]], [order.pk])
+        self.status(order)
+        self.assertEqual(len(self.ready_messages(buyer)), 1)
+        self.assertEqual(set(order.recipients.values_list("invitation_status", flat=True)), {"SENT"})
 
     def test_existing_recipient_keeps_password_and_gets_only_a_login_notice(self):
         user = make_user("existing-review@example.com", password=PASSWORD)
@@ -215,12 +332,13 @@ class GoogleReviewOnboardingTests(APITestCase):
         self.assertNotEqual(fresh_token, token)
         self.assertEqual(self._complete(fresh_token, purpose="recipient").status_code, 200)
 
-    def test_pending_purchaser_later_receiving_review_uses_only_the_recipient_activation_path(self):
+    def test_pending_purchaser_link_stays_usable_until_processing_issues_recipient_activation(self):
         self.buy(["review-one@example.com"])
         purchaser_token = self._token(self._setup_messages()[0])
         _, _, self_order = self.buy(["review-buyer@example.com"])
-        self.assertNotEqual(self._complete(purchaser_token).status_code, 200)
+        self.assertEqual(self._check(purchaser_token).status_code, 200)
         self.status(self_order)
+        self.assertNotEqual(self._complete(purchaser_token).status_code, 200)
         messages = [message for message in self._recipient_messages() if message.to == ["review-buyer@example.com"]]
         self.assertEqual(len(messages), 1)
         self.assertEqual(len(self._setup_messages()), 1)

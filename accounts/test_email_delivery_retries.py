@@ -137,8 +137,8 @@ class OnboardingEmailRetryTests(TestCase):
             self.assertTrue(onboarding.deliver_purchaser_setup_email(user.pk, token))
         self.assertEqual(send.call_count, 3)
 
-    def test_purchaser_setup_stops_retrying_when_link_is_replaced_or_user_becomes_recipient(self):
-        for transition in ("recovery", "recipient"):
+    def test_purchaser_setup_stops_retrying_when_link_is_replaced_by_either_setup_purpose(self):
+        for transition in ("recovery", "activation"):
             with self.subTest(transition=transition):
                 user, token = self._purchaser()
 
@@ -147,6 +147,7 @@ class OnboardingEmailRetryTests(TestCase):
                         EmailOTP.issue_purchaser_setup_link(user)
                     else:
                         OrderRecipient.objects.create(order=user.orders.get(), user=user, name="Recipient", email=user.email)
+                        EmailOTP.issue_activation_link(user, lifetime_hours=1)
                     return False
 
                 with mock.patch("accounts.onboarding.send_email", side_effect=reject_after_transition) as send:

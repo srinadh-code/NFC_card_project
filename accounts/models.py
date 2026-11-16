@@ -113,6 +113,11 @@ class EmailOTP(models.Model):
         ACTIVATE = "ACTIVATE", "Account Activation"
         PURCHASER = "PURCHASER", "Purchaser Account Setup"
 
+    class EmailStatus(models.TextChoices):
+        PENDING = "PENDING", "Queued"
+        SENT = "SENT", "Accepted; delivery unverified"
+        FAILED = "FAILED", "Failed"
+
     PURCHASER_LINK_LIFETIME_MINUTES = 60
 
     # Wrong-guess ceiling for `check_code()` — once reached the OTP is
@@ -157,6 +162,14 @@ class EmailOTP(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
     is_used = models.BooleanField(default=False)
+
+    # Purchaser setup needs delivery evidence independent of recipient
+    # onboarding. Blank preserves unknown outcomes for historical links;
+    # merely issuing a credential never proves that an email was accepted.
+    email_status = models.CharField(max_length=10, choices=EmailStatus.choices, blank=True, default="")
+    email_attempts = models.PositiveIntegerField(default=0)
+    email_last_error = models.CharField(max_length=255, blank=True, default="")
+    email_sent_at = models.DateTimeField(null=True, blank=True)
 
     # Set only once this OTP has been successfully verified for a RESET —
     # a hashed, single-use, short-lived authorization that ResetPasswordView
@@ -257,6 +270,7 @@ class EmailOTP(models.Model):
         with transaction.atomic():
             User.objects.select_for_update(no_key=True).get(pk=user.pk)
             cls._supersede(user, cls.Purpose.ACTIVATE)
+            cls._supersede(user, cls.Purpose.PURCHASER)
             raw_secret = secrets.token_urlsafe(32)
             otp = cls.objects.create(
                 user=user,
@@ -272,6 +286,7 @@ class EmailOTP(models.Model):
         with transaction.atomic():
             User.objects.select_for_update(no_key=True).get(pk=user.pk)
             cls._supersede(user, cls.Purpose.PURCHASER)
+            cls._supersede(user, cls.Purpose.ACTIVATE)
             raw_secret = secrets.token_urlsafe(32)
             otp = cls.objects.create(
                 user=user,

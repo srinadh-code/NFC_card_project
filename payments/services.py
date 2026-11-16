@@ -637,10 +637,11 @@ def _fulfill(session, *, via, payment_ref=None):
     """Turns a paid, row-locked CheckoutSession into the real order — exactly
     once (a FULFILLED session just returns). Must run inside the caller's
     transaction. The order starts as Pending with payment Paid; the customer
-    account (new ones pending password setup) is linked now. Purchaser-only
+    account (new ones pending password setup) is linked now. Purchaser
     setup is dispatched after commit; recipient setup keeps its existing
     Processing lifecycle (accounts/onboarding.py)."""
     if session.status == CheckoutSession.Status.FULFILLED:
+        onboarding.start_purchaser_setup(session.order, session)
         return False
     if session.status == CheckoutSession.Status.FAILED:
         raise CheckoutError("This checkout can no longer be paid. Please start again.", status=409)

@@ -17,6 +17,7 @@ from profiles.models import Profile
 DESTINATION = "https://search.google.com/local/writereview?placeid=ChIJ_Test123"
 
 
+@override_settings(FRONTEND_URL="https://shop.example.com", PUBLIC_NFC_BASE_URL="")
 class GoogleReviewFeatureTests(APITestCase):
     def setUp(self):
         self.owner = make_user(email="review-owner@example.com")
@@ -334,3 +335,61 @@ class GoogleReviewFeatureTests(APITestCase):
         digital = self.card("CUSTOM", owner=self.owner, status="ACTIVE")
         self.assertIsNone(unowned.programming_url)
         self.assertIsNone(digital.programming_url)
+
+    def test_verified_short_link_saves_direct_destination_without_changing_card_programming_url(self):
+        self.allocation()
+        card = self.card(owner=self.owner, status="ACTIVE")
+        stable = card.programming_url
+        direct = DESTINATION.replace("ChIJ_Test123", "ChIJ_Verified456")
+        with patch("nfc_cards.review_urls._public_dns", return_value="142.250.1.1"), \
+                patch("nfc_cards.review_urls._request_redirect", return_value=(302, direct)) as request:
+            response = self.client.patch(reverse("customer-google-review"), {
+                "business_name": "Verified Business", "google_review_url": "https://maps.app.goo.gl/verified-business",
+            }, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        request.assert_called_once()
+        self.profile.refresh_from_db()
+        self.assertEqual((self.profile.google_review_business_name, self.profile.google_review_url), ("Verified Business", direct))
+        data = response.data["data"]
+        self.assertEqual(data["cards"][0]["programming_url"], stable)
+        self.assertEqual((data["scan_url"], data["qr_url"]), (stable, stable + "?source=qr"))
+        self.client.force_authenticate(None)
+        with patch("nfc_cards.review_urls._public_dns") as dns, patch("nfc_cards.review_urls._request_redirect") as request:
+            resolved = self.client.get(reverse("nfc-cards-resolve", args=[card.uid]))
+        self.assertEqual(resolved.data["data"]["redirect_url"], direct)
+        dns.assert_not_called()
+        request.assert_not_called()
+
+    def test_maps_listing_is_explained_and_cannot_overwrite_saved_business_or_review_url(self):
+        self.allocation()
+        self.profile.google_review_business_name = "Existing Business"
+        self.profile.google_review_url = DESTINATION
+        self.profile.save(update_fields=["google_review_business_name", "google_review_url"])
+        with patch("nfc_cards.review_urls._public_dns", return_value="142.250.1.1"), \
+                patch("nfc_cards.review_urls._request_redirect", side_effect=[
+                    (302, "https://www.google.com/maps/place/Mulugu/data=!1s0x123:0x456"), (200, ""),
+                ]):
+            response = self.client.patch(reverse("customer-google-review"), {
+                "business_name": "Must not save", "google_review_url": "https://maps.app.goo.gl/ixmLnerBdPTZNrHe9",
+            }, format="json")
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn("place listing", response.data["message"])
+        self.assertIn("Get more reviews", str(response.data["errors"]["google_review_url"]))
+        self.profile.refresh_from_db()
+        self.assertEqual((self.profile.google_review_business_name, self.profile.google_review_url), ("Existing Business", DESTINATION))
+
+    def test_unsafe_or_failed_short_link_verification_does_not_replace_existing_destination(self):
+        self.allocation()
+        self.profile.google_review_url = DESTINATION
+        self.profile.save(update_fields=["google_review_url"])
+        for status, location in ((302, "https://127.0.0.1/review"), (302, "https://evil.example/review"), (503, "")):
+            with self.subTest(status=status, location=location), \
+                    patch("nfc_cards.review_urls._public_dns", return_value="142.250.1.1"), \
+                    patch("nfc_cards.review_urls._request_redirect", return_value=(status, location)) as request:
+                response = self.client.patch(reverse("customer-google-review"), {
+                    "google_review_url": "https://maps.app.goo.gl/unsafe-or-unavailable",
+                }, format="json")
+                self.assertEqual(response.status_code, 400, response.data)
+                request.assert_called_once()
+                self.profile.refresh_from_db()
+                self.assertEqual(self.profile.google_review_url, DESTINATION)

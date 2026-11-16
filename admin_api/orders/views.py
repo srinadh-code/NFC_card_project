@@ -4,7 +4,6 @@ from django.db import transaction
 from django.db.models import Prefetch, Q
 from rest_framework.views import APIView
 
-from accounts import onboarding
 from accounts.models import User
 from admin_api.permissions import IsAdminRole
 from common.pagination import StandardPagination
@@ -119,12 +118,11 @@ class AdminOrderStatusView(APIView):
         serializer = AdminOrderStatusSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         new_status = serializer.validated_data["status"]
-        previous_status = order.status
 
         # Processing starts fulfilment and the customer's account activation,
         # so the order must really be paid: Paid status *and* a successful
         # payment record.
-        if new_status == Order.Status.PROCESSING and previous_status != Order.Status.PROCESSING:
+        if new_status == Order.Status.PROCESSING:
             paid = order.payment_status == Order.PaymentStatus.PAID and Transaction.objects.filter(
                 order=order, status=Order.PaymentStatus.PAID
             ).exists()
@@ -135,17 +133,12 @@ class AdminOrderStatusView(APIView):
                     status=400,
                 )
 
-        activation = None
         try:
             with transaction.atomic():
                 apply_status_transition(order, new_status)
-                # Only on the move into Processing — re-saving Processing (or any
-                # other status) never sends the activation email again, and
-                # start_activation_for_order itself sends at most once per account.
-                if new_status == Order.Status.PROCESSING and previous_status != Order.Status.PROCESSING:
-                    activation = onboarding.start_activation_for_order(order)
         except ValueError as exc:
             return error(str(exc), status=400)
+        activation = order.activation_result
 
         message = {
             "sent": "Order is Processing. Activation email work is queued; check each recipient's email status. Delivery is unverified.",

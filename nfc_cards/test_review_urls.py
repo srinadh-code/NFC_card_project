@@ -12,6 +12,12 @@ from .review_urls import _PinnedHTTPSConnection, _request_redirect, validate_rev
 
 CANONICAL = "https://search.google.com/local/writereview?placeid=ChIJ_Test-Place123"
 MAPS_REVIEW = "https://www.google.com/maps/place//data=!4m3!3m2!1s0x808f778c55555555:0xa4f25c571acded3f!12e1"
+MAPS_LOCALITY = (
+    "https://www.google.com/maps/place/Mulugu,+Telangana+506343/"
+    "@18.1926885,79.9320133,15z/"
+    "data=!3m1!4b1!4m6!3m5!1s0x3a330d14148fa42f:0x72b39845137cd478"
+    "!8m2!3d18.1916156!4d79.9441298!16s%2Fg%2F11bc623hkb!18m1!1e1?entry=tts"
+)
 PUBLIC_DNS = [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("142.250.1.1", 443))]
 
 
@@ -57,6 +63,40 @@ class GoogleReviewUrlTests(SimpleTestCase):
             validate_review_url("https://www.google.com/maps/search/?api=1&query=Business&query_place_id=ChIJ_Test-Place123"),
             CANONICAL,
         )
+        self.assertEqual(validate_review_url("https://maps.google.com/?query_place_id=ChIJ_Test-Place123"), CANONICAL)
+
+    def test_reported_short_link_to_locality_has_listing_error_without_inventing_a_review_form(self):
+        with patch("nfc_cards.review_urls.socket.getaddrinfo", return_value=PUBLIC_DNS), \
+                patch("nfc_cards.review_urls._request_redirect", side_effect=[(302, MAPS_LOCALITY), (200, "")]) as request:
+            with self.assertRaises(ValidationError) as caught:
+                validate_review_url("https://maps.app.goo.gl/ixmLnerBdPTZNrHe9", expand_short_links=True)
+        self.assertEqual(caught.exception.code, "google_maps_listing")
+        self.assertIn("place listing", caught.exception.messages[0])
+        self.assertIn("Get more reviews", caught.exception.messages[0])
+        self.assertEqual(request.call_count, 2)
+
+    def test_full_maps_listing_and_cid_are_not_mistaken_for_places_review_identifiers(self):
+        for value in (MAPS_LOCALITY, "https://maps.google.com/?cid=8265117636659205240", MAPS_REVIEW.replace("!12e1", "!9m1!1b1")):
+            with self.subTest(value=value), patch("nfc_cards.review_urls._request_redirect") as request:
+                with self.assertRaises(ValidationError) as caught:
+                    validate_review_url(value, expand_short_links=True)
+                self.assertEqual(caught.exception.code, "google_maps_listing")
+                request.assert_not_called()
+
+    def test_maps_intermediate_can_still_redirect_to_an_explicit_review_form(self):
+        result, request, _ = self._expand([(302, MAPS_LOCALITY), (302, MAPS_REVIEW)], value="https://maps.app.goo.gl/business")
+        self.assertEqual(result, MAPS_REVIEW)
+        self.assertEqual(request.call_count, 2)
+
+    def test_expansion_error_distinguishes_transport_failure_from_listing(self):
+        with patch("nfc_cards.review_urls._PinnedHTTPSConnection") as connection_class:
+            connection_class.return_value.request.side_effect = TimeoutError("private responsebody?secret=private")
+            with self.assertLogs("nfc_cards.review_urls", "WARNING") as logs, self.assertRaises(ValidationError) as caught:
+                _request_redirect(urlsplit("https://maps.app.goo.gl/business?private_query=value"), "142.250.1.1")
+        self.assertEqual(caught.exception.code, "google_review_unverified")
+        self.assertIsInstance(caught.exception.__cause__, TimeoutError)
+        self.assertIn("reason=TimeoutError", "\n".join(logs.output))
+        self.assertNotIn("private", "\n".join(logs.output))
 
     def test_blank_clears_the_destination(self):
         self.assertEqual(validate_review_url(""), "")

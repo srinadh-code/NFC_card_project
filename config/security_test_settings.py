@@ -16,6 +16,7 @@ os.environ.update({
     "RENDER": "False",
     "RENDER_EXTERNAL_HOSTNAME": "",
     "FRONTEND_URL": "http://localhost:5173",
+    "PUBLIC_NFC_BASE_URL": "",
     "CLOUDINARY_URL": "",
     "CLOUDINARY_CLOUD_NAME": "",
     "CLOUDINARY_API_KEY": "",

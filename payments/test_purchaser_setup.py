@@ -245,17 +245,20 @@ class PurchaserSetupTests(APITestCase):
         self.client.force_authenticate(user)
         self.assertCountEqual([entry["id"] for entry in self.client.get(reverse("my-orders")).data["data"]], [first.pk, second.pk])
 
-    def test_self_recipient_keeps_one_existing_processing_activation_path(self):
+    def test_self_recipient_gets_immediate_purchaser_setup_then_processing_activation(self):
         _, paid, order = self._buy(["srinadh@example.com"])
-        self.assertEqual(paid.data["data"]["purchaser_setup"], "recipient")
-        self.assertEqual(self._setup_messages(), [])
+        self.assertEqual(paid.data["data"]["purchaser_setup"], "required")
+        self.assertEqual([message.to for message in self._setup_messages()], [["srinadh@example.com"]])
+        purchaser_token = self._token()
+        self.assertEqual(self._check(purchaser_token).status_code, 200)
         self.assertEqual(self._recipient_messages(), [])
         self.assertEqual(order.recipients.get().user_id, order.customer_id)
         self._processing(order)
+        self.assertEqual(self._check(purchaser_token).status_code, 400)
         self.assertEqual([message.to for message in self._recipient_messages()], [["srinadh@example.com"]])
         self.assertEqual(self._complete(self._token(self._recipient_messages()[0]), purpose="recipient").status_code, 200)
         self.assertEqual(Profile.objects.filter(user=order.customer).count(), 1)
-        self.assertEqual(self._setup_messages(), [])
+        self.assertEqual(len(self._setup_messages()), 1)
 
     def test_recipients_receive_only_their_existing_recipient_account_ready_emails(self):
         _, _, order = self._buy()
@@ -482,9 +485,9 @@ class PurchaserSetupTests(APITestCase):
         for token in attempted_tokens:
             self.assertNotIn(token, "\n".join(logs.output))
         self._pay(checkout)
-        self.assertEqual(self._setup_messages(), [])
-        self.assertEqual(self._request_setup(order.customer.email).status_code, 200)
         self.assertEqual(len(self._setup_messages()), 1)
+        self.assertEqual(self._request_setup(order.customer.email).status_code, 200)
+        self.assertEqual(len(self._setup_messages()), 2)
         self.assertEqual(self._complete(self._token()).status_code, 200)
 
     def test_brevo_rejection_cannot_echo_a_setup_token_or_key_into_logs(self):
@@ -497,6 +500,7 @@ class PurchaserSetupTests(APITestCase):
         ]
         for payload in provider_payloads:
             with self.subTest(payload_type=type(payload).__name__):
+                EmailOTP.objects.filter(user=order.customer, purpose=EmailOTP.Purpose.PURCHASER).update(email_status=EmailOTP.EmailStatus.PENDING)
                 with self.settings(BREVO_API_KEY="mock-provider-secret"), mock.patch("accounts.onboarding.smtp_configured", return_value=False), mock.patch("accounts.emails.requests.post") as post, self.assertLogs("accounts.email", level="ERROR") as logs:
                     post.return_value.status_code = 400
                     post.return_value.json.return_value = payload

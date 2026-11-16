@@ -154,6 +154,12 @@ class AdminCardDetailView(APIView):
             Order.objects.select_for_update().get(pk=recipient.order_id)
         card = NfcCard.objects.select_for_update().get(pk=card.pk)
         linked = OrderRecipient.objects.filter(assigned_card=card).exists() or Order.objects.filter(assigned_card=card).exists()
+        if (
+            card.card_type == NfcCard.CardType.REVIEW and (card.user_id or card.assigned_on or linked)
+            and "uid" in data and data["uid"] != card.uid
+        ):
+            return error("An assigned Google Review card's UID cannot be changed because its NFC URL must stay the same.",
+                         errors={"uid": ["Keep the existing UID to preserve the programmed NFC URL."]}, status=400)
         new_owner = _resolve_customer(data["customer_email"], existing_card=card, recipient_id=data.get("recipient_id")) if "customer_email" in data else card.user
         if data.get("card_type", card.card_type) != card.card_type and (linked or card.user_id):
             return error("An assigned card's product cannot be changed.", status=400)

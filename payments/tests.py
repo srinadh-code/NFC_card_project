@@ -137,6 +137,15 @@ class RazorpayOnboardingTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
         return checkout, response
 
+    def _assert_one_setup_and_confirmation(self):
+        self.assertEqual(len(mail.outbox), 2)
+        setup = [message for message in mail.outbox if message.subject == "Set Up Your VR's Gateway Account"]
+        confirmations = [message for message in mail.outbox if "is confirmed" in message.subject]
+        self.assertEqual(len(setup), 1)
+        self.assertEqual(len(confirmations), 1)
+        self.assertEqual(setup[0].to, ["new.buyer@example.com"])
+        self.assertEqual(confirmations[0].to, ["new.buyer@example.com"])
+
     # --- Scenario C: existing customer --------------------------------
     def test_scenario_c_existing_customer(self):
         existing = make_user(email="regular@example.com", password="Exist@123")
@@ -178,7 +187,7 @@ class RazorpayOnboardingTests(APITestCase):
         self.assertEqual(User.objects.filter(email="new.buyer@example.com").count(), 1)
         self.assertEqual(Order.objects.count(), 1)
         self.assertEqual(CustomerOnboarding.objects.count(), 1)
-        self.assertEqual(len(mail.outbox), 1)
+        self._assert_one_setup_and_confirmation()
 
     def test_scenario_f_webhook_alone_fulfils_once(self):
         checkout = self._checkout()
@@ -186,7 +195,7 @@ class RazorpayOnboardingTests(APITestCase):
         self._webhook("order.paid", checkout["razorpay_order_id"], checkout["amount"])
         self.assertEqual(Order.objects.count(), 1)
         self.assertEqual(CheckoutSession.objects.get().fulfilled_via, "webhook")
-        self.assertEqual(len(mail.outbox), 1)
+        self._assert_one_setup_and_confirmation()
 
     def test_scenario_f_forged_payments_create_nothing(self):
         checkout = self._checkout()

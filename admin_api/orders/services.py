@@ -24,6 +24,7 @@ def _reached_step(status):
     }[status]
 
 
+@transaction.atomic
 def apply_status_transition(order, new_status):
     """Moves `order` to `new_status`, stamping any newly-reached tracking
     step with now() while leaving already-reached ones untouched — mirrors
@@ -31,6 +32,14 @@ def apply_status_transition(order, new_status):
     just backed by real persisted timestamps instead of a recomputed array."""
     if order.status == Order.Status.CANCELLED:
         raise ValueError("Cannot change the status of a cancelled order.")
+
+    # Every administration path must establish the same payment evidence,
+    # including retries while the order is already Processing.
+    if new_status == Order.Status.PROCESSING and (
+        order.payment_status != Order.PaymentStatus.PAID
+        or not Transaction.objects.filter(order=order, status=Order.PaymentStatus.PAID).exists()
+    ):
+        raise ValueError("This order has no successful payment yet, so it can't move to Processing.")
 
     update_fields = ["status", "updated_at"]
     if new_status != Order.Status.CANCELLED:
@@ -43,6 +52,13 @@ def apply_status_transition(order, new_status):
 
     order.status = new_status
     order.save(update_fields=update_fields)
+    order.activation_result = None
+    if new_status == Order.Status.PROCESSING:
+        from accounts.onboarding import start_activation_for_order
+
+        # The onboarding service owns claims and duplicate prevention. Calling
+        # it for repeated saves also permits recovery of genuinely failed work.
+        order.activation_result = start_activation_for_order(order)
     if new_status == Order.Status.CANCELLED:
         released_allocations = list(RecipientEmailAllocation.objects.filter(
             recipients__order=order,

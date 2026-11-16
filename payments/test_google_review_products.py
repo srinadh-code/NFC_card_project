@@ -25,6 +25,7 @@ from profiles.models import Profile
     RAZORPAY_WEBHOOK_SECRET=fixtures.WEBHOOK_SECRET,
     ONBOARDING_EMAIL_SYNC=True, BREVO_API_KEY="", DUMMY_PAYMENTS_ENABLED=False,
     EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    FRONTEND_URL="https://shop.example.com", PUBLIC_NFC_BASE_URL="",
 )
 class GoogleReviewProductPaymentTests(APITestCase):
     # Reuse the existing provider/OTP fixtures, not a second payment flow.
