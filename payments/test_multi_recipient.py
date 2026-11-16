@@ -378,7 +378,12 @@ class MultiRecipientPaymentTests(APITestCase):
         self.assertTrue(is_recipient_email_available(email, first_buyer))
         self.assertTrue(is_recipient_email_available(email, second_buyer))
 
-        reserve_recipient_emails(uuid4(), [recipient(email=email)], first_buyer)
+        # A live hold belongs to a committed checkout; a random orphan UUID
+        # no longer represents a competing payment attempt.
+        self._checkout({
+            **_guest_payload(email=first_buyer),
+            "recipients": [recipient(email=email)],
+        })
         with self.assertRaises(CheckoutError):
             reserve_recipient_emails(uuid4(), [recipient(email=email)], second_buyer)
 
@@ -548,19 +553,35 @@ class MultiRecipientPaymentTests(APITestCase):
 @override_settings(DUMMY_PAYMENTS_ENABLED=True)
 class RecipientAllocationConcurrencyTests(TransactionTestCase):
     def setUp(self):
-        OrderCardProduct.objects.update_or_create(
-            slug="custom",
-            defaults={
-                "name": "GATEWAY Custom",
-                "price": "999.00",
-                "card_type": "CUSTOM",
-                "is_active": True,
-                "is_published": True,
-            },
-        )
+        for slug, card_type, price in (("custom", "CUSTOM", "999.00"), ("google-review", "REVIEW", "499.00")):
+            OrderCardProduct.objects.update_or_create(
+                slug=slug,
+                defaults={
+                    "name": f"GATEWAY {card_type}", "price": price, "card_type": card_type,
+                    "is_active": True, "is_published": True,
+                },
+            )
 
     def test_concurrent_checkout_attempts_only_claim_one_recipient_email(self):
+        self._concurrent_checkouts(("CUSTOM", "CUSTOM"), ["allocated", "rejected"])
+
+    def test_concurrent_review_checkouts_only_claim_one_recipient_email(self):
+        self._concurrent_checkouts(("REVIEW", "REVIEW"), ["allocated", "rejected"])
+
+    def test_concurrent_digital_and_review_checkouts_both_claim_the_same_email(self):
+        self._concurrent_checkouts(("CUSTOM", "REVIEW"), ["allocated", "allocated"])
+
+    def test_opposite_order_bulk_checkouts_claim_one_complete_recipient_set(self):
+        self._concurrent_checkouts(("REVIEW", "REVIEW"), ["allocated", "rejected"], bulk=True)
+
+    def _concurrent_checkouts(self, card_types, expected, *, bulk=False):
         email = "concurrent.recipient@example.com"
+        emails = [email, "another.concurrent.recipient@example.com"] if bulk else [email]
+        if bulk:
+            for address_email in emails:
+                RecipientEmailAllocation.objects.create(
+                    normalized_email=address_email, card_type="REVIEW", owner_email="previous@example.com",
+                )
         start = Barrier(2)
         address = {
             "phone": "9876543210",
@@ -577,15 +598,17 @@ class RecipientAllocationConcurrencyTests(TransactionTestCase):
             "longitude": None,
         }
 
-        def checkout(owner_email):
+        def checkout(arguments):
+            owner_email, card_type = arguments
+            recipient_emails = list(reversed(emails)) if "second" in owner_email else emails
             close_old_connections()
             try:
                 start.wait(timeout=5)
                 create_checkout_session(
                     contact={"full_name": "Checkout Buyer", "email": owner_email, "phone": "9876543210"},
                     address=address,
-                    items=[{"product_id": "PRD-NEXORA-CUSTOM", "qty": 1}],
-                    recipients=[recipient(email=email)],
+                    items=[{"product_id": f"PRD-NEXORA-{'GOOGLE-REVIEW' if card_type == 'REVIEW' else 'CUSTOM'}", "qty": len(emails)}],
+                    recipients=[recipient(index=index + 1, email=address_email) for index, address_email in enumerate(recipient_emails)],
                     email_token="already-verified",
                     provider=CheckoutSession.Provider.DUMMY,
                 )
@@ -602,13 +625,19 @@ class RecipientAllocationConcurrencyTests(TransactionTestCase):
         ):
             results = list(executor.map(
                 checkout,
-                ["concurrent.first@example.com", "concurrent.second@example.com"],
+                zip(["concurrent.first@example.com", "concurrent.second@example.com"], card_types),
             ))
 
-        self.assertCountEqual(results, ["allocated", "rejected"])
-        self.assertEqual(CheckoutSession.objects.count(), 1)
-        self.assertEqual(RecipientEmailAllocation.objects.filter(normalized_email=email).count(), 1)
-        self.assertEqual(RecipientEmailReservation.objects.filter(allocation__normalized_email=email).count(), 1)
+        count = expected.count("allocated")
+        self.assertCountEqual(results, expected)
+        self.assertEqual(CheckoutSession.objects.count(), count)
+        self.assertEqual(RecipientEmailAllocation.objects.filter(normalized_email__in=emails).count(), count * len(emails))
+        self.assertEqual(RecipientEmailReservation.objects.filter(allocation__normalized_email__in=emails).count(), count * len(emails))
+        if bulk:
+            session = CheckoutSession.objects.get()
+            expected_emails = list(reversed(emails)) if "second" in session.email else emails
+            self.assertEqual([row["email"] for row in session.recipients], expected_emails)
+            self.assertEqual(RecipientEmailReservation.objects.filter(checkout_session_id=session.public_id).count(), len(emails))
 
 
 @override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])

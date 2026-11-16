@@ -13,11 +13,15 @@ Click below to create your password and activate your account.
 Set Your Password: {{ action_url }}
 (This link can be used once and expires in {{ expires_text }}.)
 
-After setting your password, you can log in to your VR's Gateway customer dashboard.{% if is_recipient %} You can manage your digital business profile there. Physical card assignment is managed separately.{% else %} Use your email address to sign in and view your order history.{% endif %}
+After setting your password, you can log in to your VR's Gateway customer dashboard.{% if review_only %} Your Google Review workspace lets you add your business name and Google Review link. Physical card assignment is managed separately.{% elif is_recipient %} You can manage your digital business profile there. Physical card assignment is managed separately.{% else %} Use your email address to sign in and view your order history.{% endif %}
 
-{% if is_recipient %}Our designer will contact you within the next 24 hours to discuss your digital business profile design and customisation. Please be available to coordinate with our designer.
+{% if is_recipient and not review_only %}Our designer will contact you within the next 24 hours to discuss your digital business profile design and customisation. Please be available to coordinate with our designer.
 
 After activating your account and logging into your Customer Dashboard, please complete your digital profile by adding your personal details, business information, profile picture and social media links.
+{% endif %}
+{% if has_review and not review_only %}Your Google Review workspace is also available for your business name and review destination.
+{% endif %}
+{% if has_review %}After your physical Google Review card is assigned, open Google Review in your dashboard and select Activate card. Save your business name and Google Review URL there; the review QR downloads become available when the card is active and configured.
 {% endif %}
 {% if order_number %}
 Order Number: {{ order_number }}

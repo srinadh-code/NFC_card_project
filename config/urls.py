@@ -1,7 +1,9 @@
 from django.contrib import admin
 from django.urls import include, path
+from nfc_cards.review import GoogleReviewWorkspaceView
 
 urlpatterns = [
+    path("api/customer/google-review/", GoogleReviewWorkspaceView.as_view(), name="customer-google-review"),
     path("admin/", admin.site.urls),
 
     path("api/auth/", include("accounts.urls")),

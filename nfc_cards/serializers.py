@@ -5,6 +5,7 @@ from .models import NfcCard
 
 class NfcCardSerializer(serializers.ModelSerializer):
     customer_name = serializers.SerializerMethodField()
+    programming_url = serializers.ReadOnlyField()
 
     class Meta:
         model = NfcCard
@@ -20,6 +21,7 @@ class NfcCardSerializer(serializers.ModelSerializer):
             "activated_on",
             "purchase_date",
             "notes",
+            "programming_url",
         ]
         read_only_fields = fields
 

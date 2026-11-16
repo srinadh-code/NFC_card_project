@@ -9,13 +9,18 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import IntegrityError, OperationalError, connection, transaction
-from django.db.models.functions import Lower
+from django.db.models import Q
+from django.db.models.functions import Lower, Trim
 from django.utils import timezone
 from rest_framework import serializers
 
 from accounts import onboarding
 from accounts.models import CustomerOnboarding, User
 from common.discounts import calculate_first_order_discount, get_catalog_product
+from common.card_products import (
+    CARD_TYPES, DIGITAL_CARD_TYPES, DIGITAL_CARD_TYPE, REVIEW_CARD_TYPE,
+    allocation_card_type, recipient_card_type, recipient_product_slots,
+)
 from customer_management.customer_addresses import pincode as pincode_service
 from customer_management.customer_addresses.models import CustomerAddress
 from customer_management.customer_cart.services import clear_cart, get_or_create_cart
@@ -161,11 +166,32 @@ def normalize_recipient_email(value):
     return (value or "").strip().lower()
 
 
-def is_recipient_email_available(email, buyer_email="", *, checkout_session_id=None):
+def recipient_claim_order(recipients):
+    """Lock shared claims consistently, retaining each original product slot."""
+    return sorted(enumerate(recipients), key=lambda entry: (
+        normalize_recipient_email(entry[1]["email"]),
+        allocation_card_type(entry[1].get("card_type", DIGITAL_CARD_TYPE)),
+    ))
+
+
+def checkout_product_slots(lines):
+    try:
+        return recipient_product_slots(lines)
+    except ValueError:
+        raise CheckoutError("Choose between 1 and 10 supported cards.", errors={"quantity": ["Must be from 1 to 10."]})
+
+
+def is_recipient_email_available(email, buyer_email="", *, checkout_session_id=None, card_type=DIGITAL_CARD_TYPE):
     normalized_email = normalize_recipient_email(email)
     buyer_email = normalize_recipient_email(buyer_email)
-    allocation = RecipientEmailAllocation.objects.filter(normalized_email=normalized_email).first()
-    if allocation is not None:
+    purpose = allocation_card_type(card_type)
+    if not purpose:
+        return False
+    # Blank legacy claims protect both categories until their product is known.
+    allocations = RecipientEmailAllocation.objects.filter(normalized_email=normalized_email).filter(
+        Q(card_type=purpose) | Q(card_type=""),
+    )
+    for allocation in allocations:
         if _allocation_has_recipient_order(allocation):
             return False
         reservations = _live_recipient_reservations(allocation)
@@ -173,8 +199,18 @@ def is_recipient_email_available(email, buyer_email="", *, checkout_session_id=N
             reservations = reservations.exclude(checkout_session_id=checkout_session_id)
         if reservations.exists():
             return False
-    if _recipient_email_has_assigned_card(normalized_email):
+    if _recipient_email_has_assigned_card(normalized_email, card_type=card_type):
         return False
+    # Older paid slots can predate email claims. They remain authoritative;
+    # never make an existing allocation disappear just because its FK is null.
+    historical_slots = OrderRecipient.objects.annotate(normalized_email=Lower(Trim("email"))).filter(
+        normalized_email=normalized_email,
+        order__payment_status__in=(Order.PaymentStatus.PAID, Order.PaymentStatus.PENDING),
+    ).exclude(order__status=Order.Status.CANCELLED).select_related("order", "assigned_card")
+    for recipient in historical_slots:
+        existing_type = recipient_card_type(recipient)
+        if not existing_type or allocation_card_type(existing_type) == purpose:
+            return False
     return True
 
 
@@ -187,28 +223,34 @@ def _allocation_has_recipient_order(allocation):
 
 
 def _live_recipient_reservations(allocation):
-    # The UUID is intentionally not a foreign key. Ignore known terminal
-    # attempts, but keep unknown reservations conservative (including races).
-    terminal_sessions = CheckoutSession.objects.filter(
+    # The UUID is not a foreign key, so partial historical cleanup can leave
+    # orphan reservations. Creation of a session and its holds is atomic;
+    # a missing session cannot be paid or fulfilled. Ignore that stale hold
+    # without deleting history, while protecting every existing live session.
+    live_sessions = CheckoutSession.objects.exclude(
         status__in=(CheckoutSession.Status.FAILED, CheckoutSession.Status.FULFILLED),
     ).values("public_id")
-    return allocation.reservations.exclude(checkout_session_id__in=terminal_sessions)
+    return allocation.reservations.filter(checkout_session_id__in=live_sessions)
 
 
-def _recipient_email_has_assigned_card(normalized_email):
-    if User.objects.annotate(normalized_email=Lower("email")).filter(
+def _recipient_email_has_assigned_card(normalized_email, *, card_type=DIGITAL_CARD_TYPE):
+    if User.objects.annotate(normalized_email=Lower(Trim("email"))).filter(
         normalized_email=normalized_email,
         role=User.Role.ADMIN,
     ).exists():
         return True
-    if OrderRecipient.objects.annotate(normalized_email=Lower("email")).filter(
+    card_types = (REVIEW_CARD_TYPE,) if allocation_card_type(card_type) == REVIEW_CARD_TYPE else DIGITAL_CARD_TYPES
+    if OrderRecipient.objects.annotate(normalized_email=Lower(Trim("email"))).filter(
         normalized_email=normalized_email,
         assigned_card__isnull=False,
+        assigned_card__card_type__in=card_types,
     ).exists():
         return True
-    return User.objects.annotate(normalized_email=Lower("email")).filter(
+    # Match assignment policy: ownership survives a status change. Even a
+    # legacy owned row labelled UNASSIGNED must not allow a duplicate sale.
+    return User.objects.annotate(normalized_email=Lower(Trim("email"))).filter(
         normalized_email=normalized_email,
-        nfc_cards__status__in=("ACTIVE", "ASSIGNED", "INACTIVE", "BLOCKED", "LOST"),
+        nfc_cards__card_type__in=card_types,
     ).exists()
 
 
@@ -224,22 +266,27 @@ def _is_sqlite_lock_error(exc):
     return connection.vendor == "sqlite" and "locked" in str(exc).lower()
 
 
-def claim_recipient_email(email, buyer_email, *, index=0):
+def claim_recipient_email(email, buyer_email, *, index=0, card_type=DIGITAL_CARD_TYPE):
     normalized_email = normalize_recipient_email(email)
+    purpose = allocation_card_type(card_type)
+    if not purpose:
+        raise CheckoutError("Choose a supported card product.")
     try:
         with transaction.atomic():
             allocation = RecipientEmailAllocation.objects.select_for_update().filter(
                 normalized_email=normalized_email,
-            ).first()
+            ).filter(Q(card_type=purpose) | Q(card_type="")).order_by("-card_type", "pk").first()
+            if not is_recipient_email_available(normalized_email, buyer_email, card_type=card_type):
+                raise _recipient_email_conflict(index, normalized_email)
             if allocation is not None:
-                if not is_recipient_email_available(normalized_email, buyer_email):
-                    raise _recipient_email_conflict(index, normalized_email)
                 allocation.owner_email = normalize_recipient_email(buyer_email)
-                allocation.save(update_fields=["owner_email"])
+                allocation.card_type = purpose
+                allocation.save(update_fields=["owner_email", "card_type"])
                 return allocation
             return RecipientEmailAllocation.objects.create(
                 normalized_email=normalized_email,
                 owner_email=normalize_recipient_email(buyer_email),
+                card_type=purpose,
             )
     except IntegrityError:
         raise _recipient_email_conflict(index, normalized_email)
@@ -250,9 +297,12 @@ def reserve_recipient_emails(checkout_session_id, recipients, buyer_email):
     for attempt in range(5):
         try:
             with transaction.atomic():
-                for index, recipient in enumerate(recipients):
+                for index, recipient in recipient_claim_order(recipients):
                     normalized_email = normalize_recipient_email(recipient["email"])
-                    allocation = claim_recipient_email(normalized_email, normalized_buyer_email, index=index)
+                    allocation = claim_recipient_email(
+                        normalized_email, normalized_buyer_email, index=index,
+                        card_type=recipient.get("card_type", DIGITAL_CARD_TYPE),
+                    )
                     RecipientEmailReservation.objects.create(
                         allocation=allocation,
                         checkout_session_id=checkout_session_id,
@@ -293,7 +343,7 @@ def fail_checkout_session(session):
         release_checkout_reservations(locked_session)
 
 
-def validate_recipients(raw_recipients, total_quantity, buyer_email="", *, checkout_session_id=None, indian_mobile=True):
+def validate_recipients(raw_recipients, total_quantity, buyer_email="", *, checkout_session_id=None, indian_mobile=True, product_slots=None):
     """Validate one distinct, available email allocation for every card.
 
     ``indian_mobile`` (the default for every new checkout/order) requires each
@@ -309,6 +359,8 @@ def validate_recipients(raw_recipients, total_quantity, buyer_email="", *, check
             "Enter recipient details for every card.",
             errors={"recipients": [f"Exactly {total_quantity} recipient entries are required."]},
         )
+    if product_slots is not None and len(product_slots) != total_quantity:
+        raise CheckoutError("Recipient quantities do not match the purchased products.")
     cleaned = []
     for index, raw in enumerate(raw_recipients, start=1):
         if not isinstance(raw, dict):
@@ -339,19 +391,32 @@ def validate_recipients(raw_recipients, total_quantity, buyer_email="", *, check
             normalized_phone = ("+" if phone.startswith("+") else "") + digits
         if errors:
             raise CheckoutError(f"Please check recipient {index}.", errors={"recipients": {str(index - 1): errors}})
-        cleaned.append({"full_name": name, "email": email, "phone": normalized_phone})
+        slot = product_slots[index - 1] if product_slots is not None else {"card_type": DIGITAL_CARD_TYPE}
+        card_type = slot["card_type"]
+        if card_type not in CARD_TYPES:
+            raise CheckoutError("Choose a supported card product.")
+        if raw.get("card_type") is not None and raw["card_type"] != card_type:
+            raise CheckoutError("Recipient product does not match the purchased card.", errors={"recipients": {str(index - 1): {"card_type": ["Product mismatch."]}}})
+        product_id = slot.get("product_id")
+        if product_id and raw.get("product_id") is not None and str(raw["product_id"]).upper() != str(product_id).upper():
+            raise CheckoutError("Recipient product does not match the purchased card.", errors={"recipients": {str(index - 1): {"product_id": ["Product mismatch."]}}})
+        cleaned.append({"full_name": name, "email": email, "phone": normalized_phone, "card_type": card_type})
+        if product_id:
+            cleaned[-1]["product_id"] = product_id
     seen_emails = set()
     for index, recipient in enumerate(cleaned):
-        if recipient["email"] in seen_emails:
+        identity = (recipient["email"], allocation_card_type(recipient["card_type"]))
+        if identity in seen_emails:
             raise CheckoutError(
                 "Use a different email address for each NFC card.",
-                errors={"recipients": {str(index): {"email": ["Recipient emails must be unique within checkout."]}}},
+                errors={"recipients": {str(index): {"email": ["Recipient emails must be unique for each card type within checkout."]}}},
             )
-        seen_emails.add(recipient["email"])
+        seen_emails.add(identity)
         if not is_recipient_email_available(
             recipient["email"],
             buyer_email,
             checkout_session_id=checkout_session_id,
+            card_type=recipient["card_type"],
         ):
             raise _recipient_email_conflict(index, recipient["email"])
     if User.objects.filter(role=User.Role.ADMIN).annotate(normalized_email=Lower("email")).filter(normalized_email__in=[r["email"] for r in cleaned]).exists():
@@ -488,7 +553,10 @@ def create_checkout_session(
     delivery_phone = saved.phone if customer is not None else (address or {}).get("phone", contact_values["phone"])
     if not isinstance(delivery_phone, str) or not re.fullmatch(r"\+?[0-9 ().-]{7,20}", delivery_phone.strip()) or not 7 <= len(re.sub(r"\D", "", delivery_phone)) <= 15:
         raise CheckoutError("A valid delivery phone number is required.", errors={"address": {"phone": ["Enter a phone number with 7 to 15 digits."]}})
-    validated_recipients = validate_recipients(recipients, total_quantity, contact_values["email"])
+    validated_recipients = validate_recipients(
+        recipients, total_quantity, contact_values["email"],
+        product_slots=checkout_product_slots(lines),
+    )
 
     try:
         priced_items, subtotal = price_lines(
@@ -584,10 +652,34 @@ def _fulfill(session, *, via, payment_ref=None):
         session.email,
         checkout_session_id=session.public_id,
         indian_mobile=False,
+        product_slots=checkout_product_slots(session.lines),
     )
 
     user, account_created = _provision_user(session)
     method = PAYMENT_METHOD_FOR_PROVIDER[session.provider]
+
+    # Lock the product-specific claims before inserting paid recipient rows.
+    # This also supports a pre-upgrade payment callback without inventing a
+    # new order or treating our own freshly inserted recipient as a conflict.
+    allocations = [None] * len(validated_recipients)
+    for index, recipient in recipient_claim_order(validated_recipients):
+        purpose = allocation_card_type(recipient["card_type"])
+        allocation = RecipientEmailAllocation.objects.select_for_update().filter(
+            normalized_email=recipient["email"],
+        ).filter(Q(card_type=purpose) | Q(card_type="")).order_by("-card_type", "pk").first()
+        if allocation is None:
+            allocation = claim_recipient_email(
+                recipient["email"], session.email, index=index, card_type=recipient["card_type"],
+            )
+        elif not is_recipient_email_available(
+            recipient["email"], session.email,
+            checkout_session_id=session.public_id, card_type=recipient["card_type"],
+        ):
+            raise _recipient_email_conflict(index, recipient["email"])
+        elif not allocation.card_type:
+            allocation.card_type = purpose
+            allocation.save(update_fields=["card_type"])
+        allocations[index] = allocation
 
     order = Order(
         customer=user,
@@ -625,27 +717,13 @@ def _fulfill(session, *, via, payment_ref=None):
             for line in session.lines
         ]
     )
-    recipient_rows = OrderRecipient.objects.bulk_create([
-        OrderRecipient(order=order, name=recipient["full_name"], email=recipient["email"], phone=recipient["phone"])
-        for recipient in validated_recipients
+    OrderRecipient.objects.bulk_create([
+        OrderRecipient(
+            order=order, name=recipient["full_name"], email=recipient["email"],
+            phone=recipient["phone"], card_type=recipient["card_type"], email_allocation=allocation,
+        )
+        for recipient, allocation in zip(validated_recipients, allocations)
     ])
-    for index, recipient in enumerate(recipient_rows):
-        email = normalize_recipient_email(recipient.email)
-        allocation = RecipientEmailAllocation.objects.select_for_update().filter(normalized_email=email).first()
-        if allocation is None:
-            allocation = claim_recipient_email(email, session.email, index=index)
-            RecipientEmailReservation.objects.create(
-                allocation=allocation,
-                checkout_session_id=session.public_id,
-            )
-        elif not is_recipient_email_available(
-            email,
-            session.email,
-            checkout_session_id=session.public_id,
-        ):
-            raise _recipient_email_conflict(index, email)
-        recipient.email_allocation = allocation
-        recipient.save(update_fields=["email_allocation", "updated_at"])
     RecipientEmailReservation.objects.filter(checkout_session_id=session.public_id).delete()
     onboarding.ensure_recipient_accounts(order)
     Transaction.objects.create(order=order, amount=session.total, method=method, status=Order.PaymentStatus.PAID)

@@ -2,6 +2,7 @@
 # the domain app stays the single source of truth for the model; this
 # package only owns the admin read/write *shapes* around it.
 import secrets
+import re
 
 from rest_framework import serializers
 
@@ -16,6 +17,7 @@ class NfcCardAdminSerializer(serializers.ModelSerializer):
     customer_id = serializers.IntegerField(source="user_id", read_only=True)
     customer_name = serializers.SerializerMethodField()
     customer_email = serializers.SerializerMethodField()
+    programming_url = serializers.ReadOnlyField()
 
     class Meta:
         model = NfcCard
@@ -33,6 +35,7 @@ class NfcCardAdminSerializer(serializers.ModelSerializer):
             "activated_on",
             "purchase_date",
             "notes",
+            "programming_url",
         ]
         read_only_fields = fields
 
@@ -64,6 +67,7 @@ class AdminCardWriteSerializer(serializers.Serializer):
     purchase_date = serializers.DateField(required=False, allow_null=True)
     notes = serializers.CharField(required=False, allow_blank=True)
     customer_email = serializers.EmailField(required=False, allow_blank=True)
+    recipient_id = serializers.IntegerField(required=False, min_value=1)
 
     def __init__(self, *args, existing_card=None, **kwargs):
         self._existing_card = existing_card
@@ -79,6 +83,15 @@ class AdminCardWriteSerializer(serializers.Serializer):
         if qs.exists():
             raise serializers.ValidationError("A card with this UID is already registered.")
         return value
+
+    def validate(self, attrs):
+        card_type = attrs.get("card_type", self._existing_card.card_type if self._existing_card else NfcCard.CardType.CUSTOM)
+        uid = attrs.get("uid", self._existing_card.uid if self._existing_card else "")
+        # New Review links encode this UID as one stable path segment.
+        # Digital inventory retains its established UID validation behavior.
+        if card_type == NfcCard.CardType.REVIEW and uid and not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", uid):
+            raise serializers.ValidationError({"uid": "Use letters, numbers, hyphens or underscores for a Google Review UID."})
+        return attrs
 
     def validate_serial_number(self, value):
         value = value.strip()
@@ -103,6 +116,7 @@ class AdminCardWriteSerializer(serializers.Serializer):
 
 class AdminCardAssignSerializer(serializers.Serializer):
     email = serializers.EmailField()
+    recipient_id = serializers.IntegerField(required=False, min_value=1)
 
     def validate_email(self, value):
         value = value.strip().lower()

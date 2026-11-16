@@ -370,7 +370,7 @@ class DummyPaymentActivationTests(APITestCase):
         processing = self._set_status(order.pk, "PROCESSING")
         self.assertEqual(processing.status_code, status.HTTP_200_OK, processing.content)
         self.assertEqual(processing.data["data"]["activation_result"], "sent")
-        self.assertEqual(processing.data["data"]["account"]["status_display"], "Activation Email Sent")
+        self.assertEqual(processing.data["data"]["account"]["status_display"], "Email accepted; delivery unverified")
         emails = self._activation_emails()
         self.assertEqual(len(emails), 1)
         body = emails[0].body

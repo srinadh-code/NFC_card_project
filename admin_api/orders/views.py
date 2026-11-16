@@ -148,8 +148,8 @@ class AdminOrderStatusView(APIView):
             return error(str(exc), status=400)
 
         message = {
-            "sent": "Order is Processing. The account activation email is being sent to the customer.",
-            "already_sent": "Order is Processing. This customer's activation email was already sent earlier.",
+            "sent": "Order is Processing. Activation email work is queued; check each recipient's email status. Delivery is unverified.",
+            "already_sent": "Order is Processing. An activation link already exists; check email status or resend after a failure.",
             "active": "Order is Processing. The customer already has an active account.",
             "partial_failure": "Order is Processing. Activation started for some recipients; check each recipient's status and retry any failures.",
             "failed": "Order is Processing, but activation could not be started for the recipients. Check their status and retry.",

@@ -9,7 +9,7 @@ from common.permissions import IsRecipientCustomer
 from common.response import error, success
 
 from .models import NfcCard
-from .assignment import ensure_card_assignment_available
+from .assignment import assignment_recipient, ensure_card_assignment_available
 from .serializers import (
     ActivateCardSerializer,
     DeactivateCardSerializer,
@@ -37,9 +37,20 @@ class ActivateCardView(APIView):
         serializer.is_valid(raise_exception=True)
         uid = serializer.validated_data["uid"].strip()
 
-        card = NfcCard.objects.select_for_update().filter(uid__iexact=uid).first()
+        card = NfcCard.objects.filter(uid__iexact=uid).first()
         if card is None:
             return error("No card found with that ID.", status=404)
+
+        # Paid assignment locks order before inventory. Do not first lock
+        # the card here and invert that order against an admin assignment.
+        if card.user_id is None and card.card_type == NfcCard.CardType.REVIEW:
+            from admin_api.orders.services import assign_card_to_order
+            try:
+                recipient = assignment_recipient(request.user, card.card_type)
+                assign_card_to_order(recipient.order, card, recipient_id=recipient.pk)
+            except ValueError as exc:
+                return error(str(exc), status=400)
+        card = NfcCard.objects.select_for_update().get(pk=card.pk)
 
         if card.user_id is not None and card.user_id != request.user.id:
             return error("This card is already claimed by another account.", status=400)
@@ -131,6 +142,10 @@ class CardResolveView(APIView):
         card = NfcCard.objects.filter(uid__iexact=identifier).first()
         if card is None and identifier.isdigit():
             card = NfcCard.objects.filter(pk=int(identifier)).first()
+
+        if card is not None and card.card_type == NfcCard.CardType.REVIEW:
+            from .review import resolve_review_card
+            return resolve_review_card(request, card)
 
         if card is None or card.status not in (NfcCard.Status.ACTIVE, NfcCard.Status.ASSIGNED):
             return error("This card is not active.", status=404)

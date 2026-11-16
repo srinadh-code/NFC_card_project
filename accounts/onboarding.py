@@ -47,6 +47,28 @@ def normalize_email(email):
     return (email or "").strip().lower()
 
 
+def email_delivery_details(status, *, queued=False, error=""):
+    """Describe stored transport evidence without inventing mailbox delivery."""
+    if status == "PENDING" and error == "dispatch_outcome_unknown":
+        state = "UNVERIFIED"
+    elif status == "FAILED":
+        state = "BOUNCED" if error == "recipient_bounced" else "FAILED"
+    elif status == "SENT":
+        state = "ACCEPTED"
+    else:
+        state = "QUEUED" if queued else "NOT_QUEUED"
+    labels = {
+        "NOT_QUEUED": "Not queued",
+        "QUEUED": "Queued",
+        "ACCEPTED": "Accepted by email service; delivery unverified",
+        "FAILED": "Failed",
+        "BOUNCED": "Bounced",
+        "UNVERIFIED": "Outcome unverified; check provider records before retrying",
+    }
+    return {"email_delivery_status": state, "email_delivery_status_display": labels[state],
+            "email_delivery_verified": False}
+
+
 def find_customer_by_email(email):
     return User.objects.filter(email__iexact=normalize_email(email)).first()
 
@@ -147,6 +169,7 @@ def _render_activation(user, raw_token, order):
         "is_recipient": user.order_recipients.exists() or user.nfc_cards.exists(),
         "username": username_for(user),
         "order_number": order.order_number if order is not None else "",
+        **_email_product_context(user, order),
     }
     return (
         render_to_string("accounts/emails/account_activation.html", context),
@@ -210,12 +233,23 @@ def _send(user, subject, html, text):
     return send_email(user.email, subject, html, text, f"purpose=activation user_id={user.pk}")
 
 
-def deliver_activation_email(onboarding_id, raw_token):
+def deliver_activation_email(onboarding_id, raw_token, *, issued_at=None):
     """Sends the activation email with retries and records every attempt on
     CustomerOnboarding. Never raises, never logs the link."""
     onboarding = CustomerOnboarding.objects.select_related("user", "source_order").filter(pk=onboarding_id).first()
     if onboarding is None:
         return False
+    if issued_at is not None and (
+        onboarding.credentials_issued_at != issued_at
+        or onboarding.email_status != CustomerOnboarding.EmailStatus.PENDING
+    ):
+        return False
+    # A resend can supersede this worker while it is queued, sleeping between
+    # attempts, or waiting for its provider. It must never send another attempt
+    # or replace the newer link's delivery evidence after that happens.
+    current_rows = CustomerOnboarding.objects.filter(
+        pk=onboarding.pk, credentials_issued_at=onboarding.credentials_issued_at,
+    )
     user = onboarding.user
     if not user.must_change_password or not eligible_activation_recipients().filter(user=user).exists():
         return False
@@ -225,7 +259,7 @@ def deliver_activation_email(onboarding_id, raw_token):
         and not smtp_configured()
         and settings.EMAIL_BACKEND == "django.core.mail.backends.console.EmailBackend"
     ):
-        CustomerOnboarding.objects.filter(pk=onboarding.pk).update(
+        current_rows.update(
             email_status=CustomerOnboarding.EmailStatus.FAILED,
             email_last_error="Email delivery is not configured",
         )
@@ -235,7 +269,7 @@ def deliver_activation_email(onboarding_id, raw_token):
         html, text = _render_activation(user, raw_token, onboarding.source_order)
     except Exception as exc:  # noqa: BLE001 — recorded, never propagated
         error_text = type(exc).__name__
-        CustomerOnboarding.objects.filter(pk=onboarding.pk).update(
+        current_rows.update(
             email_status=CustomerOnboarding.EmailStatus.FAILED,
             email_last_error=error_text[:255],
         )
@@ -246,34 +280,50 @@ def deliver_activation_email(onboarding_id, raw_token):
     for attempt, delay in enumerate(delays, start=1):
         if delay and not getattr(settings, "ONBOARDING_EMAIL_SYNC", False):
             time.sleep(delay)
+        if not current_rows.filter(user__must_change_password=True, user__is_active=True).exists():
+            return False
         try:
             ok = _send(user, ACTIVATION_SUBJECT, html, text)
             error_text = "" if ok else "Email provider rejected the message"
         except PermanentEmailDeliveryError as exc:
             error_text = exc.code
-            CustomerOnboarding.objects.filter(pk=onboarding.pk).update(email_attempts=onboarding.email_attempts + attempt)
+            current_rows.update(email_attempts=onboarding.email_attempts + attempt)
             logger.warning("onboarding.email_failed user_id=%s attempt=%s reason=%s", user.pk, attempt, error_text)
             break
         except Exception as exc:  # noqa: BLE001 — recorded, never propagated
             ok, error_text = False, type(exc).__name__
-        CustomerOnboarding.objects.filter(pk=onboarding.pk).update(email_attempts=onboarding.email_attempts + attempt)
+        current_rows.update(email_attempts=onboarding.email_attempts + attempt)
         if ok:
-            CustomerOnboarding.objects.filter(pk=onboarding.pk).update(
+            recorded = current_rows.update(
                 email_status=CustomerOnboarding.EmailStatus.SENT, email_sent_at=timezone.now(), email_last_error=""
             )
+            if not recorded:
+                return False
             logger.info("onboarding.email_sent user_id=%s attempt=%s", user.pk, attempt)
             return True
         logger.warning("onboarding.email_failed user_id=%s attempt=%s reason=%s", user.pk, attempt, error_text)
-    CustomerOnboarding.objects.filter(pk=onboarding.pk).update(
+    current_rows.update(
         email_status=CustomerOnboarding.EmailStatus.FAILED, email_last_error=error_text[:255]
     )
     return False
 
 
-def _dispatch_after_commit(deliver, *args, sync=False):
+def _dispatch_after_commit(deliver, *args, sync=False, on_failure=None, on_uncertain=None):
     """Runs account email delivery after the current transaction commits —
     in a background thread normally, inline when ONBOARDING_EMAIL_SYNC is
     set (tests). The request never waits on email."""
+
+    def failed(exc, *, definitely_unsent=False):
+        reason = type(exc).__name__
+        logger.warning("onboarding.email_dispatch_failed reason=%s", reason)
+        # Once invoked, the provider may have accepted a message before a
+        # later exception. Only a failed thread start proves no send began.
+        callback = on_failure if definitely_unsent else on_uncertain
+        if callback is not None:
+            try:
+                callback(reason)
+            except Exception as record_error:
+                logger.warning("onboarding.email_failure_record_failed reason=%s", type(record_error).__name__)
 
     def invoke():
         try:
@@ -281,7 +331,7 @@ def _dispatch_after_commit(deliver, *args, sync=False):
         except Exception as exc:
             # Credentials may occur in an email provider's exception text.
             # Report only the class, including failures before rendering.
-            logger.warning("onboarding.email_dispatch_failed reason=%s", type(exc).__name__)
+            failed(exc)
 
     def run():
         try:
@@ -296,23 +346,41 @@ def _dispatch_after_commit(deliver, *args, sync=False):
             else:
                 threading.Thread(target=run, daemon=True).start()
         except Exception as exc:
-            logger.warning("onboarding.email_dispatch_failed reason=%s", type(exc).__name__)
+            failed(exc, definitely_unsent=True)
 
     transaction.on_commit(start, robust=True)
 
 
-def dispatch_activation_email(onboarding_id, raw_token, *, sync=False):
-    _dispatch_after_commit(deliver_activation_email, onboarding_id, raw_token, sync=sync)
+def dispatch_activation_email(onboarding_id, raw_token, *, sync=False, issued_at=None):
+    def pending_rows():
+        rows = CustomerOnboarding.objects.filter(pk=onboarding_id, email_status=CustomerOnboarding.EmailStatus.PENDING)
+        if issued_at is not None:
+            rows = rows.filter(credentials_issued_at=issued_at)
+        return rows
+
+    def failed(reason):
+        pending_rows().update(email_status=CustomerOnboarding.EmailStatus.FAILED, email_last_error=reason)
+
+    def uncertain(_reason):
+        pending_rows().update(email_last_error="dispatch_outcome_unknown")
+
+    def deliver_current():
+        return deliver_activation_email(onboarding_id, raw_token, issued_at=issued_at)
+
+    _dispatch_after_commit(deliver_current, sync=sync,
+                           on_failure=failed, on_uncertain=uncertain)
 
 
 def _issue_and_dispatch(onboarding, *, sync=False):
     raw_token = EmailOTP.issue_activation_link(onboarding.user, settings.ACCOUNT_ACTIVATION_LINK_HOURS)
+    issued_at = timezone.now()
     CustomerOnboarding.objects.filter(pk=onboarding.pk).update(
-        credentials_issued_at=timezone.now(),
+        credentials_issued_at=issued_at,
         email_status=CustomerOnboarding.EmailStatus.PENDING,
         email_last_error="",
+        email_sent_at=None,
     )
-    dispatch_activation_email(onboarding.pk, raw_token, sync=sync)
+    dispatch_activation_email(onboarding.pk, raw_token, sync=sync, issued_at=issued_at)
 
 
 def _start_activation_for_user(user, *, order, sync=False):
@@ -333,6 +401,18 @@ def _start_activation_for_user(user, *, order, sync=False):
     return "sent"
 
 
+def _email_product_context(user, order):
+    from common.card_products import DIGITAL_CARD_TYPES, recipient_card_type
+    types = {recipient_card_type(row) for row in order.recipients.filter(user=user).select_related("order", "assigned_card")} if order else set()
+    if not types and order is not None:
+        types = set(order.items.values_list("card_type", flat=True))
+    return {
+        "review_only": types == {"REVIEW"},
+        "has_review": "REVIEW" in types,
+        "has_digital": bool(types.intersection(DIGITAL_CARD_TYPES)),
+    }
+
+
 def _render_card_ready(user, order):
     name = user.full_name or user.email
     context = {
@@ -347,6 +427,7 @@ def _render_card_ready(user, order):
         "login_email": user.email,
         "login_url": f"{settings.FRONTEND_URL.rstrip('/')}/login",
         "order_number": order.order_number if order is not None else "",
+        **_email_product_context(user, order),
     }
     return (
         render_to_string("accounts/emails/card_ready.html", context),
@@ -366,6 +447,8 @@ def deliver_card_ready_email(recipient_id):
     allocation = OrderRecipient.objects.select_related("user", "order").filter(pk=recipient_id).first()
     if allocation is None or allocation.user is None or allocation.user.must_change_password:
         return False
+    if allocation.invitation_status == OrderRecipient.InvitationStatus.SENT:
+        return True
     user = allocation.user
     error_text = ""
     try:
@@ -386,17 +469,29 @@ def deliver_card_ready_email(recipient_id):
             except Exception as exc:  # noqa: BLE001 — recorded, never propagated
                 ok, error_text = False, type(exc).__name__
             if ok:
-                OrderRecipient.objects.filter(pk=allocation.pk).update(
+                _card_ready_claim_rows(allocation).update(
                     invitation_status=OrderRecipient.InvitationStatus.SENT, invitation_sent_at=timezone.now()
                 )
                 logger.info("onboarding.card_ready_sent user_id=%s order_id=%s attempt=%s", user.pk, allocation.order_id, attempt)
                 return True
     # Clearing the claim lets a later move into Processing retry it.
-    OrderRecipient.objects.filter(pk=allocation.pk).update(
+    _card_ready_claim_rows(allocation).update(
         invitation_status=OrderRecipient.InvitationStatus.FAILED, invitation_sent_at=None
     )
     logger.warning("onboarding.card_ready_failed user_id=%s order_id=%s reason=%s", user.pk, allocation.order_id, error_text)
     return False
+
+
+def _card_ready_claim_rows(allocation):
+    """One claimed message covers every slot held by this account on the order."""
+    from orders.models import OrderRecipient
+    if allocation.invitation_sent_at is None:
+        return OrderRecipient.objects.filter(pk=allocation.pk)
+    return OrderRecipient.objects.filter(
+        order_id=allocation.order_id, user_id=allocation.user_id,
+        invitation_status=OrderRecipient.InvitationStatus.PENDING,
+        invitation_sent_at=allocation.invitation_sent_at,
+    )
 
 
 def _notify_card_ready(user, *, order, sync=False):
@@ -413,11 +508,17 @@ def _notify_card_ready(user, *, order, sync=False):
         )
         if not claimable:
             return
+        claimed_at = timezone.now()
         OrderRecipient.objects.filter(pk__in=claimable).update(
-            invitation_status=OrderRecipient.InvitationStatus.PENDING, invitation_sent_at=timezone.now()
+            invitation_status=OrderRecipient.InvitationStatus.PENDING, invitation_sent_at=claimed_at
         )
+        def failed(_reason):
+            OrderRecipient.objects.filter(pk__in=claimable, invitation_status=OrderRecipient.InvitationStatus.PENDING,
+                                          invitation_sent_at=claimed_at).update(
+                invitation_status=OrderRecipient.InvitationStatus.FAILED, invitation_sent_at=None
+            )
         # One email per account per order, even for several allocations.
-        _dispatch_after_commit(deliver_card_ready_email, claimable[0], sync=sync)
+        _dispatch_after_commit(deliver_card_ready_email, claimable[0], sync=sync, on_failure=failed)
 
 
 def start_activation_for_order(order, *, sync=False):
@@ -536,6 +637,9 @@ def deliver_purchaser_setup_email(user_id, raw_token):
     for attempt, delay in enumerate((0, *EMAIL_RETRY_DELAYS_SECONDS), start=1):
         if delay and not getattr(settings, "ONBOARDING_EMAIL_SYNC", False):
             time.sleep(delay)
+        outcome, _ = EmailOTP.check_activation_link(raw_token, purpose=EmailOTP.Purpose.PURCHASER)
+        if outcome != EmailOTP.LINK_VALID:
+            return False
         try:
             delivered = send_email(user.email, context["subject"], html, text, f"purpose=purchaser_setup user_id={user.pk}")
         except PermanentEmailDeliveryError as exc:

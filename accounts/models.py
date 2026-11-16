@@ -394,7 +394,8 @@ class CustomerOnboarding(models.Model):
 
     class AccountStatus(models.TextChoices):
         PENDING_PROCESSING = "PENDING_PROCESSING", "Pending Processing"
-        EMAIL_SENT = "EMAIL_SENT", "Activation Email Sent"
+        EMAIL_QUEUED = "EMAIL_QUEUED", "Activation email queued"
+        EMAIL_SENT = "EMAIL_SENT", "Email accepted; delivery unverified"
         EMAIL_FAILED = "EMAIL_FAILED", "Activation Email Failed"
         ACTIVATED = "ACTIVATED", "Account Activated"
 
@@ -431,4 +432,6 @@ class CustomerOnboarding(models.Model):
             return self.AccountStatus.PENDING_PROCESSING
         if self.email_status == self.EmailStatus.FAILED:
             return self.AccountStatus.EMAIL_FAILED
+        if self.email_status == self.EmailStatus.PENDING:
+            return self.AccountStatus.EMAIL_QUEUED
         return self.AccountStatus.EMAIL_SENT

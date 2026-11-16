@@ -58,7 +58,8 @@ class Profile(models.Model):
     # is a separate product from the NEXORA digital-profile card and never
     # participates in profile-template selection). Blank until set — no
     # review destination is invented when this is empty.
-    google_review_url = models.URLField(blank=True)
+    google_review_url = models.URLField(max_length=2048, blank=True)
+    google_review_business_name = models.CharField(max_length=150, blank=True, default="")
     bio = models.TextField(blank=True)
     avatar = models.ImageField(upload_to="profile_avatars/", null=True, blank=True)
     cover_image = models.ImageField(upload_to="profile_covers/", null=True, blank=True)

@@ -3,6 +3,7 @@ from decimal import Decimal
 from rest_framework import serializers
 
 from accounts.models import User
+from accounts.onboarding import email_delivery_details
 from orders.models import Order, OrderItem, OrderRecipient
 from orders.serializers import ORDER_ITEM_CARD_TYPE_CHOICES
 
@@ -32,6 +33,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 
 class OrderRecipientSerializer(serializers.ModelSerializer):
+    card_type = serializers.SerializerMethodField()
     onboarding_id = serializers.SerializerMethodField()
     assigned_card_id = serializers.IntegerField(read_only=True)
     assigned_card_uid = serializers.CharField(source="assigned_card.uid", read_only=True, default=None)
@@ -43,6 +45,9 @@ class OrderRecipientSerializer(serializers.ModelSerializer):
     account_status_display = serializers.SerializerMethodField()
     invitation_status = serializers.SerializerMethodField()
     invitation_sent_at = serializers.SerializerMethodField()
+    email_delivery_status = serializers.SerializerMethodField()
+    email_delivery_status_display = serializers.SerializerMethodField()
+    email_delivery_verified = serializers.SerializerMethodField()
 
     class Meta:
         model = OrderRecipient
@@ -51,6 +56,7 @@ class OrderRecipientSerializer(serializers.ModelSerializer):
             "name",
             "email",
             "phone",
+            "card_type",
             "assigned_card_id",
             "assigned_card_uid",
             "assigned_card_serial",
@@ -64,9 +70,16 @@ class OrderRecipientSerializer(serializers.ModelSerializer):
             "account_status",
             "account_status_display",
             "invitation_sent_at",
+            "email_delivery_status",
+            "email_delivery_status_display",
+            "email_delivery_verified",
             "created_at",
         ]
         read_only_fields = fields
+
+    def get_card_type(self, obj):
+        from common.card_products import recipient_card_type
+        return recipient_card_type(obj)
 
     def get_activation_status(self, obj):
         if obj.assigned_card_id is None:
@@ -127,7 +140,25 @@ class OrderRecipientSerializer(serializers.ModelSerializer):
 
     def get_invitation_sent_at(self, obj):
         onboarding = self._onboarding(obj)
-        return onboarding.email_sent_at if onboarding is not None else obj.invitation_sent_at
+        if obj.user_id is not None and obj.user.must_change_password and onboarding is not None:
+            return onboarding.email_sent_at
+        return obj.invitation_sent_at if obj.invitation_status == "SENT" else None
+
+    def _email_delivery(self, obj):
+        item = self._onboarding(obj)
+        if obj.user_id is not None and obj.user.must_change_password and item is not None:
+            return email_delivery_details(item.email_status, queued=item.credentials_issued_at is not None,
+                                          error=item.email_last_error)
+        return email_delivery_details(obj.invitation_status, queued=obj.invitation_sent_at is not None)
+
+    def get_email_delivery_status(self, obj):
+        return self._email_delivery(obj)["email_delivery_status"]
+
+    def get_email_delivery_status_display(self, obj):
+        return self._email_delivery(obj)["email_delivery_status_display"]
+
+    def get_email_delivery_verified(self, obj):
+        return False
 
 
 class AdminOrderSerializer(serializers.ModelSerializer):
@@ -263,7 +294,8 @@ class AdminOrderSerializer(serializers.ModelSerializer):
             item = None
         if item is None:
             status = CustomerOnboarding.AccountStatus.ACTIVATED if not user.must_change_password else CustomerOnboarding.AccountStatus.PENDING_PROCESSING
-            return {"status": status, "status_display": status.label, "onboarding_id": None, "created_from_order": False}
+            return {"status": status, "status_display": status.label, "onboarding_id": None, "created_from_order": False,
+                    **email_delivery_details(None)}
         status = item.account_status
         return {
             "status": status,
@@ -276,6 +308,8 @@ class AdminOrderSerializer(serializers.ModelSerializer):
             "email_sent_at": item.email_sent_at,
             "activation_link_issued_at": item.credentials_issued_at,
             "password_set_at": item.password_set_at,
+            **email_delivery_details(
+                item.email_status, queued=item.credentials_issued_at is not None, error=item.email_last_error),
         }
 
     def get_tracking(self, obj):
@@ -295,10 +329,8 @@ class AdminOrderSerializer(serializers.ModelSerializer):
 class OrderItemWriteSerializer(serializers.Serializer):
     product_id = serializers.CharField(max_length=40)
     name = serializers.CharField(max_length=150)
-    # Same choice list the customer-facing checkout accepts (NfcCard types
-    # plus the Google Review Card's order-item-only "REVIEW" type) — an
-    # admin manually entering an offline order needs to be able to record
-    # either product, not just NFC cards.
+    # Checkout and physical inventory share the existing product identifiers.
+    # Offline orders can record either digital or Google Review cards.
     card_type = serializers.ChoiceField(choices=ORDER_ITEM_CARD_TYPE_CHOICES)
     color = serializers.CharField(max_length=30)
     qty = serializers.IntegerField(min_value=1)

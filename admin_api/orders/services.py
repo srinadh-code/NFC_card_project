@@ -3,6 +3,7 @@
 # here as plain functions the views call and wrap in a transaction.
 from django.db import transaction
 from django.utils import timezone
+from common.card_products import recipient_card_type
 
 from nfc_cards.models import NfcCard
 from nfc_cards.assignment import ensure_card_assignment_available
@@ -99,6 +100,12 @@ def assign_card_to_order(order, card, recipient_id=None):
             raise ValueError("This card's owner conflicts with its allocation. Reconcile it before assignment.")
         order.assigned_card_id = locked_order.assigned_card_id
         return order
+    expected_type = recipient_card_type(recipient) if recipient is not None else None
+    if recipient is None:
+        types = set(locked_order.items.values_list("card_type", flat=True))
+        expected_type = types.pop() if len(types) == 1 else None
+    if not expected_type or card.card_type != expected_type:
+        raise ValueError("The inventory card must match the purchased recipient product.")
     if previous_id is not None and recipient is not None:
         raise ValueError("This recipient allocation already has a card.")
     if card.status != NfcCard.Status.UNASSIGNED or card.user_id is not None:

@@ -137,6 +137,24 @@ class OnboardingEmailRetryTests(TestCase):
             self.assertTrue(onboarding.deliver_purchaser_setup_email(user.pk, token))
         self.assertEqual(send.call_count, 3)
 
+    def test_purchaser_setup_stops_retrying_when_link_is_replaced_or_user_becomes_recipient(self):
+        for transition in ("recovery", "recipient"):
+            with self.subTest(transition=transition):
+                user, token = self._purchaser()
+
+                def reject_after_transition(*_args):
+                    if transition == "recovery":
+                        EmailOTP.issue_purchaser_setup_link(user)
+                    else:
+                        OrderRecipient.objects.create(order=user.orders.get(), user=user, name="Recipient", email=user.email)
+                    return False
+
+                with mock.patch("accounts.onboarding.send_email", side_effect=reject_after_transition) as send:
+                    self.assertFalse(onboarding.deliver_purchaser_setup_email(user.pk, token))
+                send.assert_called_once()
+                outcome, _ = EmailOTP.check_activation_link(token, purpose=EmailOTP.Purpose.PURCHASER)
+                self.assertNotEqual(outcome, EmailOTP.LINK_VALID)
+
     def test_accepted_email_is_not_retried_in_any_onboarding_flow(self):
         _, record, _ = self._recipient()
         _, _, allocation = self._recipient(activated=True)

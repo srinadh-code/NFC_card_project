@@ -134,6 +134,24 @@ class CustomerOrderCreateViewTests(AuthenticatedAPITestCase):
             {"recipient.one@example.com", "recipient.two@example.com", "recipient.three@example.com"},
         )
 
+    def test_bulk_cod_keeps_contact_slots_when_claims_lock_in_email_order(self):
+        _seed_cart_item(self.user, qty=2)
+        payload = _valid_payload(self.address, recipients=[
+            {"full_name": "Z Recipient", "email": "z-recipient@example.com", "phone": "+917700900121"},
+            {"full_name": "A Recipient", "email": "a-recipient@example.com", "phone": "+917700900122"},
+        ])
+        response = self.client.post(reverse("my-orders"), payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        order = Order.objects.get(pk=response.data["data"]["id"])
+        self.assertEqual(
+            list(order.recipients.order_by("pk").values_list("name", "email", "email_allocation__normalized_email", "card_type")),
+            [
+                ("Z Recipient", "z-recipient@example.com", "z-recipient@example.com", "CUSTOM"),
+                ("A Recipient", "a-recipient@example.com", "a-recipient@example.com", "CUSTOM"),
+            ],
+        )
+        self.assertEqual(order.payment_status, Order.PaymentStatus.PENDING)
+
     def test_direct_order_creation_rejects_an_already_allocated_recipient_email(self):
         _seed_cart_item(self.user, qty=1)
         first_payload = _valid_payload(

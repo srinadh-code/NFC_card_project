@@ -10,6 +10,7 @@ from rest_framework.views import APIView
 from accounts.models import User
 from accounts.onboarding import purchaser_setup_state
 from common.response import error, success
+from common.card_products import CARD_TYPES, DIGITAL_CARD_TYPE
 
 from . import razorpay, sms, verification
 from .models import CheckoutSession, CheckoutVerification
@@ -95,6 +96,7 @@ class RazorpayConfigView(APIView):
 
 
 class RecipientEmailAvailabilitySerializer(serializers.Serializer):
+    card_type = serializers.ChoiceField(choices=CARD_TYPES, required=False, default=DIGITAL_CARD_TYPE)
     email = serializers.EmailField(
         max_length=254,
         error_messages={"invalid": RECIPIENT_EMAIL_INVALID_MESSAGE},
@@ -129,7 +131,10 @@ class RecipientEmailAvailabilityView(APIView):
             if customer is not None
             else serializer.validated_data.get("buyer_email", "")
         )
-        available = is_recipient_email_available(serializer.validated_data["email"], buyer_email)
+        available = is_recipient_email_available(
+            serializer.validated_data["email"], buyer_email,
+            card_type=serializer.validated_data["card_type"],
+        )
         return success({
             "available": available,
             "message": RECIPIENT_EMAIL_AVAILABLE_MESSAGE if available else RECIPIENT_EMAIL_ALLOCATED_MESSAGE,

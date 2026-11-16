@@ -12,7 +12,9 @@ from accounts import onboarding
 from accounts.models import CustomerOnboarding, User
 from payments.services import (
     CheckoutError,
+    checkout_product_slots,
     claim_recipient_email,
+    recipient_claim_order,
     validate_purchaser_contact,
     validate_recipients,
 )
@@ -154,11 +156,14 @@ class CustomerOrderListCreateView(APIView):
                     data.get("recipients"),
                     sum(item.qty for item in cart_items),
                     request.user.email,
+                    product_slots=checkout_product_slots(cart_items),
                 )
-                recipient_allocations = [
-                    claim_recipient_email(recipient["email"], request.user.email, index=index)
-                    for index, recipient in enumerate(recipient_details)
-                ]
+                recipient_allocations = [None] * len(recipient_details)
+                for index, recipient in recipient_claim_order(recipient_details):
+                    recipient_allocations[index] = claim_recipient_email(
+                        recipient["email"], request.user.email, index=index,
+                        card_type=recipient["card_type"],
+                    )
                 first_order = calculate_first_order_discount(amount, request.user)
                 final_amount = first_order["final_amount"]
 
@@ -207,7 +212,10 @@ class CustomerOrderListCreateView(APIView):
                 # Keep the recipient snapshots and buyer-owned email holds;
                 # accounts and profiles are linked after payment is recorded.
                 recipient_rows = OrderRecipient.objects.bulk_create([
-                    OrderRecipient(order=order, name=r["full_name"], email=r["email"], phone=r["phone"])
+                    OrderRecipient(
+                        order=order, name=r["full_name"], email=r["email"],
+                        phone=r["phone"], card_type=r["card_type"],
+                    )
                     for r in recipient_details
                 ])
                 for recipient_row, allocation in zip(recipient_rows, recipient_allocations):

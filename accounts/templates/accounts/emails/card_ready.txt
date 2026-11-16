@@ -2,7 +2,7 @@
 
 An NFC card has been ordered for you, and it is linked to your existing VR's Gateway account.
 
-Your order is now being processed. Your Customer Dashboard is now available, where you can create and manage your digital business profile.
+Your order is now being processed. {% if review_only %}Your Google Review workspace is now available, where you can set your business name and Google Review link.{% else %}Your Customer Dashboard is now available, where you can create and manage your digital business profile.{% endif %}
 
 Login email: {{ login_email }}
 
@@ -10,7 +10,11 @@ Sign in with your existing password - nothing needs to be reset. If you have for
 
 Log In: {{ login_url }}
 
-Our designer will contact you within the next 24 hours to discuss your digital business profile design and customisation. Physical card assignment is managed separately.
+{% if not review_only %}Our designer will contact you within the next 24 hours to discuss your digital business profile design and customisation. {% endif %}Physical card assignment is managed separately.
+{% if has_review and not review_only %}Your Google Review workspace is also available for your business name and review destination.
+{% endif %}
+{% if has_review %}After your physical Google Review card is assigned, open Google Review in your dashboard and select Activate card. Save your business name and Google Review URL there; the review QR downloads become available when the card is active and configured.
+{% endif %}
 {% if order_number %}
 Order Number: {{ order_number }}
 {% endif %}

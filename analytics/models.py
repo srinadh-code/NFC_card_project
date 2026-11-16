@@ -15,6 +15,8 @@ class TapEvent(models.Model):
         PROFILE_VIEW = "PROFILE_VIEW", "Profile Viewed"
         CONTACT_SAVED = "CONTACT_SAVED", "Contact Saved"
         SHARED = "SHARED", "Shared"
+        REVIEW_TAP = "REVIEW_TAP", "Google Review Card Tapped"
+        REVIEW_QR_SCAN = "REVIEW_QR_SCAN", "Google Review QR Scanned"
 
     class Device(models.TextChoices):
         ANDROID = "ANDROID", "Android"

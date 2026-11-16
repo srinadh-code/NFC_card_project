@@ -19,7 +19,17 @@ class CardAssignmentEmailTests(APITestCase):
     def customer(self, email, name="Srinadh"):
         user = make_user(email, full_name=name)
         Profile.ensure_for_user(user)
+        self.paid_slot(user)
         return user
+
+    def paid_slot(self, user):
+        # Assignment lookups now require an actual paid, unfulfilled slot;
+        # these tests continue to exercise normalized-email identity rules.
+        order = Order.objects.create(customer=user, amount="100.00", payment_method="RAZORPAY", payment_status="PAID",
+                                     shipping_line1="Saved address", shipping_city="Hyderabad", shipping_state="Telangana", shipping_pincode="500001")
+        OrderItem.objects.create(order=order, product_id="custom", name="Custom Card", card_type="CUSTOM", color="Black", qty=1, price="100.00")
+        Transaction.objects.create(order=order, amount="100.00", method="RAZORPAY", status="PAID")
+        return OrderRecipient.objects.create(order=order, user=user, profile=user.profile, name=user.full_name, email=user.email, card_type="CUSTOM")
 
     def add(self, email, **extra):
         return self.client.post(reverse("admin-cards"), {"customer_email": email, "status": "ASSIGNED", **extra}, format="json")
@@ -192,6 +202,7 @@ class CardAssignmentEmailTests(APITestCase):
     def test_legacy_account_email_whitespace_is_compared_without_updating_the_account(self):
         user = User.objects.create(email="  KAVYA@GMAIL.COM  ", full_name="Kavya", role=User.Role.CUSTOMER)
         Profile.ensure_for_user(user)
+        self.paid_slot(user)
         self.assertEqual([row["email"] for row in self.choices().data["data"]], ["kavya@gmail.com"])
         response = self.add("kavya@gmail.com")
         self.assertEqual(response.status_code, 201, response.data)

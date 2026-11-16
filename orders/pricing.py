@@ -30,7 +30,7 @@ def price_lines(lines, *, customer=None, promo_code=None, selected_offer_id=None
     amount = Decimal("0")
     for item in lines:
         product = get_catalog_product(item.card_type, item.product_id)
-        if product is None:
+        if product is None or item.card_type != product.card_type:
             raise ProductUnavailable(item.name)
         tier = product.offer_for_quantity(item.qty)
         pricing = get_product_pricing(

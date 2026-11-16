@@ -32,6 +32,8 @@ def _row(item):
         "email_last_error": item.email_last_error,
         "email_sent_at": item.email_sent_at,
         "credentials_issued_at": item.credentials_issued_at,
+        **onboarding.email_delivery_details(item.email_status, queued=item.credentials_issued_at is not None,
+                                            error=item.email_last_error),
     }
 
 
@@ -61,7 +63,14 @@ class AdminOnboardingListView(APIView):
         elif activation == "PENDING_PROCESSING":
             qs = qs.filter(user__must_change_password=True, credentials_issued_at__isnull=True)
         elif activation == "EMAIL_SENT":
-            qs = qs.filter(user__must_change_password=True, credentials_issued_at__isnull=False)
+            qs = qs.filter(user__must_change_password=True, credentials_issued_at__isnull=False,
+                           email_status=CustomerOnboarding.EmailStatus.SENT)
+        elif activation == "EMAIL_QUEUED":
+            qs = qs.filter(user__must_change_password=True, credentials_issued_at__isnull=False,
+                           email_status=CustomerOnboarding.EmailStatus.PENDING)
+        elif activation == "EMAIL_FAILED":
+            qs = qs.filter(user__must_change_password=True, credentials_issued_at__isnull=False,
+                           email_status=CustomerOnboarding.EmailStatus.FAILED)
         paginator = StandardPagination()
         page = paginator.paginate_queryset(qs, request)
         return paginator.get_paginated_response([_row(item) for item in page])
@@ -95,4 +104,9 @@ class AdminOnboardingResendView(APIView):
         if not onboarding.reissue_and_send(item.user):
             return error("This account is no longer eligible for an activation email.", status=400)
         item.refresh_from_db()
-        return success(_row(item), message="A new activation link is being emailed to the customer.")
+        message = "A new activation email is queued. Acceptance and delivery are unverified."
+        if item.email_status == CustomerOnboarding.EmailStatus.SENT:
+            message = "The email service accepted the activation email. Delivery is unverified."
+        elif item.email_status == CustomerOnboarding.EmailStatus.FAILED:
+            message = "The activation email failed. Check the email status before retrying."
+        return success(_row(item), message=message)

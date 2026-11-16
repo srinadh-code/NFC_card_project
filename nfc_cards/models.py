@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 from django.conf import settings
 from django.db import models
 
@@ -6,10 +8,11 @@ class NfcCard(models.Model):
     class CardType(models.TextChoices):
         # CLASSIC and PREMIUM are fully retired (removed from this enum by
         # migration nfc_cards.0005_delete_retired_card_types, which also
-        # deletes any existing rows with those values) — Wooden and Custom
-        # are the only card types left, sellable or not.
+        # deletes any existing rows with those values). Review uses its
+        # existing catalog/order identifier for physical inventory as well.
         WOODEN = "WOODEN", "Wooden"
         CUSTOM = "CUSTOM", "Custom"
+        REVIEW = "REVIEW", "Google Review Card"
 
     class Status(models.TextChoices):
         ACTIVE = "ACTIVE", "Active"
@@ -46,6 +49,17 @@ class NfcCard(models.Model):
 
     def __str__(self):
         return f"{self.serial_number} ({self.uid})"
+
+    @property
+    def programming_url(self):
+        """Permanent public URL for an owned Review card, even before setup.
+
+        Only the card UID and configured frontend origin form this URL;
+        changing the owner's Google destination never changes the NFC chip.
+        """
+        if self.card_type != self.CardType.REVIEW or self.user_id is None or self.status == self.Status.UNASSIGNED:
+            return None
+        return f"{settings.FRONTEND_URL.rstrip('/')}/nfc/{quote(self.uid, safe='')}"
 
     @classmethod
     def generate_serial_number(cls):

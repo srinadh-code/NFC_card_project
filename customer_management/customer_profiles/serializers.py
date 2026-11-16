@@ -62,6 +62,20 @@ class CustomerProfileSerializer(serializers.ModelSerializer):
         path = obj.public_url_path
         return request.build_absolute_uri(path) if request else path
 
+    def validate_google_review_url(self, value):
+        from django.core.exceptions import ValidationError
+        from rest_framework.exceptions import PermissionDenied
+        from nfc_cards.review import product_access
+        from nfc_cards.review_urls import validate_review_url
+
+        request = self.context.get("request")
+        if request is None or not product_access(request.user)[0]:
+            raise PermissionDenied("A paid Google Review recipient allocation is required.")
+        try:
+            return validate_review_url(value, expand_short_links=True)
+        except ValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from None
+
     def update(self, instance, validated_data):
         user_data = validated_data.pop("user", {})
         user = instance.user

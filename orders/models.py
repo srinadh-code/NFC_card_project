@@ -233,6 +233,9 @@ class OrderRecipient(models.Model):
         FAILED = "FAILED", "Failed"
 
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="recipients")
+    # A recipient owns this purchased product, independently of the buyer.
+    # Blank is reserved for historical allocations that cannot be inferred.
+    card_type = models.CharField(max_length=10, blank=True, default="")
     name = models.CharField(max_length=150)
     email = models.EmailField(db_index=True)
     phone = models.CharField(max_length=20, null=True, blank=True, default="")
@@ -290,9 +293,20 @@ class RecipientEmailAllocation(models.Model):
     reservations determine whether the claim is still occupied.
     """
 
-    normalized_email = models.EmailField(max_length=254, unique=True)
+    normalized_email = models.EmailField(max_length=254)
+    # CUSTOM scopes all digital cards (including WOODEN); REVIEW is separate.
+    # Historical ambiguous claims remain blank and conservatively protect both.
+    card_type = models.CharField(max_length=10, blank=True, default="CUSTOM")
     owner_email = models.EmailField(max_length=254)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["normalized_email", "card_type"],
+                name="unique_recipient_email_card_type",
+            ),
+        ]
 
     def __str__(self):
         return self.normalized_email
