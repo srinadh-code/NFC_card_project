@@ -314,7 +314,8 @@ class GoogleReviewProductPaymentTests(APITestCase):
         self.assertEqual(activated.status_code, 200, activated.content)
         workspace = self.client.get(workspace_url).data["data"]
         self.assertTrue(workspace["configured"])
-        self.assertTrue(workspace["qr_url"].endswith("/nfc/WORKFLOW-REVIEW?source=qr"))
+        self.assertEqual(workspace["qr_url"], workspace["scan_url"])
+        self.assertEqual(workspace["qr_url"], activated.data["data"]["programming_url"])
         self.client.credentials()
         public_url = reverse("nfc-cards-resolve", args=["WORKFLOW-REVIEW"])
         for source in ({}, {"source": "qr"}):

@@ -82,7 +82,7 @@ def _workspace(user, *, eligible, digital):
         "google_review_url": destination,
         "configured": configured,
         "cards": NfcCardSerializer(cards, many=True).data,
-        "scan_url": scan_url, "qr_url": f"{scan_url}?source=qr" if scan_url else "",
+        "scan_url": scan_url, "qr_url": scan_url,
         "stats": {**totals, "total": totals["taps"] + totals["qr_scans"]},
     }
 

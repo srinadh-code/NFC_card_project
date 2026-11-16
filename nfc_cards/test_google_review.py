@@ -1,5 +1,6 @@
 """Review ownership, persistence, assignment, redirects and digital isolation."""
 from unittest.mock import patch
+from urllib.parse import unquote, urlsplit
 
 from django.urls import reverse
 from django.test import override_settings
@@ -10,7 +11,7 @@ from accounts.models import User
 from analytics.models import TapEvent
 from common.test_utils import make_user
 from customer_management.customer_analytics.models import AnalyticsEvent
-from nfc_cards.models import NfcCard
+from nfc_cards.models import NfcCard, review_uid_from_identifier
 from orders.models import Order, OrderItem, OrderRecipient, Transaction
 from profiles.models import Profile
 
@@ -155,7 +156,7 @@ class GoogleReviewFeatureTests(APITestCase):
         self.client.force_authenticate(self.owner)
         data = self.client.get(reverse("customer-google-review")).data["data"]
         self.assertEqual(data["stats"], {"taps": 1, "qr_scans": 1, "total": 2})
-        self.assertTrue(data["qr_url"].endswith(f"/nfc/{card.uid}?source=qr"))
+        self.assertEqual(data["qr_url"], card.programming_url)
 
     def test_existing_digital_resolve_contract_and_metrics_remain(self):
         card = self.card("CUSTOM", owner=self.owner, status="ASSIGNED")
@@ -277,11 +278,13 @@ class GoogleReviewFeatureTests(APITestCase):
     def test_admin_and_owner_get_the_same_programming_url_before_activation_and_configuration(self):
         self.allocation()
         card = self.card(owner=self.owner, status="ASSIGNED")
-        expected = f"https://gateway.example/nfc/{card.uid}"
+        expected = card.programming_url
+        self.assertTrue(expected.startswith("https://gateway.example/nfc/"))
+        self.assertEqual(review_uid_from_identifier(unquote(urlsplit(expected).path.rsplit("/", 1)[-1])), card.uid)
         workspace = self.client.get(reverse("customer-google-review")).data["data"]
         self.assertFalse(workspace["configured"])
         self.assertEqual(workspace["scan_url"], expected)
-        self.assertEqual(workspace["qr_url"], expected + "?source=qr")
+        self.assertEqual(workspace["qr_url"], expected)
         self.assertEqual(workspace["cards"][0]["programming_url"], expected)
         owned_cards = self.client.get(reverse("nfc-cards-mine")).data["data"]
         self.assertEqual(owned_cards[0]["programming_url"], expected)
@@ -289,7 +292,7 @@ class GoogleReviewFeatureTests(APITestCase):
         admin_cards = self.client.get(reverse("admin-cards")).data["data"]
         self.assertEqual(admin_cards[0]["programming_url"], expected)
         self.assertNotIn(self.owner.email, expected)
-        self.assertNotIn("token", expected)
+        self.assertNotIn("token=", expected)
         self.client.force_authenticate(self.buyer)
         self.assertEqual(self.client.get(reverse("customer-google-review")).data["data"]["cards"], [])
         self.assertEqual(self.client.get(reverse("admin-cards")).status_code, 403)
@@ -299,14 +302,15 @@ class GoogleReviewFeatureTests(APITestCase):
         card = self.card(owner=self.owner, status="ACTIVE")
         workspace_url = reverse("customer-google-review")
         stable = self.client.get(workspace_url).data["data"]["scan_url"]
-        public_url = reverse("nfc-cards-resolve", args=[card.uid])
-        for destination in (DESTINATION, DESTINATION.replace("ChIJ_Test123", "ChIJ_Updated123")):
+        public_url = reverse("nfc-cards-resolve", args=[unquote(urlsplit(stable).path.rsplit("/", 1)[-1])])
+        for destination in (DESTINATION, "https://www.google.com/maps/place/Updated+Business/", "https://maps.google.com/?cid=123456789"):
             saved = self.client.patch(workspace_url, {
                 "business_name": "Updated Business", "google_review_url": destination,
                 "programming_url": "https://evil.example/ignored",
             }, format="json")
             self.assertEqual(saved.status_code, 200, saved.data)
             self.assertEqual(saved.data["data"]["scan_url"], stable)
+            self.assertEqual(saved.data["data"]["qr_url"], stable)
             self.assertEqual(saved.data["data"]["cards"][0]["programming_url"], stable)
             self.client.force_authenticate(None)
             resolved = self.client.get(public_url)
@@ -352,7 +356,7 @@ class GoogleReviewFeatureTests(APITestCase):
         self.assertEqual((self.profile.google_review_business_name, self.profile.google_review_url), ("Verified Business", direct))
         data = response.data["data"]
         self.assertEqual(data["cards"][0]["programming_url"], stable)
-        self.assertEqual((data["scan_url"], data["qr_url"]), (stable, stable + "?source=qr"))
+        self.assertEqual((data["scan_url"], data["qr_url"]), (stable, stable))
         self.client.force_authenticate(None)
         with patch("nfc_cards.review_urls._public_dns") as dns, patch("nfc_cards.review_urls._request_redirect") as request:
             resolved = self.client.get(reverse("nfc-cards-resolve", args=[card.uid]))
@@ -360,23 +364,35 @@ class GoogleReviewFeatureTests(APITestCase):
         dns.assert_not_called()
         request.assert_not_called()
 
-    def test_maps_listing_is_explained_and_cannot_overwrite_saved_business_or_review_url(self):
+    def test_maps_short_listing_saves_business_and_exposes_the_same_stable_link_to_customer_and_admin(self):
         self.allocation()
+        card = self.card(owner=self.owner, status="ACTIVE")
+        stable = card.programming_url
+        listing = "https://www.google.com/maps/place/Mulugu/data=!1s0x123:0x456"
         self.profile.google_review_business_name = "Existing Business"
         self.profile.google_review_url = DESTINATION
         self.profile.save(update_fields=["google_review_business_name", "google_review_url"])
         with patch("nfc_cards.review_urls._public_dns", return_value="142.250.1.1"), \
                 patch("nfc_cards.review_urls._request_redirect", side_effect=[
-                    (302, "https://www.google.com/maps/place/Mulugu/data=!1s0x123:0x456"), (200, ""),
+                    (302, listing), (200, ""),
                 ]):
             response = self.client.patch(reverse("customer-google-review"), {
-                "business_name": "Must not save", "google_review_url": "https://maps.app.goo.gl/ixmLnerBdPTZNrHe9",
+                "business_name": "Maps Business", "google_review_url": "https://maps.app.goo.gl/ixmLnerBdPTZNrHe9",
             }, format="json")
-        self.assertEqual(response.status_code, 400, response.data)
-        self.assertIn("place listing", response.data["message"])
-        self.assertIn("Get more reviews", str(response.data["errors"]["google_review_url"]))
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data["success"])
+        self.assertEqual(response.data["data"]["scan_url"], stable)
+        self.assertEqual(response.data["data"]["qr_url"], stable)
         self.profile.refresh_from_db()
-        self.assertEqual((self.profile.google_review_business_name, self.profile.google_review_url), ("Existing Business", DESTINATION))
+        self.assertEqual((self.profile.google_review_business_name, self.profile.google_review_url), ("Maps Business", listing))
+        self.client.force_authenticate(self.admin)
+        self.assertEqual(self.client.get(reverse("admin-cards")).data["data"][0]["programming_url"], stable)
+        self.client.force_authenticate(None)
+        public_url = reverse("nfc-cards-resolve", args=[unquote(urlsplit(stable).path.rsplit("/", 1)[-1])])
+        with patch("nfc_cards.review_urls._public_dns") as dns, patch("nfc_cards.review_urls._request_redirect") as request:
+            self.assertEqual(self.client.get(public_url).data["data"]["redirect_url"], listing)
+        dns.assert_not_called()
+        request.assert_not_called()
 
     def test_unsafe_or_failed_short_link_verification_does_not_replace_existing_destination(self):
         self.allocation()

@@ -1,4 +1,6 @@
 """A Review chip receives only a stable, public HTTPS application URL."""
+from urllib.parse import unquote, urlsplit
+
 from django.contrib import admin
 from django.test import RequestFactory, SimpleTestCase, override_settings
 from django.urls import reverse
@@ -7,7 +9,7 @@ from rest_framework.test import APITestCase
 from accounts.models import User
 from common.test_utils import make_user
 from nfc_cards.admin import NfcCardAdmin
-from nfc_cards.models import NfcCard
+from nfc_cards.models import NfcCard, review_uid_from_identifier
 
 
 @override_settings(PUBLIC_NFC_BASE_URL="")
@@ -16,10 +18,19 @@ class ProgrammingUrlConfigurationTests(SimpleTestCase):
         return NfcCard(uid="REVIEW-STABLE_123", serial_number="REVIEW-CONFIG", card_type="REVIEW",
                        user_id=7, status=kwargs.pop("status", "ASSIGNED"), **kwargs)
 
+    def assert_programming_url(self, card, origin):
+        parsed = urlsplit(card.programming_url)
+        self.assertEqual(f"{parsed.scheme}://{parsed.netloc}", origin)
+        self.assertTrue(parsed.path.startswith("/nfc/"))
+        self.assertEqual((parsed.query, parsed.fragment), ("", ""))
+        identifier = unquote(parsed.path.removeprefix("/nfc/"))
+        self.assertGreater(len(identifier), NfcCard._meta.get_field("uid").max_length)
+        self.assertEqual(review_uid_from_identifier(identifier), card.uid)
+
     def test_public_https_frontend_origin_and_trailing_slash_are_supported(self):
         for origin in ("https://cards.example.com", "https://cards.example.com/"):
             with self.subTest(origin=origin), override_settings(FRONTEND_URL=origin):
-                self.assertEqual(self.card().programming_url, "https://cards.example.com/nfc/REVIEW-STABLE_123")
+                self.assert_programming_url(self.card(), "https://cards.example.com")
 
     def test_local_private_malformed_or_non_origin_configuration_exposes_no_programming_url(self):
         rejected = (
@@ -40,7 +51,7 @@ class ProgrammingUrlConfigurationTests(SimpleTestCase):
 
     @override_settings(FRONTEND_URL="http://localhost:5173", PUBLIC_NFC_BASE_URL="https://production.example.com/")
     def test_explicit_public_base_is_used_while_frontend_runs_locally(self):
-        self.assertEqual(self.card().programming_url, "https://production.example.com/nfc/REVIEW-STABLE_123")
+        self.assert_programming_url(self.card(), "https://production.example.com")
 
     @override_settings(FRONTEND_URL="https://frontend.example.com", PUBLIC_NFC_BASE_URL="http://localhost:5173")
     def test_invalid_explicit_base_fails_closed_instead_of_changing_the_chip_origin(self):
@@ -55,7 +66,8 @@ class ProgrammingUrlConfigurationTests(SimpleTestCase):
     @override_settings(FRONTEND_URL="https://production.example.com")
     def test_existing_assigned_url_survives_activation_and_unavailable_card_states(self):
         urls = {self.card(status=status).programming_url for status in ("ASSIGNED", "ACTIVE", "INACTIVE", "BLOCKED", "LOST")}
-        self.assertEqual(urls, {"https://production.example.com/nfc/REVIEW-STABLE_123"})
+        self.assertEqual(len(urls), 1)
+        self.assert_programming_url(self.card(), "https://production.example.com")
 
 
 @override_settings(

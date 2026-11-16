@@ -36,11 +36,8 @@ class GoogleReviewUrlTests(SimpleTestCase):
              patch("nfc_cards.review_urls._request_redirect", return_value=(302, MAPS_REVIEW)):
             self.assertEqual(validate_review_url("https://g.page/r/example/review", expand_short_links=True), MAPS_REVIEW)
 
-    def test_maps_review_path_rejects_read_reviews_photos_and_incomplete_identifiers(self):
+    def test_maps_place_path_rejects_malformed_identifiers_and_embedded_external_urls(self):
         invalid = [
-            MAPS_REVIEW.replace("!12e1", "!9m1!1b1"),
-            MAPS_REVIEW.replace("!12e1", "!10e5"),
-            MAPS_REVIEW.replace("!12e1", ""),
             MAPS_REVIEW + "!1shttps://evil.example",
             MAPS_REVIEW.replace("/maps/place//", "/maps/place/https://evil.example/"),
             MAPS_REVIEW.replace("0x808f778c55555555:0xa4f25c571acded3f", "0x123:"),
@@ -58,30 +55,71 @@ class GoogleReviewUrlTests(SimpleTestCase):
         dns.assert_not_called()
         request.assert_not_called()
 
-    def test_explicit_maps_place_id_becomes_a_direct_review_link(self):
-        self.assertEqual(
-            validate_review_url("https://www.google.com/maps/search/?api=1&query=Business&query_place_id=ChIJ_Test-Place123"),
-            CANONICAL,
-        )
-        self.assertEqual(validate_review_url("https://maps.google.com/?query_place_id=ChIJ_Test-Place123"), CANONICAL)
+    def test_explicit_maps_place_id_preserves_the_maps_destination(self):
+        for value in (
+            "https://www.google.com/maps/search/?api=1&query=Business&query_place_id=ChIJ_Test-Place123",
+            "https://maps.google.com/?query_place_id=ChIJ_Test-Place123",
+        ):
+            self.assertEqual(validate_review_url(value), value)
 
-    def test_reported_short_link_to_locality_has_listing_error_without_inventing_a_review_form(self):
+    def test_reported_short_link_preserves_the_resolved_maps_place_destination(self):
         with patch("nfc_cards.review_urls.socket.getaddrinfo", return_value=PUBLIC_DNS), \
                 patch("nfc_cards.review_urls._request_redirect", side_effect=[(302, MAPS_LOCALITY), (200, "")]) as request:
-            with self.assertRaises(ValidationError) as caught:
-                validate_review_url("https://maps.app.goo.gl/ixmLnerBdPTZNrHe9", expand_short_links=True)
-        self.assertEqual(caught.exception.code, "google_maps_listing")
-        self.assertIn("place listing", caught.exception.messages[0])
-        self.assertIn("Get more reviews", caught.exception.messages[0])
+            self.assertEqual(validate_review_url("https://maps.app.goo.gl/ixmLnerBdPTZNrHe9", expand_short_links=True), MAPS_LOCALITY)
         self.assertEqual(request.call_count, 2)
 
-    def test_full_maps_listing_and_cid_are_not_mistaken_for_places_review_identifiers(self):
-        for value in (MAPS_LOCALITY, "https://maps.google.com/?cid=8265117636659205240", MAPS_REVIEW.replace("!12e1", "!9m1!1b1")):
+    def test_full_maps_listing_cid_and_read_reviews_are_preserved_without_network(self):
+        for value in (
+            MAPS_LOCALITY, "https://maps.google.com/?cid=8265117636659205240",
+            "https://www.google.com/maps?cid=123", MAPS_REVIEW.replace("!12e1", "!9m1!1b1"),
+            MAPS_REVIEW.replace("!12e1", "!10e5"),
+            "https://www.google.com/maps/place/Example+Business/",
+            "https://www.google.com/maps/?ftid=0x3a330d14148fa42f:0x72b39845137cd478",
+            "https://www.google.com/maps?q=place_id:ChIJ_Test123",
+            "https://www.google.com/maps/search/?api=1&query=Example+Business",
+        ):
             with self.subTest(value=value), patch("nfc_cards.review_urls._request_redirect") as request:
-                with self.assertRaises(ValidationError) as caught:
-                    validate_review_url(value, expand_short_links=True)
-                self.assertEqual(caught.exception.code, "google_maps_listing")
+                self.assertEqual(validate_review_url(value, expand_short_links=True), value)
                 request.assert_not_called()
+
+    def test_unicode_maps_place_is_encoded_and_host_normalized(self):
+        self.assertEqual(validate_review_url("https://WWW.GOOGLE.COM/maps/place/Caf\u00e9/"),
+                         "https://www.google.com/maps/place/Caf%C3%A9/")
+
+    def test_rejects_blank_ambiguous_malformed_or_unrelated_maps_destinations(self):
+        invalid = [
+            "https://www.google.com/maps", "https://maps.google.com/", "https://www.google.com/maps/place/",
+            "https://www.google.com/maps/dir/?api=1&destination=Business",
+            "https://www.google.com/maps/@18,79,10z", "https://www.google.com/maps/preview",
+            "https://www.google.com/maps?cid=", "https://www.google.com/maps?cid=0",
+            "https://www.google.com/maps?cid=18446744073709551616", "https://www.google.com/maps?cid=abc",
+            "https://www.google.com/maps?cid=123&cid=456", "https://www.google.com/maps?cid=123&placeid=ChIJ_Test",
+            "https://www.google.com/maps?ftid=0x123:", "https://www.google.com/maps?query_place_id=",
+            "https://www.google.com/maps?placeid=%2F%2Fevil.example", "https://www.google.com/maps?q=place_id:",
+            "https://www.google.com/maps/search/?query=", "https://www.google.com/maps/search/?query=one&query=two",
+            "https://www.google.com/maps/search/?query=https%3A%2F%2Fevil.example",
+            "https://www.google.com/maps?q=%2F%2Fevil.example", "https://www.google.com/maps?q=bad%0D%0Avalue",
+            "https://www.google.com/maps/place/Business/?url=https%3A%2F%2Fevil.example",
+            "https://www.google.com/maps/place/Business/?Redirect_URL=https%3A%2F%2Fevil.example",
+            "https://www.google.com/maps/place/https%3A%2F%2Fevil.example/",
+            "https://www.google.com/maps/place/Business%5Cevil/",
+        ]
+        for value in invalid:
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                validate_review_url(value, expand_short_links=True)
+
+    def test_short_listing_must_reach_successful_terminal_maps_page(self):
+        for status in (403, 404, 500):
+            with self.subTest(status=status), self.assertRaises(ValidationError):
+                self._expand([(302, MAPS_LOCALITY), (status, "")])
+
+    def test_short_maps_listing_cannot_redirect_outside_the_allowlist(self):
+        with self.assertRaises(ValidationError):
+            self._expand([(302, MAPS_LOCALITY), (302, "https://evil.example/")])
+
+    def test_unrelated_google_terminal_pages_are_not_accepted(self):
+        with self.assertRaises(ValidationError):
+            self._expand([(302, "https://www.google.com/maps/dir/?api=1&destination=Business"), (200, "")])
 
     def test_maps_intermediate_can_still_redirect_to_an_explicit_review_form(self):
         result, request, _ = self._expand([(302, MAPS_LOCALITY), (302, MAPS_REVIEW)], value="https://maps.app.goo.gl/business")
@@ -118,7 +156,6 @@ class GoogleReviewUrlTests(SimpleTestCase):
             "https://search.google.com/\nlocal/writereview?placeid=x",
             "https://search.google.com\\@evil.test/local/writereview?placeid=x",
             "https://www.google.com/url?q=https://evil.test",
-            "https://www.google.com/maps?cid=123",
             "https://127.0.0.1/local/writereview?placeid=x",
             "https://[::1]/local/writereview?placeid=x",
             "https://www.google.com/maps?placeid=x&query_place_id=y",

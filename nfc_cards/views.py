@@ -8,7 +8,7 @@ from analytics.tracking import log_event
 from common.permissions import IsRecipientCustomer
 from common.response import error, success
 
-from .models import NfcCard
+from .models import NfcCard, review_uid_from_identifier
 from .assignment import assignment_recipient, ensure_card_assignment_available
 from .serializers import (
     ActivateCardSerializer,
@@ -139,9 +139,16 @@ class CardResolveView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, identifier):
-        card = NfcCard.objects.filter(uid__iexact=identifier).first()
-        if card is None and identifier.isdigit():
-            card = NfcCard.objects.filter(pk=int(identifier)).first()
+        if len(identifier) > 32:
+            # Signed Review identifiers exceed the UID field's maximum
+            # length. Failed verification must not fall back to UID/PK lookup.
+            uid = review_uid_from_identifier(identifier)
+            card = NfcCard.objects.filter(uid=uid, card_type=NfcCard.CardType.REVIEW).first() if uid else None
+        else:
+            # Preserve existing Digital and already-programmed raw UID URLs.
+            card = NfcCard.objects.filter(uid__iexact=identifier).first()
+            if card is None and identifier.isdigit():
+                card = NfcCard.objects.filter(pk=int(identifier)).first()
 
         if card is not None and card.card_type == NfcCard.CardType.REVIEW:
             from .review import resolve_review_card

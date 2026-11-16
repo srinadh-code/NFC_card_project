@@ -3,6 +3,7 @@ import re
 from urllib.parse import quote, urlsplit
 
 from django.conf import settings
+from django.core import signing
 from django.db import models
 
 
@@ -28,6 +29,23 @@ def _programming_origin():
     except ValueError:
         pass
     return None
+
+
+def _review_signer():
+    # Deterministic and non-expiring: editing business settings or restarting
+    # a worker must never require rewriting a physical card. This is a public
+    # routing identifier, separate from account authentication credentials.
+    return signing.Signer(salt="nfc_cards.review.public.v1", sep=".", algorithm="sha256")
+
+
+def review_uid_from_identifier(identifier):
+    if not isinstance(identifier, str) or not 45 <= len(identifier) <= 76:
+        return None
+    try:
+        uid = _review_signer().unsign(identifier)
+    except signing.BadSignature:
+        return None
+    return uid if 1 <= len(uid) <= 32 else None
 
 
 class NfcCard(models.Model):
@@ -80,13 +98,15 @@ class NfcCard(models.Model):
     def programming_url(self):
         """Permanent public URL for an owned Review card, even before setup.
 
-        Only the card UID and configured frontend origin form this URL;
-        changing the owner's Google destination never changes the NFC chip.
+        A purpose-bound signature makes even manually chosen card UIDs
+        unguessable as programming identifiers. It is derived without writing
+        or changing the existing UID; business edits never change this link.
         """
         if self.card_type != self.CardType.REVIEW or self.user_id is None or self.status == self.Status.UNASSIGNED:
             return None
         origin = _programming_origin()
-        return f"{origin}/nfc/{quote(self.uid, safe='')}" if origin else None
+        identifier = _review_signer().sign(self.uid)
+        return f"{origin}/nfc/{quote(identifier, safe='')}" if origin else None
 
     @classmethod
     def generate_serial_number(cls):
