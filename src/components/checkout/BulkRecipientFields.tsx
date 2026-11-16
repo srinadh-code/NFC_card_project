@@ -50,13 +50,13 @@ export function BulkRecipientFields({
       </div>
       <div className="mt-3 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-100">
         <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-        <p>Important: Please double-check the recipient&apos;s full name, email address and phone number before continuing. These details will be used for NFC card allocation and digital profile creation.</p>
+        <p>Important: Please double-check the recipient&apos;s full name, email address and phone number before continuing. These details allocate each product to its owner. Digital profile and Google Review cards have separate allocations.</p>
       </div>
       <p className="mt-2 text-sm text-muted-foreground">Enter the full name, email and phone number of the person who will use each card, including when buying for yourself.</p>
       <div className="mt-4 space-y-4">
         {Array.from({ length: count }, (_, index) => (
           <div key={index} className="rounded-xl border bg-background/60 p-4">
-            <p className="mb-3 text-sm font-medium text-foreground">Recipient {index + 1}</p>
+            <p className="mb-3 text-sm font-medium text-foreground">Recipient {index + 1}{recipients[index]?.card_type && <> · {recipients[index].card_type === "REVIEW" ? "Google Review Card" : "Digital Business Card"}</>}</p>
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-1.5">
                 <label htmlFor={`bulk-recipient-name-${index}`} className="text-sm font-medium text-foreground">
@@ -101,6 +101,7 @@ export function BulkRecipientFields({
                       <div role="status" className="space-y-0.5 text-sm text-destructive">
                         <p className="flex items-center gap-1.5"><CircleX className="size-3.5" />Email Already Assigned</p>
                         <p>{message}</p>
+                        {onRetryEmailCheck && <button type="button" className="font-medium underline" onClick={() => onRetryEmailCheck(status.email)}>Check again</button>}
                       </div>
                     )
                   }

@@ -175,6 +175,53 @@ test("a delayed bootstrap cannot reinstate the previous account", async () => {
   assert.equal(auth.useCustomerSessionStore.getState().user.id, 2)
 })
 
+test("background role refresh preserves the same account, tokens and cart while enabling purchaser and recipient switches", async () => {
+  api.setTokens(tokenFor(1), "a-refresh", "customer")
+  auth.useCustomerSessionStore.getState().setUser({ ...user(1), roles: ["PURCHASER"] })
+  const line = { lineId: "saved-cart", productId: "custom", cardType: "Custom", qty: 1, price: 100, color: { name: "Black", hex: "#000" } }
+  cart.setState({ lines: [line] })
+  queryClient.setQueryData(["customer-orders", "1", 1], { saved: "Existing order history" })
+  const calls = []
+  globalThis.fetch = async (url) => { calls.push(url); return response(user(1)) }
+  await auth.useCustomerSessionStore.getState().refresh()
+  assert.deepEqual(calls, [`${api.API_BASE_URL}/auth/me/`])
+  assert.deepEqual(auth.useCustomerSessionStore.getState().user.roles, ["RECIPIENT", "PURCHASER"])
+  assert.equal(auth.isRecipientUser(auth.useCustomerSessionStore.getState().user), true)
+  assert.equal(api.getAccessToken("customer"), tokenFor(1))
+  assert.equal(api.getRefreshToken("customer"), "a-refresh")
+  assert.deepEqual(cart.getState().lines, [line])
+  assert.deepEqual(queryClient.getQueryData(["customer-orders", "1", 1]), { saved: "Existing order history" })
+})
+
+test("transient background refresh failures preserve the authenticated session", async () => {
+  api.setTokens(tokenFor(1), "a-refresh", "customer")
+  auth.useCustomerSessionStore.setState({ user: user(1), hydrated: true })
+  globalThis.fetch = async () => { throw new Error("Offline") }
+  await auth.useCustomerSessionStore.getState().refresh()
+  assert.equal(auth.useCustomerSessionStore.getState().user.id, 1)
+  assert.equal(auth.useCustomerSessionStore.getState().hydrated, true)
+  assert.equal(api.getAccessToken("customer"), tokenFor(1))
+})
+
+for (const boundary of ["logout", "account switch"]) {
+  test(`a delayed background refresh cannot undo ${boundary}`, async () => {
+    api.setTokens(tokenFor(1), "a-refresh", "customer")
+    auth.useCustomerSessionStore.setState({ user: user(1), hydrated: true })
+    const task = deferred()
+    globalThis.fetch = (url) => url.endsWith("/auth/logout/") ? Promise.resolve(response(null)) : task.promise
+    const pending = auth.useCustomerSessionStore.getState().refresh()
+    if (boundary === "logout") facade().logout()
+    else {
+      api.setTokens(tokenFor(2), "b-refresh", "customer")
+      auth.useCustomerSessionStore.getState().setUser(user(2))
+    }
+    task.resolve(response(user(1)))
+    await pending
+    assert.equal(auth.useCustomerSessionStore.getState().user?.id ?? null, boundary === "logout" ? null : 2)
+    assert.equal(api.getAccessToken("customer"), boundary === "logout" ? null : tokenFor(2))
+  })
+}
+
 test("a pending login cannot sign the user back in after logout", async () => {
   const task = deferred()
   globalThis.fetch = () => task.promise

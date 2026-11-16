@@ -151,7 +151,7 @@ test("typing waits 600 ms and checks only the final normalized email", async (co
   await hook.advance(599)
   assert.deepEqual(hook.calls, [])
   await hook.advance(1)
-  assert.deepEqual(hook.calls, [["final@example.com", ""]])
+  assert.deepEqual(hook.calls, [["final@example.com", "", "CUSTOM"]])
   assert.equal(hook.result.allAvailable, true)
 })
 
@@ -166,7 +166,7 @@ test("empty and invalid emails never issue availability requests", async (contex
 test("duplicate recipients are blocked locally while a distinct email is checked once", async (context) => {
   const hook = createHarness(context, [" Same@Example.com ", "same@example.com", "other@example.com"])
   await hook.advance(600)
-  assert.deepEqual(hook.calls, [["other@example.com", ""]])
+  assert.deepEqual(hook.calls, [["other@example.com", "", "CUSTOM"]])
   assert.deepEqual(hook.result.statuses.map(({ state }) => state), ["duplicate", "duplicate", "available"])
   assert.equal(hook.result.allAvailable, false)
 })
@@ -175,7 +175,7 @@ test("different recipients each receive one availability check", async (context)
   const emails = Array.from({ length: 10 }, (_, index) => `recipient${index}@example.com`)
   const hook = createHarness(context, emails)
   await hook.advance(600)
-  assert.deepEqual(hook.calls, emails.map((email) => [email, ""]))
+  assert.deepEqual(hook.calls, emails.map((email) => [email, "", "CUSTOM"]))
   assert.equal(hook.result.allAvailable, true)
 })
 
@@ -185,7 +185,7 @@ test("editing another recipient preserves the unchanged email result", async (co
   hook.update(["first@example.com", "third@example.com"])
   assert.equal(hook.result.statuses[0].state, "available")
   await hook.advance(600)
-  assert.deepEqual(hook.calls, [["first@example.com", ""], ["second@example.com", ""], ["third@example.com", ""]])
+  assert.deepEqual(hook.calls, [["first@example.com", "", "CUSTOM"], ["second@example.com", "", "CUSTOM"], ["third@example.com", "", "CUSTOM"]])
   assert.equal(hook.result.allAvailable, true)
 })
 
@@ -198,7 +198,7 @@ test("name, phone, casing, whitespace and recipient order changes reuse checked 
     recipient("third@example.com"),
   ])
   await hook.advance(600)
-  assert.deepEqual(hook.calls, [["first@example.com", ""], ["second@example.com", ""], ["third@example.com", ""]])
+  assert.deepEqual(hook.calls, [["first@example.com", "", "CUSTOM"], ["second@example.com", "", "CUSTOM"], ["third@example.com", "", "CUSTOM"]])
   assert.equal(hook.result.allAvailable, true)
 })
 
@@ -235,7 +235,7 @@ test("changing buyer context checks the same recipient again", async (context) =
   hook.update(["recipient@example.com"], "secondbuyer@example.com")
   assert.equal(hook.result.allAvailable, false)
   await hook.advance(600)
-  assert.deepEqual(hook.calls, [["recipient@example.com", "firstbuyer@example.com"], ["recipient@example.com", "secondbuyer@example.com"]])
+  assert.deepEqual(hook.calls, [["recipient@example.com", "firstbuyer@example.com", "CUSTOM"], ["recipient@example.com", "secondbuyer@example.com", "CUSTOM"]])
 })
 
 test("a network failure can be retried without duplicate concurrent requests", async (context) => {
@@ -306,7 +306,7 @@ test("a row retry preserves availability for other recipients", async (context) 
   hook.render()
   assert.equal(hook.result.statuses[0].state, "available")
   await hook.advance(600)
-  assert.deepEqual(hook.calls, [["first@example.com", ""], ["second@example.com", ""], ["second@example.com", ""]])
+  assert.deepEqual(hook.calls, [["first@example.com", "", "CUSTOM"], ["second@example.com", "", "CUSTOM"], ["second@example.com", "", "CUSTOM"]])
   assert.equal(hook.result.allAvailable, true)
 })
 
@@ -330,7 +330,7 @@ test("HTTP 429 prevents checks for newly entered emails during cooldown", async 
   await hook.advance(600)
   hook.update(["second@example.com"])
   await hook.advance(600)
-  assert.deepEqual(hook.calls, [["first@example.com", ""]])
+  assert.deepEqual(hook.calls, [["first@example.com", "", "CUSTOM"]])
   assert.equal(hook.result.statuses[0].state, "rate-limited")
   assert.equal(hook.result.allAvailable, false)
 })
@@ -383,5 +383,100 @@ test("HTTP 429 without an exposed Retry-After header uses a one-minute cooldown"
   hook.result.retry("recipient@example.com")
   hook.render()
   await hook.advance(1_000)
+  assert.equal(hook.calls.length, 1)
+})
+
+
+test("one email can own a digital allocation and a Google Review allocation independently", async (context) => {
+  const hook = createHarness(context, [])
+  hook.update([
+    { ...recipient(" Same@Example.com "), card_type: "CUSTOM" },
+    { ...recipient("same@example.com"), card_type: "REVIEW" },
+  ])
+  await hook.advance(600)
+  assert.deepEqual(hook.calls, [["same@example.com", "", "CUSTOM"], ["same@example.com", "", "REVIEW"]])
+  assert.deepEqual(hook.result.statuses.map(({ state }) => state), ["available", "available"])
+  assert.equal(hook.result.allAvailable, true)
+})
+
+test("same-family digital duplicates remain blocked across Custom and Wooden", async (context) => {
+  const hook = createHarness(context, [])
+  hook.update([
+    { ...recipient("same@example.com"), card_type: "CUSTOM" },
+    { ...recipient("same@example.com"), card_type: "WOODEN" },
+  ])
+  await hook.advance(600)
+  assert.deepEqual(hook.calls, [])
+  assert.deepEqual(hook.result.statuses.map(({ state }) => state), ["duplicate", "duplicate"])
+})
+
+test("changing product family rechecks the same email without reusing its previous eligibility", async (context) => {
+  const hook = createHarness(context, ["owner@example.com"], "", async (_email, _buyer, cardType) => ({ available: cardType === "REVIEW", message: "Already allocated" }))
+  await hook.advance(600)
+  assert.equal(hook.result.statuses[0].state, "allocated")
+  hook.update([{ ...recipient("owner@example.com"), card_type: "REVIEW" }])
+  assert.equal(hook.result.allAvailable, false)
+  await hook.advance(600)
+  assert.deepEqual(hook.calls.map((call) => call[2]), ["CUSTOM", "REVIEW"])
+  assert.equal(hook.result.allAvailable, true)
+})
+
+test("a released allocation stops blocking an unchanged email after the cached result expires", async (context) => {
+  let available = false
+  const hook = createHarness(context, ["owner@example.com"], "", async () => ({ available, message: "Already assigned" }))
+  await hook.advance(600)
+  assert.equal(hook.result.statuses[0].state, "allocated")
+  available = true
+  await hook.advance(29_999)
+  assert.equal(hook.calls.length, 1)
+  await hook.advance(1)
+  assert.equal(hook.result.allAvailable, false)
+  await hook.advance(600)
+  assert.equal(hook.calls.length, 2)
+  assert.equal(hook.result.statuses[0].state, "available")
+})
+
+test("a cached available result cannot keep checkout enabled after that recipient becomes allocated", async (context) => {
+  let available = true
+  const hook = createHarness(context, ["owner@example.com"], "", async () => ({ available, message: "Already assigned" }))
+  await hook.advance(600)
+  assert.equal(hook.result.allAvailable, true)
+  available = false
+  await hook.advance(30_000)
+  assert.equal(hook.result.allAvailable, false)
+  await hook.advance(600)
+  assert.equal(hook.calls.length, 2)
+  assert.equal(hook.result.statuses[0].state, "allocated")
+})
+
+test("allocation-row Check again refreshes a released result without changing the typed email", async (context) => {
+  let available = false
+  const hook = createHarness(context, ["owner@example.com"], "", async () => ({ available, message: "Already assigned" }))
+  await hook.advance(600)
+  available = true
+  hook.result.retry("owner@example.com")
+  hook.render()
+  assert.equal(hook.result.allAvailable, false)
+  await hook.advance(600)
+  assert.equal(hook.result.allAvailable, true)
+  assert.equal(hook.calls.length, 2)
+})
+
+test("freshness checks do not automatically retry network errors", async (context) => {
+  const hook = createHarness(context, ["owner@example.com"], "", async () => { throw new Error("Offline") })
+  await hook.advance(600)
+  assert.equal(hook.result.statuses[0].state, "network-error")
+  await hook.advance(60_000)
+  assert.equal(hook.calls.length, 1)
+  hook.unmount()
+  await hook.advance(60_000)
+  assert.equal(hook.calls.length, 1)
+})
+
+test("unmount cancels scheduled eligibility refreshes", async (context) => {
+  const hook = createHarness(context, ["owner@example.com"])
+  await hook.advance(600)
+  hook.unmount()
+  await hook.advance(60_000)
   assert.equal(hook.calls.length, 1)
 })

@@ -84,7 +84,7 @@ export default function CustomerDashboard() {
   })
 
   const cards = useMemo(
-    () => (dashboardQuery.data ? dashboardQuery.data.nfc_cards.map(toFrontendCard) : []),
+    () => (dashboardQuery.data ? dashboardQuery.data.nfc_cards.map(toFrontendCard).filter((card) => card.cardType !== "Review") : []),
     [dashboardQuery.data],
   )
   const activeCard = useMemo(() => cards.find((c) => c.status === "Active") ?? cards[0] ?? null, [cards])

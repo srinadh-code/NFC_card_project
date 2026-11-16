@@ -72,7 +72,7 @@ export default function CustomerMyCard() {
     queryFn: nfcApi.mine,
     enabled: Boolean(customer),
   })
-  const cards = cardsQuery.data ?? []
+  const cards = (cardsQuery.data ?? []).filter((card) => card.cardType !== "Review")
 
   const ordersQuery = useQuery({
     queryKey: customerOrderKeys.page(customer?.id),

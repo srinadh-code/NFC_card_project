@@ -16,15 +16,10 @@ import { CustomerPicker } from "@/components/admin/CustomerPicker"
 import { PLAN_ACCENT, PLAN_BY_CARD_TYPE } from "@/components/admin/PlanTypeBadge"
 import { cn } from "@/lib/utils"
 import type { NfcCard, CardType, CardStatus } from "@/types"
+import { ReviewCardProgrammingLink } from "@/components/common/ReviewCardProgrammingLink"
 
-// The NEXORA-plan-mapped Card Type values — the only ones offered here.
-// Classic and Premium are retired and no longer selectable; Custom is the
-// only remaining tier. "Wooden" has no NEXORA plan and isn't presented as a
-// choice either (the backend enum itself still allows it; this only changes
-// what this form offers). Label/description come straight from
-// NEXORA_CARD_TYPES (via PLAN_BY_CARD_TYPE) — the same data the public
-// /shop page reads — rather than a second, separately-worded copy.
-const CARD_TYPE_ORDER: CardType[] = ["Custom"]
+// Existing Custom inventory plus the separately purchased Google Review product.
+const CARD_TYPE_ORDER: CardType[] = ["Custom", "Review"]
 
 export interface CardFormValues {
   uid: string
@@ -32,6 +27,7 @@ export interface CardFormValues {
   cardType: CardType
   color: string
   customerEmail: string // "" = unassigned
+  recipientId?: number
   status: CardStatus
   purchaseDate: string
   notes: string
@@ -87,7 +83,7 @@ export function CardFormDialog({
   }, [open, card])
 
   function set<K extends keyof CardFormValues>(key: K, value: CardFormValues[K]) {
-    setValues((v) => ({ ...v, [key]: value }))
+    setValues((v) => ({ ...v, ...(key === "cardType" && value !== v.cardType ? { customerEmail: "", recipientId: undefined } : {}), [key]: value }))
   }
 
   return (
@@ -101,6 +97,7 @@ export function CardFormDialog({
         </DialogHeader>
 
         <div className="grid max-h-[65vh] grid-cols-1 gap-4 overflow-y-auto px-1 py-1 sm:grid-cols-2">
+          {card?.cardType === "Review" && card.customerId && card.status !== "Unassigned" && <div className="sm:col-span-2"><ReviewCardProgrammingLink url={card.programmingUrl} /></div>}
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="nf-uid">Card UID</Label>
             <Input
@@ -122,7 +119,7 @@ export function CardFormDialog({
           <div className="flex flex-col gap-1.5 sm:col-span-2">
             <Label>Card Type</Label>
             <p className="text-xs text-muted-foreground">
-              Drag a plan onto the box below to select it — or just click one.
+              Drag a card type onto the box below to select it — or click one.
             </p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {CARD_TYPE_ORDER.map((cardType) => {
@@ -218,7 +215,7 @@ export function CardFormDialog({
                 <button
                   type="button"
                   className="text-xs text-muted-foreground hover:text-foreground hover:underline"
-                  onClick={() => set("customerEmail", "")}
+                  onClick={() => setValues((previous) => ({ ...previous, customerEmail: "", recipientId: undefined }))}
                 >
                   Clear
                 </button>
@@ -226,7 +223,8 @@ export function CardFormDialog({
             </div>
             <CustomerPicker
               value={values.customerEmail}
-              onChange={(email) => set("customerEmail", email)}
+              cardType={values.cardType}
+              onChange={(email, recipientId) => setValues((previous) => ({ ...previous, customerEmail: email, recipientId }))}
               placeholder="Unassigned"
             />
           </div>

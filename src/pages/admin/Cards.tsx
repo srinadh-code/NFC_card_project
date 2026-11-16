@@ -70,6 +70,7 @@ export default function AdminCards() {
   const [deleting, setDeleting] = useState<NfcCard | null>(null)
   const [assigning, setAssigning] = useState<NfcCard | null>(null)
   const [assignEmail, setAssignEmail] = useState("")
+  const [assignRecipientId, setAssignRecipientId] = useState<number | undefined>()
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -102,6 +103,7 @@ export default function AdminCards() {
         purchaseDate: values.purchaseDate,
         notes: values.notes,
         customerEmail: values.customerEmail,
+        recipientId: values.recipientId,
       }),
     onSuccess: () => {
       invalidate()
@@ -122,6 +124,7 @@ export default function AdminCards() {
         purchaseDate: values.purchaseDate,
         notes: values.notes,
         customerEmail: values.customerEmail,
+        recipientId: values.recipientId,
       }),
     onSuccess: () => {
       invalidate()
@@ -170,7 +173,7 @@ export default function AdminCards() {
   })
 
   const assignMutation = useMutation({
-    mutationFn: ({ id, email }: { id: string; email: string }) => adminNfcApi.assign(id, email),
+    mutationFn: ({ id, email, recipientId }: { id: string; email: string; recipientId?: number }) => adminNfcApi.assign(id, email, recipientId),
     onSuccess: () => {
       invalidate()
       toast.success("Card assigned to customer.")
@@ -301,6 +304,7 @@ export default function AdminCards() {
                               onClick={() => {
                                 setAssigning(c)
                                 setAssignEmail(c.customerEmail ?? "")
+                                setAssignRecipientId(undefined)
                               }}
                             >
                               <UserPlus /> Assign
@@ -370,14 +374,14 @@ export default function AdminCards() {
             <DialogTitle>Assign Card</DialogTitle>
             <DialogDescription>Assign card {assigning?.id} to a customer.</DialogDescription>
           </DialogHeader>
-          <CustomerPicker value={assignEmail} onChange={setAssignEmail} placeholder="Select a customer..." />
+          <CustomerPicker key={assigning?.id} value={assignEmail} cardType={assigning?.cardType} onChange={(email, recipientId) => { setAssignEmail(email); setAssignRecipientId(recipientId) }} placeholder="Select a paid recipient allocation..." />
           <DialogFooter>
             <Button variant="outline" onClick={() => setAssigning(null)}>
               Cancel
             </Button>
             <Button
               disabled={!assignEmail || assignMutation.isPending}
-              onClick={() => assigning && assignMutation.mutate({ id: assigning.id, email: assignEmail })}
+              onClick={() => assigning && assignMutation.mutate({ id: assigning.id, email: assignEmail, recipientId: assignRecipientId })}
             >
               Assign
             </Button>

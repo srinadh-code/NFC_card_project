@@ -37,7 +37,7 @@ import { formatCurrency } from "@/lib/mock-api"
 import { PaymentCancelled, PaymentFailed, payWithRazorpay } from "@/lib/razorpay"
 import { cn } from "@/lib/utils"
 import { CurrentLocationError, detectAddressFromCurrentLocation, mergeDetectedAddress } from "@/lib/checkout-location"
-import { recipientErrorsAfterChange, resizeRecipients, validateRecipients, validCardQuantity, type CheckoutRecipient } from "@/lib/checkout-recipients"
+import { associateRecipientProducts, recipientErrorsAfterChange, resizeRecipients, validateRecipients, validCardQuantity, type CheckoutRecipient } from "@/lib/checkout-recipients"
 import { isFresh, useCheckoutVerificationStore } from "@/store/checkout-verification-store"
 import { storeOrderSuccess } from "@/pages/public/OrderSuccess"
 
@@ -137,10 +137,11 @@ export function GuestCheckout() {
   const [checkoutStep, setCheckoutStep] = useState<"summary" | "address" | "confirmation">("summary")
   const [errors, setErrors] = useState<Errors>({})
   const [bulkRecipients, setBulkRecipients] = useState<CheckoutRecipient[]>(savedRecipients)
+  const recipientProducts = associateRecipientProducts(bulkRecipients, lines)
   const availabilityBuyerEmail = viaMobile
     ? verifiedEmail?.destination ?? emailInput
     : contact?.destination ?? ""
-  const recipientEmailAvailability = useRecipientEmailAvailability(bulkRecipients, availabilityBuyerEmail)
+  const recipientEmailAvailability = useRecipientEmailAvailability(recipientProducts, availabilityBuyerEmail)
   const [recipientErrors, setRecipientErrors] = useState<BulkRecipientErrors>([])
   const [paying, setPaying] = useState(false)
   const [payError, setPayError] = useState<string | null>(null)
@@ -287,7 +288,7 @@ export function GuestCheckout() {
   }
 
   function validateBulkRecipients() {
-    const result = validateRecipients(bulkRecipients, bulkRecipientCount, { indianMobilePhone: true })
+    const result = validateRecipients(recipientProducts, bulkRecipientCount, { indianMobilePhone: true })
     setRecipientErrors(result.errors)
     if (!result.valid) {
       toast.error("Please complete each recipient's name, valid email and phone number. Orders support 1 to 10 cards.")
@@ -593,7 +594,7 @@ export function GuestCheckout() {
           <div ref={recipientDetailsRef}>
             <BulkRecipientFields
               count={bulkRecipientCount}
-              recipients={bulkRecipients}
+              recipients={recipientProducts}
               errors={recipientErrors}
               emailStatuses={recipientEmailAvailability.statuses}
               onRetryEmailCheck={recipientEmailAvailability.retry}

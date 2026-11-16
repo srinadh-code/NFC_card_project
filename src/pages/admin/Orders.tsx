@@ -26,7 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { StatusBadge } from "@/components/admin/StatusBadge"
-import { AccountStatusBadge } from "@/components/admin/AccountStatusBadge"
+import { AccountStatusBadge, EmailDeliveryBadge } from "@/components/admin/AccountStatusBadge"
 import { TablePagination } from "@/components/admin/TablePagination"
 import { downloadCsv } from "@/components/admin/export-csv"
 import { CopyTrackingIdButton } from "@/components/orders/OrderTrackingView"
@@ -135,6 +135,8 @@ export default function AdminOrders() {
   const assigningOrder = orders.find((o) => o.id === assigningOrderId) ?? (orderDetail.data?.id === assigningOrderId ? orderDetail.data : null)
   const unassignedRecipients = assigningOrder?.recipients?.filter((recipient) => !recipient.assignedCardId) ?? []
   const assigningRecipient = unassignedRecipients.find((recipient) => String(recipient.id) === recipientChoice)
+  const requiredCardType = assigningRecipient?.cardType ?? (!assigningOrder?.recipients?.length && assigningOrder?.items.length === 1 ? assigningOrder.items[0].cardType : undefined)
+  const matchingCards = availableCards.filter((card) => card.cardType === requiredCardType)
 
   function openAssignment(order: Order, recipientId?: string | number) {
     setAssigningOrderId(order.id)
@@ -168,9 +170,12 @@ export default function AdminOrders() {
 
   const resendActivationMutation = useMutation({
     mutationFn: (onboardingId: number) => adminOnboardingApi.resend(onboardingId),
-    onSuccess: () => {
+    onSuccess: (updated) => {
       invalidate()
-      toast.success("A new activation link is being emailed to the customer.")
+      if (updated.email_delivery_status === "FAILED" || updated.email_delivery_status === "BOUNCED" || updated.email_status === "FAILED") toast.error("The setup email failed. Check the email status before retrying.")
+      else if (updated.email_delivery_status === "UNVERIFIED") toast.info("Email outcome unverified. Check provider records before retrying.")
+      else if (updated.email_delivery_status === "ACCEPTED" || updated.email_status === "SENT") toast.success("Accepted by email service; delivery unverified.")
+      else toast.info("Setup email queued; delivery unverified.")
     },
     onError: (err) => toast.error(errorMessage(err, "Couldn't resend the activation email.")),
   })
@@ -559,19 +564,20 @@ export default function AdminOrders() {
                       </div>
                       {viewing.account.status === "PENDING_PROCESSING" && (
                         <p className="text-xs text-muted-foreground">
-                          Moving this paid order to Processing emails the purchaser a secure link to set their password and access order history. Recipient account setup is listed separately.
+                          Purchaser account setup is initiated after verified payment. Recipient account setup is listed separately.
                         </p>
                       )}
                       {viewing.account.status === "EMAIL_FAILED" && (
                         <p className="text-xs text-destructive">
-                          Email delivery failed after {viewing.account.emailAttempts ?? 0} attempts
+                          Email submission failed after {viewing.account.emailAttempts ?? 0} attempts
                           {viewing.account.emailLastError ? ` (${viewing.account.emailLastError})` : ""}. Use Resend
                           once email is working.
                         </p>
                       )}
                       {viewing.account.status === "EMAIL_SENT" && viewing.account.emailSentAt && (
-                        <p className="text-xs text-muted-foreground">Sent {formatDateTime(viewing.account.emailSentAt)}</p>
+                        <p className="text-xs text-muted-foreground">Accepted by email service {formatDateTime(viewing.account.emailSentAt)}; delivery unverified.</p>
                       )}
+                      {viewing.account.emailDeliveryStatus && <EmailDeliveryBadge status={viewing.account.emailDeliveryStatus} label={viewing.account.emailDeliveryStatusLabel} />}
                       {viewing.account.status === "ACTIVATED" && (
                         <p className="text-xs text-muted-foreground">
                           {viewing.account.createdFromOrder
@@ -620,7 +626,7 @@ export default function AdminOrders() {
                               </div>
                               <div className="flex items-center justify-between gap-2">
                                 <span className="text-muted-foreground">Account invitation</span>
-                                <StatusBadge status={recipient.invitationStatus ?? "Pending"} />
+                                <EmailDeliveryBadge status={recipient.emailDeliveryStatus ?? (recipient.invitationStatus === "Sent" || recipient.invitationStatus === "Accepted" ? "ACCEPTED" : recipient.invitationStatus === "Failed" ? "FAILED" : recipientStatus === "EMAIL_QUEUED" ? "QUEUED" : "NOT_QUEUED")} label={recipient.emailDeliveryStatusLabel} />
                               </div>
                             </div>
                             <div className="mt-3 space-y-2 border-t pt-3">
@@ -640,7 +646,8 @@ export default function AdminOrders() {
                                   <Button variant="outline" size="sm" disabled={!canAssign(viewing)} onClick={() => openAssignment(viewing, recipient.id)}><Nfc /> Assign</Button>
                                 </div>
                               )}
-                              {recipient.profileUsername ? <a className="text-xs font-medium text-primary hover:underline" href={`/u/${encodeURIComponent(recipient.profileUsername)}`} target="_blank" rel="noreferrer">View digital profile</a> : <p className="text-xs text-muted-foreground">Profile pending</p>}
+                              <p className="text-xs font-medium">{recipient.cardType === "Review" ? "Google Review Card" : recipient.cardType ? "Digital Business Card" : "Product not recorded"}</p>
+                              {recipient.cardType === "Review" ? <p className="text-xs text-muted-foreground">Uses the recipient's Google Review workspace.</p> : recipient.profileUsername ? <a className="text-xs font-medium text-primary hover:underline" href={`/u/${encodeURIComponent(recipient.profileUsername)}`} target="_blank" rel="noreferrer">View digital profile</a> : <p className="text-xs text-muted-foreground">Profile pending</p>}
                             </div>
                           </div>
                         )
@@ -810,10 +817,10 @@ export default function AdminOrders() {
           {Boolean(assigningOrder?.recipients?.length) && (
             <div className="space-y-2">
               <p className="text-sm font-medium">Recipient allocation</p>
-              <Select value={recipientChoice} onValueChange={setRecipientChoice}>
+              <Select value={recipientChoice} onValueChange={(value) => { setRecipientChoice(value); setCardChoice("") }}>
                 <SelectTrigger className="w-full"><SelectValue placeholder="Select an unassigned recipient" /></SelectTrigger>
                 <SelectContent>
-                  {unassignedRecipients.map((recipient) => <SelectItem key={recipient.id} value={String(recipient.id)}>{recipient.name} - {recipient.email}</SelectItem>)}
+                  {unassignedRecipients.map((recipient) => <SelectItem key={recipient.id} value={String(recipient.id)}>{recipient.name} - {recipient.email} · {recipient.cardType === "Review" ? "Google Review" : "Digital card"}</SelectItem>)}
                 </SelectContent>
               </Select>
               {assigningRecipient && <p className="break-all text-xs text-muted-foreground">{assigningRecipient.email} | {assigningRecipient.phone || "Phone not recorded"}</p>}
@@ -827,13 +834,13 @@ export default function AdminOrders() {
               <SelectValue placeholder="Select an unassigned card" />
             </SelectTrigger>
             <SelectContent>
-              {availableCards.map((c) => (
+              {matchingCards.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.id} · {c.uid} ({c.cardType})
                 </SelectItem>
               ))}
-              {availableCards.length === 0 && (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">No unassigned cards in stock.</div>
+              {matchingCards.length === 0 && (
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">{requiredCardType ? "No matching unassigned cards in stock." : "Select a recipient to see matching cards."}</div>
               )}
             </SelectContent>
           </Select>
@@ -842,7 +849,7 @@ export default function AdminOrders() {
               Cancel
             </Button>
             <Button
-              disabled={!cardChoice || assignCardMutation.isPending || !assigningOrder || !canAssign(assigningOrder) || Boolean(assigningOrder.recipients?.length && !assigningRecipient)}
+              disabled={!matchingCards.some((card) => card.id === cardChoice) || assignCardMutation.isPending || !assigningOrder || !canAssign(assigningOrder) || Boolean(assigningOrder.recipients?.length && !assigningRecipient)}
               onClick={() =>
                 assigningOrder && assignCardMutation.mutate({ orderId: assigningOrder.id, cardId: cardChoice, recipientId: assigningRecipient ? String(assigningRecipient.id) : undefined })
               }

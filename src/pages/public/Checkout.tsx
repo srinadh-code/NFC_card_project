@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AddressFormDialog } from "@/components/customer/AddressFormDialog"
 import { PinnedLocationLink } from "@/components/customer/PinnedLocationLink"
-import { recipientErrorsAfterChange, validateRecipients, resizeRecipients, validCardQuantity, type CheckoutRecipient, type RecipientErrors } from "@/lib/checkout-recipients"
+import { associateRecipientProducts, recipientErrorsAfterChange, validateRecipients, resizeRecipients, validCardQuantity, type CheckoutRecipient, type RecipientErrors } from "@/lib/checkout-recipients"
 import { useCheckoutVerificationStore } from "@/store/checkout-verification-store"
 import { BulkRecipientFields } from "@/components/checkout/BulkRecipientFields"
 import { useRecipientEmailAvailability } from "@/hooks/useRecipientEmailAvailability"
@@ -103,8 +103,9 @@ export default function Checkout() {
   const recipientDetailsRef = useRef<HTMLDivElement | null>(null)
   const orderSummaryRef = useRef<HTMLDivElement | null>(null)
   const { recipients: bulkRecipients, setRecipients: setBulkRecipients } = useCheckoutVerificationStore()
+  const recipientProducts = associateRecipientProducts(bulkRecipients, sanitizeCartLines(lines))
   // GuestCheckout owns the guest checks; avoid a second set in this parent.
-  const recipientEmailAvailability = useRecipientEmailAvailability(customer ? bulkRecipients : [], customer?.email ?? "")
+  const recipientEmailAvailability = useRecipientEmailAvailability(customer ? recipientProducts : [], customer?.email ?? "")
   const [recipientErrors, setRecipientErrors] = useState<RecipientErrors[]>([])
   // Set -> the form dialog edits this address (e.g. to fix a PIN code that
   // failed verification); null -> it adds a new one.
@@ -185,7 +186,7 @@ export default function Checkout() {
   }
 
   function validateBulkRecipients() {
-    const result = validateRecipients(bulkRecipients, bulkRecipientCount, { indianMobilePhone: true })
+    const result = validateRecipients(recipientProducts, bulkRecipientCount, { indianMobilePhone: true })
     setRecipientErrors(result.errors)
     if (!result.valid) {
       toast.error("Please complete each recipient's name, valid email and phone number. Orders support 1 to 10 cards.")
@@ -580,7 +581,7 @@ export default function Checkout() {
             <div ref={recipientDetailsRef}>
               <BulkRecipientFields
                 count={bulkRecipientCount}
-                recipients={bulkRecipients}
+                recipients={recipientProducts}
                 errors={recipientErrors}
                 emailStatuses={recipientEmailAvailability.statuses}
                 onRetryEmailCheck={recipientEmailAvailability.retry}

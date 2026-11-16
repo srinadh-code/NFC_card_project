@@ -1,10 +1,28 @@
 /** Shared checkout rules for card quantities and recipient contact snapshots. */
 export const MAX_CARD_QTY = 10
+export type CheckoutCardType = "CUSTOM" | "WOODEN" | "REVIEW"
 
 export interface CheckoutRecipient {
   full_name: string
   email: string
   phone: string
+  card_type?: CheckoutCardType
+  product_id?: string
+}
+
+export function recipientAllocationFamily(cardType?: string): "DIGITAL" | "REVIEW" {
+  return cardType === "REVIEW" ? "REVIEW" : "DIGITAL"
+}
+
+/** Match each contact slot to a real cart unit; the server verifies this association. */
+export function associateRecipientProducts(
+  recipients: CheckoutRecipient[],
+  lines: { productId: string; cardType: string; qty: number }[],
+): CheckoutRecipient[] {
+  const slots = lines.flatMap((line) => Array.from({ length: Math.max(0, Math.min(MAX_CARD_QTY, line.qty)) }, () => ({
+    product_id: line.productId, card_type: line.cardType.toUpperCase() as CheckoutCardType,
+  })))
+  return resizeRecipients(recipients, slots.length).map((recipient, index) => ({ ...recipient, ...slots[index] }))
 }
 
 export type RecipientErrors = Partial<Record<keyof CheckoutRecipient, string>>
@@ -89,12 +107,13 @@ export function validateRecipients(
     }
     else if (!/^\+?[0-9]{7,15}$/.test(phone)) entry.phone = "Enter a valid phone number with 7 to 15 digits, including country code if needed."
     errors[index] = entry
-    return { full_name, email, phone }
+    return { full_name, email, phone, ...(recipient.card_type ? { card_type: recipient.card_type } : {}), ...(recipient.product_id ? { product_id: recipient.product_id } : {}) }
   })
   const emailSlots = new Map<string, number[]>()
   cleaned.forEach((recipient, index) => {
     if (!recipient.email) return
-    emailSlots.set(recipient.email, [...(emailSlots.get(recipient.email) ?? []), index])
+    const key = JSON.stringify([recipient.email, recipientAllocationFamily(recipient.card_type)])
+    emailSlots.set(key, [...(emailSlots.get(key) ?? []), index])
   })
   for (const indexes of emailSlots.values()) {
     if (indexes.length < 2) continue

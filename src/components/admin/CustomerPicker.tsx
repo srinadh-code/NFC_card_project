@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { adminNfcApi } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import type { CardType } from "@/types"
 
 /** Search-as-you-type lookup of customers without an assigned NFC card.
  * Resolves to the customer's normalized email — the shared identifier the
@@ -14,10 +15,12 @@ export function CustomerPicker({
   value,
   onChange,
   placeholder = "Select a customer...",
+  cardType = "Custom",
 }: {
   value: string
-  onChange: (email: string) => void
+  onChange: (email: string, recipientId?: number) => void
   placeholder?: string
+  cardType?: CardType
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
@@ -33,8 +36,8 @@ export function CustomerPicker({
   }, [query])
 
   const { data, isFetching } = useQuery({
-    queryKey: ["customer-picker", "card-assignment", debounced],
-    queryFn: () => adminNfcApi.assignmentCustomers({ search: debounced || undefined, page: 1 }),
+    queryKey: ["customer-picker", "card-assignment", cardType, debounced],
+    queryFn: () => adminNfcApi.assignmentCustomers({ search: debounced || undefined, page: 1, cardType }),
     enabled: open,
   })
 
@@ -73,17 +76,18 @@ export function CustomerPicker({
           ) : (
             results.map((c) => (
               <button
-                key={c.email}
+                key={c.recipientId ?? c.email}
                 type="button"
                 className="flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                 onClick={() => {
-                  onChange(c.email)
+                  onChange(c.email, c.recipientId)
                   setOpen(false)
                 }}
               >
                 <span className="flex flex-col">
                   <span className="font-medium">{c.name}</span>
                   <span className="text-xs text-muted-foreground">{c.email}</span>
+                  {c.orderId && <span className="text-xs text-muted-foreground">Order {c.orderId} · {c.cardType === "REVIEW" ? "Google Review" : "Digital card"}</span>}
                 </span>
                 {value.trim().toLowerCase() === c.email && <Check className="size-4 shrink-0" />}
               </button>

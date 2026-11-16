@@ -20,10 +20,12 @@ export const PLAN_BY_CARD_TYPE: Partial<Record<CardType, (typeof NEXORA_CARD_TYP
 // drift out of sync with each other.
 export const PLAN_ACCENT: Record<string, string> = {
   custom: "#7C3AED",
+  "google-review": "#16A34A",
 }
 
 const PLAN_BADGE_CLASS: Record<string, string> = {
   custom: "border-[#7C3AED]/25 bg-gradient-to-r from-[#4F46E5]/10 via-[#7C3AED]/10 to-[#EC4899]/10 text-[#7C3AED]",
+  "google-review": "border-green-600/25 bg-green-600/10 text-green-700",
 }
 
 export function PlanTypeBadge({ cardType, className }: { cardType: CardType; className?: string }) {

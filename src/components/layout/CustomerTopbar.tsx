@@ -23,6 +23,7 @@ import { ApiError, notificationsApi } from "@/lib/api"
 import { formatTimeAgo } from "@/lib/mock-api"
 import { cn } from "@/lib/utils"
 import ThemeToggle from "@/components/layout/ThemeToggle"
+import { useGoogleReview } from "@/hooks/useGoogleReview"
 
 interface CustomerTopbarProps {
   onMenuClick?: () => void
@@ -36,6 +37,7 @@ export function CustomerTopbar({ onMenuClick, variant = "customer" }: CustomerTo
   const isPurchaserView = variant === "purchaser"
   const navigate = useNavigate()
   const customer = useCustomerAuthStore((s) => s.customer)
+  const access = useGoogleReview()
   const logout = useCustomerAuthStore((s) => s.logout)
   const [search, setSearch] = useState("")
   const queryClient = useQueryClient()
@@ -258,7 +260,7 @@ export function CustomerTopbar({ onMenuClick, variant = "customer" }: CustomerTo
               <p className="truncate text-xs font-normal text-muted-foreground">{customer?.email}</p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {!isPurchaserView && (
+            {!isPurchaserView && access.data?.digital_access && (
               <DropdownMenuItem onClick={() => navigate("/profile")}>
                 <UserCircle />
                 My Profile

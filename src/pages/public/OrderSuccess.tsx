@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/button"
 import { formatOrderNumber } from "@/lib/mock-api"
 import { useCheckoutVerificationStore } from "@/store/checkout-verification-store"
 import type { PurchaserSetupStatus } from "@/lib/api"
+import { useCustomerSessionStore } from "@/store/auth-store"
+import { queryClient } from "@/lib/query-client"
+import { customerOrderKeys } from "@/lib/customer-order-queries"
 
 const ORDER_SUCCESS_STORAGE_KEY = "vrs-order-success"
 
@@ -59,7 +62,13 @@ export default function OrderSuccess() {
   // so the next order verifies again. This page only reads router state, so
   // refreshing it never creates another order or payment.
   useEffect(() => {
-    if (state?.orderId) useCheckoutVerificationStore.getState().clear()
+    if (!state?.orderId) return
+    useCheckoutVerificationStore.getState().clear()
+    const session = useCustomerSessionStore.getState()
+    if (!session.user) return
+    void session.refresh()
+    void queryClient.invalidateQueries({ queryKey: customerOrderKeys.customer(String(session.user.id)) })
+    void queryClient.invalidateQueries({ queryKey: ["google-review", String(session.user.id)] })
   }, [state?.orderId])
 
   return (

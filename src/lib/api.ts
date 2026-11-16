@@ -22,6 +22,7 @@ import type {
   TrackingStep,
   OrderAccount,
 } from "@/types"
+import type { CheckoutRecipient, CheckoutCardType } from "@/lib/checkout-recipients"
 
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || "http://localhost:8000/api"
 
@@ -212,6 +213,7 @@ interface RequestOptions {
   // needed by authApi.me(area), which bootstrap() calls once per portal
   // regardless of which portal's page happens to be currently mounted.
   area?: SessionArea
+  signal?: AbortSignal
 }
 
 /** Network-level failure (server unreachable, DNS, offline, CORS) — distinct
@@ -240,6 +242,7 @@ async function rawRequest<T>(path: string, options: RequestOptions = {}, retried
       method,
       headers,
       body: body === undefined ? undefined : isFormData ? (body as FormData) : JSON.stringify(body),
+      signal: options.signal,
     })
   } catch {
     if (auth) assertSession(area, requestVersion)
@@ -1314,12 +1317,10 @@ export interface ApiNfcCard {
   activated_on: string | null
   purchase_date: string | null
   notes: string
+  programming_url?: string | null
 }
 
-// Shared by NfcCard inventory responses (WOODEN/CUSTOM only — an NfcCard can
-// never actually be REVIEW), by order-item responses (which can be REVIEW —
-// see Google Review Card in @/data/constants), and by the Order Card page's
-// admin-editable product catalog (Shop.tsx).
+// Shared by physical inventory, purchased items and the CMS product catalog.
 export const CARD_TYPE_MAP: Record<string, NfcCard["cardType"]> = {
   WOODEN: "Wooden",
   CUSTOM: "Custom",
@@ -1348,6 +1349,7 @@ export function toFrontendCard(c: ApiNfcCard): NfcCard {
     activatedOn: c.activated_on,
     purchaseDate: c.purchase_date ?? "",
     notes: c.notes,
+    programmingUrl: c.programming_url ?? null,
   }
 }
 
@@ -1363,8 +1365,26 @@ export const nfcApi = {
   activateAssigned: async (id: string): Promise<NfcCard> =>
     toFrontendCard(await request<ApiNfcCard>(`/nfc/cards/${id}/activate-assigned/`, { method: "POST" })),
 
-  resolve: (identifier: string) =>
-    request<{ redirect_url: string }>(`/nfc/cards/${encodeURIComponent(identifier)}/`, { auth: false }),
+  resolve: (identifier: string, source?: "qr", signal?: AbortSignal) =>
+    request<{ redirect_url: string }>(`/nfc/cards/${encodeURIComponent(identifier)}/${source === "qr" ? "?source=qr" : ""}`, { auth: false, signal }),
+}
+
+export interface GoogleReviewWorkspace {
+  eligible: boolean
+  digital_access: boolean
+  business_name: string
+  google_review_url: string
+  cards: ApiNfcCard[]
+  scan_url: string | null
+  qr_url: string | null
+  configured: boolean
+  stats: { taps: number; qr_scans: number; total: number }
+}
+
+export const googleReviewApi = {
+  get: () => request<GoogleReviewWorkspace>("/customer/google-review/"),
+  update: (body: { business_name: string; google_review_url: string }) =>
+    request<GoogleReviewWorkspace>("/customer/google-review/", { method: "PATCH", body }),
 }
 
 // ---------------------------------------------------------------------
@@ -1379,9 +1399,6 @@ interface ApiAdminNfcCard extends ApiNfcCard {
 const CARD_TYPE_REVERSE_MAP: Record<NfcCard["cardType"], string> = {
   Wooden: "WOODEN",
   Custom: "CUSTOM",
-  // Present only so this Record is exhaustive over CardType — CardFormDialog
-  // never offers "Review" as an NFC inventory card type (Google Review Card
-  // isn't a piece of NFC inventory), so this entry is never actually sent.
   Review: "REVIEW",
 }
 const CARD_STATUS_REVERSE_MAP: Record<NfcCard["status"], string> = {
@@ -1410,6 +1427,7 @@ export interface AdminCardWrite {
   purchaseDate?: string
   notes?: string
   customerEmail?: string
+  recipientId?: string | number
 }
 
 function toApiCardPayload(values: AdminCardWrite): Record<string, unknown> {
@@ -1422,6 +1440,7 @@ function toApiCardPayload(values: AdminCardWrite): Record<string, unknown> {
   if (values.purchaseDate !== undefined) body.purchase_date = values.purchaseDate || null
   if (values.notes !== undefined) body.notes = values.notes
   if (values.customerEmail !== undefined) body.customer_email = values.customerEmail
+  if (values.recipientId !== undefined) body.recipient_id = Number(values.recipientId)
   return body
 }
 
@@ -1433,16 +1452,20 @@ export interface AdminCardPage {
 }
 
 export const adminNfcApi = {
-  assignmentCustomers: async (params: { page?: number; search?: string } = {}) => {
+  assignmentCustomers: async (params: { page?: number; search?: string; cardType?: NfcCard["cardType"] } = {}) => {
     const qs = new URLSearchParams()
     if (params.page) qs.set("page", String(params.page))
     if (params.search) qs.set("search", params.search)
-    const envelope = await rawRequest<{ id: number; name: string; email: string }[]>(
+    if (params.cardType) qs.set("card_type", CARD_TYPE_REVERSE_MAP[params.cardType])
+    const envelope = await rawRequest<{ id: number; name: string; email: string; recipient_id?: number; order_id?: number; card_type?: string }[]>(
       `/admin/cards/assignment-customers/?${qs}`, { area: "admin" },
     )
     return {
       data: (envelope.data ?? []).map((customer) => ({
         id: String(customer.id), name: customer.name, email: customer.email.trim().toLowerCase(),
+        ...(customer.recipient_id == null ? {} : { recipientId: customer.recipient_id }),
+        ...(customer.order_id == null ? {} : { orderId: customer.order_id }),
+        ...(customer.card_type == null ? {} : { cardType: customer.card_type }),
       })),
       count: envelope.pagination?.count ?? 0,
     }
@@ -1484,9 +1507,9 @@ export const adminNfcApi = {
 
   remove: (id: string) => request<null>(`/nfc/admin/cards/${id}/`, { method: "DELETE" }),
 
-  assign: async (id: string, email: string): Promise<NfcCard> =>
+  assign: async (id: string, email: string, recipientId?: number | string): Promise<NfcCard> =>
     toFrontendAdminCard(
-      await request<ApiAdminNfcCard>(`/nfc/admin/cards/${id}/assign/`, { method: "POST", body: { email } }),
+      await request<ApiAdminNfcCard>(`/nfc/admin/cards/${id}/assign/`, { method: "POST", body: { email, ...(recipientId == null ? {} : { recipient_id: Number(recipientId) }) } }),
     ),
 
   activate: async (id: string): Promise<NfcCard> =>
@@ -1805,6 +1828,7 @@ interface ApiOrderRecipient {
   name: string
   email: string
   phone?: string | null
+  card_type?: string
   assigned_card_id?: number | null
   assigned_card_uid?: string | null
   assigned_card_serial?: string | null
@@ -1817,8 +1841,11 @@ interface ApiOrderRecipient {
   invitation_status?: string
   invitation_sent_at?: string | null
   created_at?: string | null
-  account_status?: "PENDING_PROCESSING" | "EMAIL_SENT" | "EMAIL_FAILED" | "ACTIVATED"
+  account_status?: AccountStatus
   account_status_display?: string
+  email_delivery_status?: EmailDeliveryStatus
+  email_delivery_status_display?: string
+  email_delivery_verified?: boolean
 }
 
 export interface ApiAdminOrder {
@@ -1865,6 +1892,9 @@ export interface ApiAdminOrder {
     email_last_error?: string
     email_sent_at?: string | null
     password_set_at?: string | null
+    email_delivery_status?: EmailDeliveryStatus
+    email_delivery_status_display?: string
+    email_delivery_verified?: boolean
   }
 }
 
@@ -1902,6 +1932,7 @@ export function toFrontendOrder(o: ApiAdminOrder): Order {
       name: recipient.name,
       email: recipient.email,
       phone: recipient.phone ?? "",
+      cardType: recipient.card_type ? CARD_TYPE_MAP[recipient.card_type] : undefined,
       assignedCardId: recipient.assigned_card_id == null ? null : String(recipient.assigned_card_id),
       assignedCardUid: recipient.assigned_card_uid ?? null,
       assignedCardSerial: recipient.assigned_card_serial ?? null,
@@ -1919,6 +1950,9 @@ export function toFrontendOrder(o: ApiAdminOrder): Order {
       createdAt: recipient.created_at ?? null,
       accountStatus: recipient.account_status ?? undefined,
       accountStatusLabel: recipient.account_status_display ?? undefined,
+      emailDeliveryStatus: recipient.email_delivery_status,
+      emailDeliveryStatusLabel: recipient.email_delivery_status_display,
+      emailDeliveryVerified: recipient.email_delivery_verified,
     })),
     amount: Number(o.amount),
     shipping: Number(o.shipping),
@@ -1953,6 +1987,9 @@ export function toFrontendOrder(o: ApiAdminOrder): Order {
       emailAttempts: o.account.email_attempts,
       emailLastError: o.account.email_last_error,
       emailSentAt: o.account.email_sent_at ?? null,
+      emailDeliveryStatus: o.account.email_delivery_status,
+      emailDeliveryStatusLabel: o.account.email_delivery_status_display,
+      emailDeliveryVerified: o.account.email_delivery_verified,
       passwordSetAt: o.account.password_set_at ?? null,
     },
   }
@@ -2786,7 +2823,7 @@ export interface CreateOrderPayload {
   purchaser_contact?: { full_name: string; phone: string }
   idempotency_key?: string
   items: { product_id: string; name: string; card_type: string; color: string; qty: number; price: number }[]
-  recipients?: { full_name: string; email: string; phone: string }[]
+  recipients?: CheckoutRecipient[]
   shipping?: number
   payment_method: "UPI" | "CARD" | "NET_BANKING" | "RAZORPAY" | "COD"
   address_id: number
@@ -3062,7 +3099,7 @@ export interface GuestCheckoutInput {
     longitude?: number | null
   }
   items: { product_id: string; qty: number }[]
-  recipients?: { full_name: string; email: string; phone: string }[]
+  recipients?: CheckoutRecipient[]
   email_verification_token: string
   phone_verification_token?: string
   session_ref: string
@@ -3118,7 +3155,7 @@ export const paymentsApi = {
   createCustomerCheckout: (
     addressId: number,
     provider: PaymentProvider = "razorpay",
-    recipients?: { full_name: string; email: string; phone: string }[],
+    recipients?: CheckoutRecipient[],
     purchaserContact?: { full_name: string; phone: string },
   ) =>
     request<RazorpayCheckout>("/payments/razorpay/checkout/", {
@@ -3139,17 +3176,19 @@ export const paymentsApi = {
 }
 
 export const recipientEmailApi = {
-  check: (email: string, buyerEmail = "") =>
+  check: (email: string, buyerEmail = "", cardType: CheckoutCardType = "CUSTOM") =>
     request<{ available: boolean; message: string }>("/payments/recipient-email-availability/", {
       method: "POST",
       body: {
         email: email.trim().toLowerCase(),
+        card_type: cardType,
         ...(buyerEmail.trim() ? { buyer_email: buyerEmail.trim().toLowerCase() } : {}),
       },
     }),
 }
 
-export type AccountStatus = "PENDING_PROCESSING" | "EMAIL_SENT" | "EMAIL_FAILED" | "ACTIVATED"
+export type AccountStatus = "PENDING_PROCESSING" | "EMAIL_QUEUED" | "EMAIL_SENT" | "EMAIL_FAILED" | "ACTIVATED"
+export type EmailDeliveryStatus = "NOT_QUEUED" | "QUEUED" | "ACCEPTED" | "FAILED" | "BOUNCED" | "UNVERIFIED"
 
 // Admin → Account Activation: accounts created automatically from paid
 // orders (accounts.CustomerOnboarding). Never carries password data.
@@ -3173,6 +3212,9 @@ export interface ApiCustomerOnboarding {
   email_last_error: string
   email_sent_at: string | null
   credentials_issued_at: string | null
+  email_delivery_status?: EmailDeliveryStatus
+  email_delivery_status_display?: string
+  email_delivery_verified?: boolean
 }
 
 export const adminOnboardingApi = {

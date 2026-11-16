@@ -20,10 +20,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ErrorState } from "@/components/customer/ErrorState"
-import { useCustomerAuthStore, useIsRecipient } from "@/store/auth-store"
+import { useCustomerAuthStore } from "@/store/auth-store"
 import { useThemeStore } from "@/store/theme-store"
 import { ApiError, authApi, customerSettingsApi, profileApi } from "@/lib/api"
 import { useEnsuredProfile } from "@/hooks/use-ensured-profile"
+import { useGoogleReview } from "@/hooks/useGoogleReview"
 import type { ThemeMode } from "@/types"
 
 const THEME_OPTIONS: { value: ThemeMode; label: string; icon: typeof Sun; description: string }[] = [
@@ -255,17 +256,17 @@ function PreferencesCard() {
 export default function CustomerSettings() {
   const authCustomer = useCustomerAuthStore((s) => s.customer)
   const { profile } = useEnsuredProfile()
-  // Purchaser-only accounts have no digital profile: the name (stored via
-  // the profile API) is shown read-only and profile privacy is hidden.
-  const isRecipient = useIsRecipient()
+  // Only digital owners edit a digital profile. Review-only recipients and
+  // purchasers keep their account identity, password and preferences here.
+  const digitalAccess = useGoogleReview().data?.digital_access === true
   const queryClient = useQueryClient()
   const { mode, setMode } = useThemeStore()
 
-  const [fullName, setFullName] = useState("")
+  const [fullName, setFullName] = useState(authCustomer?.name ?? "")
   useEffect(() => {
     if (profile) setFullName(profile.fullName)
-    else if (!isRecipient && authCustomer) setFullName(authCustomer.name)
-  }, [profile, isRecipient, authCustomer])
+    else if (authCustomer) setFullName(authCustomer.name)
+  }, [profile, authCustomer])
 
   const [pwOpen, setPwOpen] = useState(false)
   const [currentPw, setCurrentPw] = useState("")
@@ -325,7 +326,7 @@ export default function CustomerSettings() {
         <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="settings-name">Full Name</Label>
-            <Input id="settings-name" value={fullName} onChange={(e) => setFullName(e.target.value)} disabled={!isRecipient} />
+            <Input id="settings-name" value={fullName} onChange={(e) => setFullName(e.target.value)} disabled={!digitalAccess || !profile} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="settings-email">Email</Label>
@@ -336,8 +337,8 @@ export default function CustomerSettings() {
             <p className="text-xs text-muted-foreground">Contact support to change your login email.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
-            {isRecipient && (
-              <Button onClick={() => saveNameMutation.mutate()} disabled={saveNameMutation.isPending}>
+            {digitalAccess && (
+              <Button onClick={() => saveNameMutation.mutate()} disabled={!profile || saveNameMutation.isPending}>
                 {saveNameMutation.isPending ? "Saving..." : "Save Changes"}
               </Button>
             )}
@@ -385,7 +386,7 @@ export default function CustomerSettings() {
         </CardContent>
       </Card>
 
-      {isRecipient && <PrivacySettingsCard />}
+      {digitalAccess && <PrivacySettingsCard />}
       <PreferencesCard />
 
       <Card className="rounded-2xl border-destructive/40">

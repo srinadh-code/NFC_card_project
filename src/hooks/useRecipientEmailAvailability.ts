@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { ApiError, recipientEmailApi } from "@/lib/api"
-import type { CheckoutRecipient } from "@/lib/checkout-recipients"
+import { recipientAllocationFamily, type CheckoutRecipient, type CheckoutCardType } from "@/lib/checkout-recipients"
 
 export type RecipientEmailStatus =
   | { email: string; state: "idle" | "checking" | "available" }
@@ -13,14 +13,16 @@ export function recipientEmailsAreAvailable(statuses: RecipientEmailStatus[]): b
 
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 const DEBOUNCE_MS = 600
+const ELIGIBILITY_FRESH_MS = 30_000
 
 type EmailCheck = {
   status: RecipientEmailStatus
   promise: Promise<RecipientEmailStatus>
+  expiresAt: number
 }
 
-function cacheKey(email: string, buyerEmail: string): string {
-  return JSON.stringify([email, buyerEmail])
+function cacheKey(email: string, buyerEmail: string, cardType: CheckoutCardType): string {
+  return JSON.stringify([email, buyerEmail, cardType])
 }
 
 function normalizeEmail(email: string): string {
@@ -37,13 +39,14 @@ function initialStatus(email: string): RecipientEmailStatus {
 
 export function useRecipientEmailAvailability(recipients: CheckoutRecipient[], buyerEmail = "") {
   const normalizedEmails = recipients.map((recipient) => normalizeEmail(recipient.email))
-  const emailKey = JSON.stringify(normalizedEmails)
+  const cardTypes = recipients.map((recipient) => recipient.card_type ?? "CUSTOM")
+  const emailKey = JSON.stringify(normalizedEmails.map((email, index) => ({ email, cardType: cardTypes[index] })))
   const buyerEmailValue = normalizeEmail(buyerEmail)
   const normalizedBuyerEmail = buyerEmailValue.length <= 254 && EMAIL_PATTERN.test(buyerEmailValue)
     ? buyerEmailValue
     : ""
-  // Eligibility depends on the buyer as well as the recipient. Keep both
-  // completed results and pending requests when another recipient changes.
+  // Share requests across unchanged rows, but recheck eligibility after a
+  // short interval because allocations and reservations can be released.
   const checks = useRef(new Map<string, EmailCheck>())
   const rateLimitUntil = useRef(0)
   const [results, setResults] = useState<Record<string, RecipientEmailStatus>>({})
@@ -51,10 +54,9 @@ export function useRecipientEmailAvailability(recipients: CheckoutRecipient[], b
 
   useEffect(() => {
     let cancelled = false
-    const emails = JSON.parse(emailKey) as string[]
-    const duplicates = new Set(
-      emails.filter((email, index) => email && emails.indexOf(email) !== index),
-    )
+    const slots = JSON.parse(emailKey) as { email: string; cardType: CheckoutCardType }[]
+    const identityKeys = slots.map(({ email, cardType }) => JSON.stringify([email, recipientAllocationFamily(cardType)]))
+    const duplicates = new Set(identityKeys.filter((key, index) => identityKeys.indexOf(key) !== index))
     const timers: ReturnType<typeof setTimeout>[] = []
     function publish(key: string, status: RecipientEmailStatus) {
       if (cancelled) return
@@ -63,16 +65,30 @@ export function useRecipientEmailAvailability(recipients: CheckoutRecipient[], b
 
     function subscribe(key: string, check: EmailCheck) {
       publish(key, check.status)
-      void check.promise.then((status) => publish(key, status))
+      void check.promise.then((status) => {
+        if (cancelled) return
+        publish(key, status)
+        if (!Number.isFinite(check.expiresAt)) return
+        timers.push(setTimeout(() => {
+          if (cancelled || checks.current.get(key) !== check) return
+          checks.current.delete(key)
+          setResults((current) => Object.fromEntries(Object.entries(current).filter(([entry]) => entry !== key)))
+          setRetryKey((value) => value + 1)
+        }, Math.max(0, check.expiresAt - Date.now())))
+      })
     }
 
-    emails.forEach((email) => {
-      if (!email || duplicates.has(email) || initialStatus(email).state === "invalid") return
-      const key = cacheKey(email, normalizedBuyerEmail)
+    slots.forEach(({ email, cardType }, index) => {
+      if (!email || duplicates.has(identityKeys[index]) || initialStatus(email).state === "invalid") return
+      const key = cacheKey(email, normalizedBuyerEmail, cardType)
       const previous = checks.current.get(key)
-      if (previous) {
+      if (previous && previous.expiresAt > Date.now()) {
         subscribe(key, previous)
         return
+      }
+      if (previous) {
+        checks.current.delete(key)
+        setResults((current) => Object.fromEntries(Object.entries(current).filter(([entry]) => entry !== key)))
       }
 
       const timer = setTimeout(() => {
@@ -83,7 +99,8 @@ export function useRecipientEmailAvailability(recipients: CheckoutRecipient[], b
 
         const check: EmailCheck = {
           status: { email, state: "checking" },
-          promise: recipientEmailApi.check(email, normalizedBuyerEmail).then(
+          expiresAt: Infinity,
+          promise: recipientEmailApi.check(email, normalizedBuyerEmail, cardType).then(
             (result): RecipientEmailStatus => result.available
               ? { email, state: "available" }
               : { email, state: "allocated", message: result.message },
@@ -102,7 +119,10 @@ export function useRecipientEmailAvailability(recipients: CheckoutRecipient[], b
         checks.current.set(key, check)
         // Complete the cache even if this effect was cleaned up while the
         // request was pending; the current effect can share the same promise.
-        void check.promise.then((status) => { check.status = status })
+        void check.promise.then((status) => {
+          check.status = status
+          check.expiresAt = status.state === "available" || status.state === "allocated" ? Date.now() + ELIGIBILITY_FRESH_MS : Infinity
+        })
         subscribe(key, check)
       }, DEBOUNCE_MS)
       timers.push(timer)
@@ -114,13 +134,15 @@ export function useRecipientEmailAvailability(recipients: CheckoutRecipient[], b
     }
   }, [emailKey, normalizedBuyerEmail, retryKey])
 
-  const statuses = normalizedEmails.map((email) => {
-    const duplicate = email && normalizedEmails.indexOf(email) !== normalizedEmails.lastIndexOf(email)
+  const statuses = normalizedEmails.map((email, index) => {
+    const family = recipientAllocationFamily(cardTypes[index])
+    const duplicate = email && normalizedEmails.some((other, slot) => slot !== index && other === email && recipientAllocationFamily(cardTypes[slot]) === family)
     if (duplicate) {
       return { email, state: "duplicate" as const, message: "Use a different email address for each NFC card." }
     }
     const initial = initialStatus(email)
-    const result = results[cacheKey(email, normalizedBuyerEmail)]
+    const key = cacheKey(email, normalizedBuyerEmail, cardTypes[index])
+    const result = results[key]
     return result?.email === email ? result : initial
   })
   const allAvailable = recipientEmailsAreAvailable(statuses)
@@ -133,8 +155,9 @@ export function useRecipientEmailAvailability(recipients: CheckoutRecipient[], b
       // cooldown. Row retries wait; the effect also enforces the IP cooldown.
       if (email !== undefined && Date.now() < rateLimitUntil.current) return
       const keys = normalizedEmails
-        .filter((value) => email === undefined || value === normalizeEmail(email))
-        .map((value) => cacheKey(value, normalizedBuyerEmail))
+        .map((value, index) => ({ email: value, cardType: cardTypes[index] }))
+        .filter((value) => email === undefined || value.email === normalizeEmail(email))
+        .map((value) => cacheKey(value.email, normalizedBuyerEmail, value.cardType))
         .filter((key) => checks.current.get(key)?.status.state !== "checking")
       if (!keys.length) return
       keys.forEach((key) => checks.current.delete(key))

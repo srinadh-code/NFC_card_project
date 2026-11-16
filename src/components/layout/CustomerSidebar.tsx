@@ -12,12 +12,14 @@ import {
   MessageSquareQuote,
   QrCode,
   Settings,
+  Star,
   ShoppingBag,
   UserCircle,
   Zap,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useCustomerAuthStore, useIsPurchaser, useIsRecipient } from "@/store/auth-store"
+import { useCustomerAuthStore, useIsPurchaser } from "@/store/auth-store"
+import { useGoogleReview } from "@/hooks/useGoogleReview"
 import { BrandMark } from "@/components/layout/BrandMark"
 
 // recipientOnly: Customer Dashboard / digital-profile pages, hidden for a
@@ -45,10 +47,10 @@ interface CustomerSidebarProps {
 export function CustomerSidebar({ onNavigate }: CustomerSidebarProps) {
   const navigate = useNavigate()
   const logout = useCustomerAuthStore((s) => s.logout)
-  const isRecipient = useIsRecipient()
+  const access = useGoogleReview()
   // Same login, second dashboard — for accounts that also bought cards.
   const isPurchaser = useIsPurchaser()
-  const navItems = NAV_ITEMS.filter((item) => isRecipient || !("recipientOnly" in item && item.recipientOnly))
+  const navItems = NAV_ITEMS.filter((item) => access.data?.digital_access || !("recipientOnly" in item && item.recipientOnly))
 
   return (
     <div className="flex h-full flex-col bg-[#0F172A] text-white">
@@ -65,6 +67,7 @@ export function CustomerSidebar({ onNavigate }: CustomerSidebarProps) {
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
+        {access.data?.eligible && <NavLink to="/google-review" onClick={onNavigate} className={({ isActive }) => cn("flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium", isActive ? "bg-gradient-brand text-white" : "text-slate-300 hover:bg-[#1E293B]")}><Star className="size-4.5" />Google Review</NavLink>}
         {navItems.map((item) => (
           <NavLink
             key={item.to}

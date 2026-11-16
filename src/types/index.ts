@@ -8,9 +8,7 @@ export type CustomerStatus = "Active" | "Inactive"
 export type CardStatus = "Active" | "Assigned" | "Inactive" | "Blocked" | "Lost" | "Unassigned"
 // Classic and Premium are retired — deleted from the backend enum and
 // purged from existing records, so they're no longer valid values here.
-// "Review" is the Google Review Card — a public-site-only product, not an
-// NfcCard inventory type (see orders.serializers.GOOGLE_REVIEW_CARD_TYPE on
-// the backend), used only on OrderItem/CartLine, never on NfcCard.
+// Review is a physical Google Review card with a separate destination.
 export type CardType = "Wooden" | "Custom" | "Review"
 export type ProfileStatus = "Active" | "Suspended"
 
@@ -70,6 +68,7 @@ export interface NfcCard {
   activatedOn: string | null
   purchaseDate: string
   notes?: string
+  programmingUrl?: string | null
 }
 
 export interface OrderItem {
@@ -120,6 +119,7 @@ export interface OrderRecipient {
   name: string
   email: string
   phone?: string
+  cardType?: CardType
   assignedCardId?: string | null
   assignedCardUid?: string | null
   assignedCardSerial?: string | null
@@ -132,8 +132,11 @@ export interface OrderRecipient {
   invitationStatus?: string
   invitationSentAt?: string | null
   createdAt?: string | null
-  accountStatus?: "PENDING_PROCESSING" | "EMAIL_SENT" | "EMAIL_FAILED" | "ACTIVATED"
+  accountStatus?: "PENDING_PROCESSING" | "EMAIL_QUEUED" | "EMAIL_SENT" | "EMAIL_FAILED" | "ACTIVATED"
   accountStatusLabel?: string
+  emailDeliveryStatus?: "NOT_QUEUED" | "QUEUED" | "ACCEPTED" | "FAILED" | "BOUNCED" | "UNVERIFIED"
+  emailDeliveryStatusLabel?: string
+  emailDeliveryVerified?: boolean
 }
 
 export interface Order {
@@ -185,7 +188,7 @@ export interface OrderDelivery {
 
 // The customer account behind an order (accounts.CustomerOnboarding).
 export interface OrderAccount {
-  status: "PENDING_PROCESSING" | "EMAIL_SENT" | "EMAIL_FAILED" | "ACTIVATED"
+  status: "PENDING_PROCESSING" | "EMAIL_QUEUED" | "EMAIL_SENT" | "EMAIL_FAILED" | "ACTIVATED"
   statusLabel: string
   onboardingId: number | null
   createdFromOrder: boolean
@@ -193,6 +196,9 @@ export interface OrderAccount {
   emailLastError?: string
   emailSentAt?: string | null
   passwordSetAt?: string | null
+  emailDeliveryStatus?: "NOT_QUEUED" | "QUEUED" | "ACCEPTED" | "FAILED" | "BOUNCED" | "UNVERIFIED"
+  emailDeliveryStatusLabel?: string
+  emailDeliveryVerified?: boolean
 }
 
 export interface Transaction {

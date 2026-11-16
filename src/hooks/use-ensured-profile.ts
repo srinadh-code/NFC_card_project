@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCustomerAuthStore, useIsRecipient } from "@/store/auth-store"
 import { profileApi } from "@/lib/api"
+import { useGoogleReview } from "@/hooks/useGoogleReview"
 
 /**
  * Reads the signed-in customer's Profile from the real backend. The backend
@@ -16,6 +17,7 @@ export function useEnsuredProfile() {
   // Only card recipients have a digital profile; a purchaser-only account
   // never requests (or creates) one — the backend refuses it anyway.
   const isRecipient = useIsRecipient()
+  const access = useGoogleReview()
   const queryClient = useQueryClient()
   const [stuck, setStuck] = useState(false)
 
@@ -31,7 +33,7 @@ export function useEnsuredProfile() {
         throw err
       }
     },
-    enabled: Boolean(customer) && isRecipient,
+    enabled: Boolean(customer) && isRecipient && access.data?.digital_access === true,
     retry: 1,
   })
 

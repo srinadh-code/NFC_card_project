@@ -235,7 +235,7 @@ test("historical orders without recipients show the existing empty message inste
   assert.ok(html.includes("Recipient details were not recorded for this historical order."))
   assert.ok(!html.includes("kavya@example.com"))
   assert.ok(!html.includes("srinadh@example.com"))
-  assert.match(html, /colSpan="5"|colspan="5"/)
+  assert.match(html, /colSpan="6"|colspan="6"/)
 })
 
 test("selected-order dialog uses its detail cache instead of merging the purchaser's list recipients", () => {

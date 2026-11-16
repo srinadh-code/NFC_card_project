@@ -95,7 +95,7 @@ test("field validation errors are visible on the correct recipient", () => {
 
 test("recipient warning and not-checked email state are shown", () => {
   const html = render(1)
-  assert.ok(html.includes("Important: Please double-check the recipient&#x27;s full name, email address and phone number before continuing. These details will be used for NFC card allocation and digital profile creation."))
+  assert.ok(html.includes("Important: Please double-check the recipient&#x27;s full name, email address and phone number before continuing. These details allocate each product to its owner. Digital profile and Google Review cards have separate allocations."))
   assert.ok(html.includes("bg-blue-50"))
   assert.ok(html.includes("Email availability not checked yet."))
   assert.ok(!html.includes("Email not verified"))
@@ -146,6 +146,22 @@ test("availability API surfaces network failures for inline retry handling", asy
   } finally {
     globalThis.fetch = originalFetch
   }
+})
+
+test("an allocated recipient row can recheck eligibility without changing the email", () => {
+  const calls = []
+  const email = "owner@example.com"
+  const tree = RecipientFields({ count: 1, recipients: [{ full_name: "Owner", email, phone: "9876543210" }], errors: [], emailStatuses: [{ email, state: "allocated", message: "Already allocated" }], onRetryEmailCheck: (value) => calls.push(value), onChange() {} })
+  function find(node) {
+    if (Array.isArray(node)) return node.map(find).find(Boolean)
+    if (!node || typeof node !== "object") return undefined
+    if (node.type === "button" && node.props.children === "Check again") return node
+    return find(node.props?.children)
+  }
+  const button = find(tree)
+  assert.ok(button, "Allocated rows expose Check again")
+  button.props.onClick()
+  assert.deepEqual(calls, [email])
 })
 
 test("rate-limited email checks show a paused check and disabled retry countdown", () => {

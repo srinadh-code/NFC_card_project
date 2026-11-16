@@ -8,6 +8,9 @@ import { ScrollToTop } from "@/components/ScrollToTop"
 import { useAdminSessionStore, useCustomerSessionStore } from "@/store/auth-store"
 import { usePublicSettings } from "@/hooks/usePublicSettings"
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute"
+import { DigitalProductRoute } from "@/components/auth/DigitalProductRoute"
+import GoogleReview from "@/pages/customer/GoogleReview"
+import NfcRedirect from "@/pages/NfcRedirect"
 import PublicLayout from "@/components/layout/PublicLayout"
 import AuthLayout from "@/components/layout/AuthLayout"
 import AdminLayout from "@/components/layout/AdminLayout"
@@ -83,6 +86,7 @@ const DEFAULT_FAVICON_HREF = "/favicon.svg"
 function App() {
   const bootstrapAdmin = useAdminSessionStore((s) => s.bootstrap)
   const bootstrapCustomer = useCustomerSessionStore((s) => s.bootstrap)
+  const refreshCustomer = useCustomerSessionStore((s) => s.refresh)
   const checkoutCustomerId = useCustomerSessionStore((s) => s.user?.id)
   const checkoutHydrated = useCustomerSessionStore((s) => s.hydrated)
   const { settings } = usePublicSettings()
@@ -94,6 +98,9 @@ function App() {
   useEffect(() => {
     bootstrapAdmin()
     bootstrapCustomer()
+    const refreshOnFocus = () => { void refreshCustomer() }
+    window.addEventListener("focus", refreshOnFocus)
+    return () => window.removeEventListener("focus", refreshOnFocus)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -191,8 +198,10 @@ function App() {
           {/* Customer Dashboard and digital profile — card recipients only. A
               purchaser-only account is redirected to the matching Purchaser
               Dashboard page instead (ProtectedRoute's requireRecipient). */}
-          <Route element={<ProtectedRoute role="CUSTOMER" requireRecipient />}>
-            <Route element={<CustomerLayout />}>
+          <Route element={<CustomerLayout />}>
+            <Route path="/google-review" element={<GoogleReview />} />
+            <Route element={<ProtectedRoute role="CUSTOMER" requireRecipient />}>
+              <Route element={<DigitalProductRoute />}>
               <Route path="/dashboard" element={<CustomerDashboard />} />
               <Route path="/my-card" element={<CustomerMyCard />} />
               <Route path="/profile" element={<CustomerProfile />} />
@@ -202,6 +211,7 @@ function App() {
               <Route path="/analytics" element={<CustomerAnalytics />} />
               <Route path="/enquiries" element={<CustomerEnquiries />} />
               <Route path="/activity" element={<CustomerActivity />} />
+              </Route>
               <Route path="/orders" element={<CustomerOrders />} />
               <Route path="/addresses" element={<CustomerAddresses />} />
               <Route path="/testimonials" element={<MyTestimonials />} />
@@ -213,6 +223,7 @@ function App() {
 
         {/* Public digital business card profile */}
         <Route path="/u/:username" element={<PublicProfile />} />
+        <Route path="/nfc/:identifier" element={<NfcRedirect />} />
 
         <Route path="*" element={<NotFound />} />
       </Routes>

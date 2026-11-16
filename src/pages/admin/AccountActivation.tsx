@@ -2,7 +2,6 @@ import { useState } from "react"
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Mail, Search } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,18 +9,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TablePagination } from "@/components/admin/TablePagination"
-import { AccountStatusBadge } from "@/components/admin/AccountStatusBadge"
-import { ApiError, adminOnboardingApi, type ApiCustomerOnboarding } from "@/lib/api"
+import { AccountStatusBadge, EmailDeliveryBadge } from "@/components/admin/AccountStatusBadge"
+import { ApiError, adminOnboardingApi } from "@/lib/api"
 import { formatDate, formatDateTime } from "@/lib/mock-api"
 
 const PAGE_SIZE = 10
-
-const EMAIL_LABEL: Record<ApiCustomerOnboarding["email_status"], string> = {
-  PENDING: "Email Pending",
-  SENT: "Email Sent",
-  FAILED: "Email Failed",
-}
-const EMAIL_VARIANT = { PENDING: "secondary", SENT: "success", FAILED: "destructive" } as const
 
 function titleCase(value: string | null) {
   if (!value) return "—"
@@ -63,8 +55,11 @@ export default function AdminAccountActivation() {
 
   const resend = useMutation({
     mutationFn: (id: number) => adminOnboardingApi.resend(id),
-    onSuccess: () => {
-      toast.success("A new activation link is being emailed to the customer.")
+    onSuccess: (updated) => {
+      if (updated.email_delivery_status === "FAILED" || updated.email_delivery_status === "BOUNCED" || updated.email_status === "FAILED") toast.error("The setup email failed. Check the email status before retrying.")
+      else if (updated.email_delivery_status === "UNVERIFIED") toast.info("Email outcome unverified. Check provider records before retrying.")
+      else if (updated.email_delivery_status === "ACCEPTED" || updated.email_status === "SENT") toast.success("Accepted by email service; delivery unverified.")
+      else toast.info("Setup email queued; delivery unverified.")
       queryClient.invalidateQueries({ queryKey: ["admin-onboarding"] })
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't resend the activation email."),
@@ -102,7 +97,8 @@ export default function AdminAccountActivation() {
               <SelectContent>
                 <SelectItem value="ALL">All account statuses</SelectItem>
                 <SelectItem value="PENDING_PROCESSING">Pending Processing</SelectItem>
-                <SelectItem value="EMAIL_SENT">Activation Email Sent</SelectItem>
+                <SelectItem value="EMAIL_QUEUED">Email queued</SelectItem>
+                <SelectItem value="EMAIL_SENT">Email accepted; delivery unverified</SelectItem>
                 <SelectItem value="ACTIVATED">Account Activated</SelectItem>
               </SelectContent>
             </Select>
@@ -112,7 +108,7 @@ export default function AdminAccountActivation() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">All email statuses</SelectItem>
-                <SelectItem value="SENT">Email Sent</SelectItem>
+                <SelectItem value="SENT">Accepted; delivery unverified</SelectItem>
                 <SelectItem value="FAILED">Email Failed</SelectItem>
                 <SelectItem value="PENDING">Email Pending</SelectItem>
               </SelectContent>
@@ -172,9 +168,9 @@ export default function AdminAccountActivation() {
                       </TableCell>
                       <TableCell>
                         {r.credentials_issued_at ? (
-                          <Badge variant={EMAIL_VARIANT[r.email_status]}>{EMAIL_LABEL[r.email_status]}</Badge>
+                          <EmailDeliveryBadge status={r.email_delivery_status ?? (r.email_status === "SENT" ? "ACCEPTED" : r.email_status === "FAILED" ? "FAILED" : "QUEUED")} label={r.email_delivery_status_display} />
                         ) : (
-                          <span className="text-xs text-muted-foreground">Sent when the order moves to Processing</span>
+                          <span className="text-xs text-muted-foreground">No setup email has been queued.</span>
                         )}
                         {r.email_status === "FAILED" && r.email_last_error && (
                           <p className="mt-1 text-xs text-muted-foreground">

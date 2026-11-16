@@ -26,6 +26,7 @@ interface SessionState {
   hydrated: boolean
   setUser: (user: ApiUser | null) => void
   bootstrap: () => Promise<void>
+  refresh: () => Promise<void>
 }
 
 /**
@@ -57,6 +58,19 @@ function createSessionStore(area: SessionArea, persistName: string) {
             }
           }
           set({ user })
+        },
+        refresh: async () => {
+          if (!getAccessToken(area)) return
+          const version = getSessionVersion(area)
+          try {
+            const user = await authApi.me(area)
+            if (getSessionVersion(area) !== version) return
+            get().setUser(user)
+          } catch {
+            // A background role refresh must not log a user out because
+            // the network is temporarily unavailable. Real 401 handling
+            // remains with the existing API client.
+          }
         },
         bootstrap: async () => {
           const version = getSessionVersion(area)
