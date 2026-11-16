@@ -86,7 +86,7 @@ export default function OrderSuccess() {
       </p>
       {state?.purchaserSetup === "required" && <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
         Check your inbox for a separate purchaser account setup link. Create your password to sign in and view this purchase in My Orders.
-        NFC recipient account-ready emails follow the recipients&apos; order processing.
+        This also applies when you are a card recipient. Digital NFC and Google Review recipients receive their account-ready emails when the order is processed.
       </p>}
       {state?.purchaserSetup === "recipient" && <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
         You are also a card recipient. Your account-ready email will arrive when your order is processed. Use that link to set your password, then sign in to My Orders.

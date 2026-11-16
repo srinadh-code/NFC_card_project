@@ -97,7 +97,7 @@ export function CardFormDialog({
         </DialogHeader>
 
         <div className="grid max-h-[65vh] grid-cols-1 gap-4 overflow-y-auto px-1 py-1 sm:grid-cols-2">
-          {card?.cardType === "Review" && card.customerId && card.status !== "Unassigned" && <div className="sm:col-span-2"><ReviewCardProgrammingLink url={card.programmingUrl} /></div>}
+          {card?.cardType === "Review" && card.customerId && card.status !== "Unassigned" && <div className="sm:col-span-2"><ReviewCardProgrammingLink url={card.programmingUrl} showQr={card.status === "Assigned" || card.status === "Active"} /></div>}
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="nf-uid">Card UID</Label>
             <Input

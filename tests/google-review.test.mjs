@@ -5,11 +5,12 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { MemoryRouter, Routes, Route } from "react-router-dom"
 import { createServer } from "vite"
+import QRCode from "qrcode"
 import { associateRecipientProducts, validateRecipients } from "../src/lib/checkout-recipients.ts"
 import { safeNfcDestination } from "../src/lib/nfc-destination.ts"
 import { safeProgrammingUrl } from "../src/lib/programming-url.ts"
 
-let vite, api, auth, GoogleReview, CustomerSettings, CustomerSidebar, PurchaserSidebar, DigitalProductRoute, useEnsuredProfile, CopyLink, CardFormDialog, AccountActivation, AccountStatusBadge, EmailDeliveryBadge, OrderSuccess, sharedQueryClient
+let vite, api, auth, GoogleReview, CustomerSettings, CustomerSidebar, PurchaserSidebar, DigitalProductRoute, useEnsuredProfile, CopyLink, ReviewCardProgrammingLink, CardFormDialog, AccountActivation, AccountStatusBadge, EmailDeliveryBadge, OrderSuccess, sharedQueryClient
 const originals = new Map()
 const workspace = (patch = {}) => ({
   eligible: true, digital_access: false, business_name: "Real Business", google_review_url: "https://search.google.com/local/writereview?placeid=ChIJTest",
@@ -28,8 +29,9 @@ before(async () => {
     name: "review-ui-test-boundaries", enforce: "pre",
     transform(code, id) {
       const path = id.replaceAll("\\", "/")
-      if (path.endsWith("/pages/customer/GoogleReview.tsx")) return code.replace("useEffect, useState,", "useEffect, useState as actualUseState,") + `\nconst useState = initial => actualUseState(globalThis.__googleReviewDraft && initial === globalThis.__googleReviewDraft.saved ? globalThis.__googleReviewDraft.draft : initial);`
+      if (path.endsWith("/pages/customer/GoogleReview.tsx")) return code.replace("useEffect, useState,", "useEffect, useState as actualUseState,").replace("useMutation, useQueryClient", "useMutation as actualUseMutation, useQueryClient") + `\nconst useState = initial => actualUseState(globalThis.__googleReviewDraft && initial === globalThis.__googleReviewDraft.saved ? globalThis.__googleReviewDraft.draft : initial);\nconst useMutation = options => { const result = actualUseMutation(options); return globalThis.__googleReviewMutationError ? { ...result, isError: true, error: globalThis.__googleReviewMutationError } : result; };`
       if (path.endsWith("/CardFormDialog.tsx")) return code.replace('"@/components/ui/dialog"', '"virtual:review-card-dialog-test"')
+      if (path.endsWith("/ReviewCardProgrammingLink.tsx")) return code.replace("import { useEffect, useState }", "import { useEffect as actualUseEffect, useState as actualUseState }") + `\nconst useState = initial => globalThis.__programmingHooks ? [initial, () => {}] : actualUseState(initial);\nconst useEffect = (...args) => globalThis.__programmingHooks ? globalThis.__programmingHooks.push(args[0]) : actualUseEffect(...args);`
       if (path.endsWith("/pages/customer/Settings.tsx")) return code.replace('"@/store/theme-store"', '"virtual:review-settings-theme-test"')
       if (path.endsWith("/pages/public/OrderSuccess.tsx")) return code.replace("import { useEffect }", "import { useEffect as actualUseEffect }") + `\nconst useEffect = (effect, dependencies) => globalThis.__orderSuccessEffects ? globalThis.__orderSuccessEffects.push(effect) : actualUseEffect(effect, dependencies);`
     },
@@ -50,6 +52,7 @@ before(async () => {
   DigitalProductRoute = (await vite.ssrLoadModule("/src/components/auth/DigitalProductRoute.tsx")).DigitalProductRoute
   useEnsuredProfile = (await vite.ssrLoadModule("/src/hooks/use-ensured-profile.ts")).useEnsuredProfile
   CopyLink = (await vite.ssrLoadModule("/src/components/common/CopyLink.tsx")).CopyLink
+  ReviewCardProgrammingLink = (await vite.ssrLoadModule("/src/components/common/ReviewCardProgrammingLink.tsx")).ReviewCardProgrammingLink
   CardFormDialog = (await vite.ssrLoadModule("/src/components/admin/CardFormDialog.tsx")).CardFormDialog
   PurchaserSidebar = (await vite.ssrLoadModule("/src/components/layout/PurchaserSidebar.tsx")).PurchaserSidebar
   AccountActivation = (await vite.ssrLoadModule("/src/pages/admin/AccountActivation.tsx")).default
@@ -61,6 +64,8 @@ before(async () => {
 after(async () => {
   await vite?.close()
   delete globalThis.__googleReviewDraft
+  delete globalThis.__googleReviewMutationError
+  delete globalThis.__programmingHooks
   delete globalThis.__orderSuccessEffects
   sharedQueryClient?.clear()
   for (const [key, descriptor] of originals) {
@@ -75,7 +80,7 @@ function signIn(id = 7, roles = ["RECIPIENT"]) {
   auth.useCustomerSessionStore.setState({ user, hydrated: true })
   Object.assign(auth.useCustomerSessionStore.getInitialState(), { user, hydrated: true })
 }
-beforeEach(() => { signIn(); delete globalThis.__googleReviewDraft; delete globalThis.__orderSuccessEffects; sharedQueryClient.clear(); globalThis.fetch = () => { throw new Error("Unexpected real request") } })
+beforeEach(() => { signIn(); delete globalThis.__googleReviewDraft; delete globalThis.__googleReviewMutationError; delete globalThis.__orderSuccessEffects; sharedQueryClient.clear(); globalThis.fetch = () => { throw new Error("Unexpected real request") } })
 
 function render(component, data, key = "7") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: Infinity }, mutations: { gcTime: 0 } } })
@@ -110,19 +115,45 @@ test("review-only workspace shows real settings, pending physical assignment and
   assert.doesNotMatch(html, /Profile Templates|Google Review Card Active/)
 })
 
-test("QR actions require an active assigned card and configured review destination", () => {
-  const links = { scan_url: "http://localhost:5173/nfc/REVIEW-UID", qr_url: "http://localhost:5173/nfc/REVIEW-UID?source=qr" }
-  const assigned = render(GoogleReview, workspace({ ...links, cards: [card()] }))
+test("QR actions require a saved destination and actual assigned card public URL, with activation explained", () => {
+  const programming = "https://cards.example/nfc/REVIEW-UID"
+  const links = { scan_url: programming, qr_url: `${programming}?source=qr` }
+  const assigned = render(GoogleReview, workspace({ ...links, cards: [card({ programming_url: programming })] }))
   assert.match(assigned, /Activate card/)
-  assert.doesNotMatch(assigned, />PNG</)
-  const active = render(GoogleReview, workspace({ ...links, cards: [card({ status: "ACTIVE" })] }))
+  assert.match(assigned, />PNG</)
+  assert.match(assigned, /Activate this assigned card before customers scan/)
+  const active = render(GoogleReview, workspace({ ...links, cards: [card({ status: "ACTIVE", programming_url: programming })] }))
   assert.match(active, />PNG</)
   assert.match(active, />SVG</)
   assert.match(active, />PDF</)
   assert.match(active, /nfc\/REVIEW-UID\?source=qr/)
   assert.doesNotMatch(active, /Activate card/)
-  for (const status of ["BLOCKED", "LOST", "INACTIVE"]) assert.doesNotMatch(render(GoogleReview, workspace({ ...links, cards: [card({ status })] })), />PNG</)
-  assert.doesNotMatch(render(GoogleReview, workspace({ ...links, configured: false, cards: [card({ status: "ACTIVE" })] })), />PNG</)
+  for (const status of ["BLOCKED", "LOST", "INACTIVE", "UNASSIGNED"]) assert.doesNotMatch(render(GoogleReview, workspace({ ...links, cards: [card({ status, programming_url: programming })] })), />PNG</)
+  assert.doesNotMatch(render(GoogleReview, workspace({ ...links, configured: false, cards: [card({ status: "ACTIVE", programming_url: programming })] })), />PNG</)
+})
+
+test("review validation displays the backend field explanation beside the URL and preserves saved settings", () => {
+  const explanation = "Use your direct Google review link. A Google Maps business listing does not open the review form."
+  globalThis.__googleReviewMutationError = new api.ApiError("Invalid input.", 400, { google_review_url: [explanation] })
+  const html = render(GoogleReview, workspace())
+  assert.ok(html.includes(explanation))
+  assert.match(html, /id="google-review-url"[^>]*aria-invalid="true"[^>]*aria-describedby="google-review-url-error"/)
+  assert.match(html, /id="google-review-url-error"[^>]*role="alert"/)
+  assert.doesNotMatch(html, />Invalid input\.</)
+  assert.ok(html.includes(`href="${workspace().google_review_url}"`))
+  assert.match(html, /Ask for reviews/)
+})
+
+test("QR and copy actions never use localhost, missing assignment URLs, or another card's workspace URL", () => {
+  for (const programming of [null, "http://localhost:5173/nfc/REVIEW-UID", "https://127.0.0.1/nfc/REVIEW-UID"]) {
+    const html = render(GoogleReview, workspace({ scan_url: "https://cards.example/nfc/OTHER", qr_url: "https://cards.example/nfc/OTHER?source=qr", cards: [card({ programming_url: programming, status: "ACTIVE" })] }))
+    assert.doesNotMatch(html, /Copy NFC URL|Download NFC QR|>PNG<|href="[^\"]*\/nfc\//)
+    assert.match(html, /public NFC link is unavailable/)
+  }
+  const programming = "https://cards.example/nfc/REVIEW-UID"
+  const html = render(GoogleReview, workspace({ scan_url: "https://cards.example/nfc/OTHER", qr_url: "https://evil.example/", cards: [card({ programming_url: programming })] }))
+  assert.match(html, /https:\/\/cards\.example\/nfc\/REVIEW-UID\?source=qr/)
+  assert.doesNotMatch(html, /evil\.example|\/nfc\/OTHER/)
 })
 
 test("buyer-only access never exposes a recipient settings form or another account's cached workspace", () => {
@@ -268,7 +299,7 @@ test("unsafe legacy destinations are editable text without a clickable or copyab
 })
 
 test("assigned review card exposes its stable MyNFC programming URL before setup and activation", () => {
-  const programming = "http://localhost:5173/nfc/REVIEW-UID"
+  const programming = "https://cards.example/nfc/REVIEW-UID"
   const assigned = card({ programming_url: programming })
   const pending = render(GoogleReview, workspace({ configured: false, google_review_url: "", scan_url: programming, qr_url: `${programming}?source=qr`, cards: [assigned] }))
   assert.ok(pending.includes(`href="${programming}"`))
@@ -278,7 +309,8 @@ test("assigned review card exposes its stable MyNFC programming URL before setup
   assert.doesNotMatch(pending, />PNG</)
   const changed = render(GoogleReview, workspace({ google_review_url: "https://search.google.com/local/writereview?placeid=Changed", scan_url: programming, cards: [assigned] }))
   assert.ok(changed.includes(`href="${programming}"`))
-  assert.doesNotMatch(changed, /href="http:\/\/localhost:5173\/nfc\/REVIEW-UID\?source=qr"/)
+  assert.match(changed, /Download NFC QR/)
+  assert.doesNotMatch(changed, /href="https:\/\/cards\.example\/nfc\/REVIEW-UID\?source=qr"/)
 })
 
 test("existing admin Review card details show programming instructions without changing digital card details", () => {
@@ -289,6 +321,7 @@ test("existing admin Review card details show programming instructions without c
   assert.ok(html.includes(`href="${programming}"`))
   assert.match(html, /NFC programming URL/)
   assert.match(html, /Copy NFC URL/)
+  assert.match(html, /Download NFC QR/)
   assert.doesNotMatch(details({ ...base, cardType: "Custom" }), /NFC programming URL/)
   assert.doesNotMatch(details({ ...base, customerId: null, status: "Unassigned" }), /NFC programming URL/)
 })
@@ -302,12 +335,12 @@ test("historical duplicate cards never borrow another card's programming URL", (
 test("copy controls write exactly the saved destination or programming URL and handle denied clipboard access", async () => {
   const copied = []
   navigator.clipboard.writeText = async (value) => { copied.push(value) }
-  for (const [url, label] of [[workspace().google_review_url, "Saved Google review destination"], ["http://localhost:5173/nfc/REVIEW-UID", "NFC programming URL"]]) {
+  for (const [url, label] of [[workspace().google_review_url, "Saved Google review destination"], ["https://cards.example/nfc/REVIEW-UID", "NFC programming URL"]]) {
     const element = CopyLink({ url, label })
     const button = element.props.children.find((child) => typeof child?.props?.onClick === "function")
     await button.props.onClick()
   }
-  assert.deepEqual(copied, [workspace().google_review_url, "http://localhost:5173/nfc/REVIEW-UID"])
+  assert.deepEqual(copied, [workspace().google_review_url, "https://cards.example/nfc/REVIEW-UID"])
   navigator.clipboard.writeText = async () => { throw new Error("Clipboard denied") }
   const element = CopyLink({ url: "https://cards.example/nfc/UID", label: "NFC programming URL" })
   await assert.doesNotReject(element.props.children.find((child) => typeof child?.props?.onClick === "function").props.onClick())
@@ -324,9 +357,38 @@ test("owner and admin inventory mapping preserve the server programming URL", as
   assert.equal(inventory.data[0].cardType, "Review")
 })
 
+test("programming QR preview and download encode the exact stable NFC URL used by copy", async (context) => {
+  const programming = "https://cards.example/nfc/REVIEW-UID"
+  const encoded = [], clicked = []
+  const originalQr = QRCode.toDataURL
+  const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document")
+  const originalFetch = globalThis.fetch
+  context.after(() => {
+    QRCode.toDataURL = originalQr
+    globalThis.fetch = originalFetch
+    if (originalDocument) Object.defineProperty(globalThis, "document", originalDocument)
+    else delete globalThis.document
+    delete globalThis.__programmingHooks
+  })
+  QRCode.toDataURL = async (value) => { encoded.push(value); return "data:image/png;base64,cXI=" }
+  globalThis.fetch = async (value) => { assert.equal(value, "data:image/png;base64,cXI="); return new Response(new Blob(["qr"])) }
+  Object.defineProperty(globalThis, "document", { configurable: true, value: {
+    createElement: () => ({ click() { clicked.push(this.download) }, remove() {} }),
+    body: { appendChild() {} },
+  } })
+  globalThis.__programmingHooks = []
+  const element = ReviewCardProgrammingLink({ url: programming, showQr: true })
+  assert.equal(element.props.children[0].props.url, programming)
+  for (const effect of globalThis.__programmingHooks) effect()
+  const download = element.props.children[2].props.children.find((child) => typeof child?.props?.onClick === "function")
+  await download.props.onClick()
+  assert.deepEqual(encoded, [programming, programming])
+  assert.deepEqual(clicked, ["google-review-nfc-qr.png"])
+})
+
 test("programming URL display accepts server NFC URLs and rejects executable or malformed links", () => {
-  for (const url of ["http://localhost:5173/nfc/UID", "https://cards.example/nfc/UID%2Fquoted"]) assert.equal(safeProgrammingUrl(url), url)
-  for (const url of [null, undefined, "", "javascript:alert(1)", "http://external.example/nfc/UID", "https://owner@cards.example/nfc/UID", "https://cards.example/u/owner", "https://cards.example/nfc/UID?source=qr", "https://cards.example/nfc/UID#fragment"]) assert.equal(safeProgrammingUrl(url), null)
+  for (const url of ["https://cards.example/nfc/UID", "https://cards.example/nfc/UID%2Fquoted"]) assert.equal(safeProgrammingUrl(url), url)
+  for (const url of [null, undefined, "", "javascript:alert(1)", "http://localhost:5173/nfc/UID", "https://localhost/nfc/UID", "https://card.localhost/nfc/UID", "https://192.168.0.1/nfc/UID", "https://[::1]/nfc/UID", "https://cards.internal/nfc/UID", "https://cards.example:8443/nfc/UID", "http://external.example/nfc/UID", "https://owner@cards.example/nfc/UID", "https://cards.example/u/owner", "https://cards.example/nfc/UID?source=qr", "https://cards.example/nfc/UID#fragment"]) assert.equal(safeProgrammingUrl(url), null)
 })
 
 test("purchaser and recipient dashboard switches follow server roles without exposing another recipient's tools", () => {

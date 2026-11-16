@@ -210,7 +210,7 @@ export default function Login() {
             )}
             {notActivated && (
               <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-                Use the setup link sent to your email. Card recipients receive their account-ready email when the order is
+                Use the latest setup link sent to your email. Purchasers can set up their login after payment, including when buying for themselves. Card recipients receive their account-ready email when the order is
                 processed. Need help with recipient setup?{" "}
                 <Link to="/contact" className="font-medium text-primary hover:underline">
                   Contact us

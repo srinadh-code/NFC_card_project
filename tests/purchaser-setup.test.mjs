@@ -94,6 +94,9 @@ test("purchaser recovery without a token requests email ownership proof instead 
   assert.ok(html.includes('type="email"'))
   assert.ok(html.includes("Email My Setup Link"))
   assert.ok(html.includes("already paid") || html.includes("Already paid"))
+  assert.ok(html.includes("after payment even if you are also a card recipient"))
+  assert.ok(html.includes("latest setup link"))
+  assert.ok(!html.includes("use your account-ready email when your order is processed"))
   assert.ok(!html.includes('type="password"'))
   assert.ok(html.includes('href="/login?redirect=%2Forders"'))
 })
@@ -198,6 +201,8 @@ for (const status of ["required", "recipient", "active", undefined]) {
     if (status === "required") {
       assert.ok(html.includes("separate purchaser account setup link"))
       assert.ok(html.includes("Need another purchaser setup link?"))
+      assert.ok(html.includes("This also applies when you are a card recipient"))
+      assert.ok(html.includes("Digital NFC and Google Review recipients"))
       assert.ok(!html.includes("You are also a card recipient"))
     } else if (status === "recipient") {
       assert.ok(html.includes("You are also a card recipient"))

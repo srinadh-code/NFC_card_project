@@ -78,7 +78,7 @@ export default function SetPassword() {
           Already paid for an order but haven&apos;t set a password? Enter the email you used at checkout to request a secure setup link and access My Orders.
         </p>
         <p className="mt-2 text-sm text-muted-foreground">
-          If you are also a card recipient, use your account-ready email when your order is processed.
+          You can set up your purchaser login after payment even if you are also a card recipient. Use the latest setup link sent to your inbox.
         </p>
         <PurchaserSetupRequestForm />
         <Link to="/login?redirect=%2Forders" className="mt-4 block text-center text-sm font-medium text-primary hover:underline">Back to Login</Link>
