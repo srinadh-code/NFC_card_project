@@ -175,7 +175,7 @@ function App() {
             <Route path="reports" element={<AdminReports />} />
             <Route path="settings" element={<AdminSettings />} />
             <Route path="support" element={<AdminSupport />} />
-            {/* <Route path="content" element={<AdminWebsiteContent />} /> */}
+            <Route path="content" element={<AdminWebsiteContent />} />
             {/* Moderation moved to Website Content → Testimonials. */}
             <Route path="reviews" element={<Navigate to="/admin/content?tab=testimonials" replace />} />
           </Route>

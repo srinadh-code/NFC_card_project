@@ -33,7 +33,7 @@ const NAV_ITEMS = [
   { to: "/admin/reports", label: "Reports", icon: FileText },
   { to: "/admin/settings", label: "Settings", icon: Settings },
   { to: "/admin/support", label: "Support", icon: LifeBuoy },
-  { to: "/admin/content", label: "Website Content", icon: Newspaper },
+  // { to: "/admin/content", label: "Website Content", icon: Newspaper },
 ]
 
 
